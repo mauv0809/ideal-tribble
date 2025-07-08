@@ -49,6 +49,7 @@ func createTables(db *sql.DB) error {
         created_at INTEGER NOT NULL,
         status TEXT NOT NULL,
         game_status TEXT NOT NULL,
+        results_status TEXT NOT NULL,
         resource_name TEXT NOT NULL,
         access_code TEXT,
         price TEXT,

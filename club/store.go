@@ -1,4 +1,4 @@
-package main
+package club
 
 import (
 	"database/sql"
@@ -23,29 +23,29 @@ type PlayerInfo struct {
 	BallBringerCount int    `json:"ball_bringer_count"`
 }
 
-// ClubStore holds the state of all processed matches in a thread-safe manner.
-type ClubStore struct {
+// Store holds the state of all processed matches in a thread-safe manner.
+type Store struct {
 	db *sql.DB
 	mu sync.RWMutex
 }
 
-// NewClubStore creates a new ClubStore.
-func NewClubStore(db *sql.DB) *ClubStore {
-	return &ClubStore{
+// New creates a new Store.
+func New(db *sql.DB) *Store {
+	return &Store{
 		db: db,
 	}
 }
 
 // GetMatchState returns the match and its notification state.
-func (s *ClubStore) GetMatchState(matchID string) (*playtomic.PadelMatch, *MatchNotificationState, bool) {
+func (s *Store) GetMatchState(matchID string) (*playtomic.PadelMatch, *MatchNotificationState, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var state MatchNotificationState
-	var ballBringerID, ballBringerName sql.NullString
-	row := s.db.QueryRow("SELECT booking_notified, result_notified, ball_bringer_id, ball_bringer_name FROM matches WHERE id = ?", matchID)
+	var ballBringerID, ballBringerName, resultsStatus sql.NullString
+	row := s.db.QueryRow("SELECT booking_notified, result_notified, ball_bringer_id, ball_bringer_name, results_status FROM matches WHERE id = ?", matchID)
 
-	err := row.Scan(&state.BookingNotified, &state.ResultNotified, &ballBringerID, &ballBringerName)
+	err := row.Scan(&state.BookingNotified, &state.ResultNotified, &ballBringerID, &ballBringerName, &resultsStatus)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil, false
@@ -57,13 +57,14 @@ func (s *ClubStore) GetMatchState(matchID string) (*playtomic.PadelMatch, *Match
 	match := &playtomic.PadelMatch{
 		BallBringerID:   ballBringerID.String,
 		BallBringerName: ballBringerName.String,
+		ResultsStatus:   playtomic.ResultsStatus(resultsStatus.String),
 	}
 
 	return match, &state, true
 }
 
 // SetMatchState updates the store with the latest match details and notification state.
-func (s *ClubStore) SetMatchState(match *playtomic.PadelMatch, state *MatchNotificationState) {
+func (s *Store) SetMatchState(match *playtomic.PadelMatch, state *MatchNotificationState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -104,7 +105,8 @@ func (s *ClubStore) SetMatchState(match *playtomic.PadelMatch, state *MatchNotif
 			var bringerID, bringerName string
 
 			for rows.Next() {
-				var id, name string
+				var id string
+				var name sql.NullString
 				var count int
 				if err := rows.Scan(&id, &name, &count); err != nil {
 					log.Error("Failed to scan player for ball bringer assignment", "error", err)
@@ -114,7 +116,7 @@ func (s *ClubStore) SetMatchState(match *playtomic.PadelMatch, state *MatchNotif
 				if minCount == -1 || count < minCount {
 					minCount = count
 					bringerID = id
-					bringerName = name
+					bringerName = name.String
 				}
 			}
 
@@ -127,7 +129,7 @@ func (s *ClubStore) SetMatchState(match *playtomic.PadelMatch, state *MatchNotif
 					tx.Rollback()
 					return
 				}
-				log.Info("Assigned ball bringer.", "matchID", match.MatchID, "player", bringerName)
+				log.Debug("Assigned ball bringer.", "matchID", match.MatchID, "player", bringerName)
 			}
 		}
 	}
@@ -146,11 +148,12 @@ func (s *ClubStore) SetMatchState(match *playtomic.PadelMatch, state *MatchNotif
 	}
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, resource_name, access_code, price, tenant_id, tenant_name, booking_notified, result_notified, teams_json, results_json, ball_bringer_id, ball_bringer_name)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, resource_name, access_code, price, tenant_id, tenant_name, booking_notified, result_notified, teams_json, results_json, ball_bringer_id, ball_bringer_name, results_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			status = excluded.status,
 			game_status = excluded.game_status,
+			results_status = excluded.results_status,
 			result_notified = excluded.result_notified;
 	`)
 	if err != nil {
@@ -160,7 +163,7 @@ func (s *ClubStore) SetMatchState(match *playtomic.PadelMatch, state *MatchNotif
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, state.BookingNotified, state.ResultNotified, teamsJSON, resultsJSON, match.BallBringerID, match.BallBringerName)
+	_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, state.BookingNotified, state.ResultNotified, teamsJSON, resultsJSON, match.BallBringerID, match.BallBringerName, match.ResultsStatus)
 	if err != nil {
 		log.Error("Failed to execute statement", "error", err)
 		tx.Rollback()
@@ -173,7 +176,7 @@ func (s *ClubStore) SetMatchState(match *playtomic.PadelMatch, state *MatchNotif
 }
 
 // Clear resets the store to its initial empty state.
-func (s *ClubStore) Clear() {
+func (s *Store) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.Exec("DELETE FROM matches; DELETE FROM players;")
@@ -183,7 +186,7 @@ func (s *ClubStore) Clear() {
 }
 
 // ClearMatch removes a specific match from the store.
-func (s *ClubStore) ClearMatch(matchID string) {
+func (s *Store) ClearMatch(matchID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.Exec("DELETE FROM matches WHERE id = ?", matchID)
@@ -193,7 +196,7 @@ func (s *ClubStore) ClearMatch(matchID string) {
 }
 
 // AddInitialPlayers adds the seed list of player IDs to the store.
-func (s *ClubStore) AddInitialPlayers(playerIDs []string) {
+func (s *Store) AddInitialPlayers(playerIDs []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -224,7 +227,7 @@ func (s *ClubStore) AddInitialPlayers(playerIDs []string) {
 }
 
 // AddPlayer adds a single player ID to the store if not already present.
-func (s *ClubStore) AddPlayer(playerID, name string) {
+func (s *Store) AddPlayer(playerID, name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -246,7 +249,7 @@ func (s *ClubStore) AddPlayer(playerID, name string) {
 }
 
 // IsKnownPlayer checks if a player ID is in the store.
-func (s *ClubStore) IsKnownPlayer(playerID string) bool {
+func (s *Store) IsKnownPlayer(playerID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var exists bool
@@ -258,8 +261,8 @@ func (s *ClubStore) IsKnownPlayer(playerID string) bool {
 	return exists
 }
 
-// IsInitialPlayer checks if a player ID was part of the initial seed.
-func (s *ClubStore) IsInitialPlayer(playerID string) bool {
+// IsInitialPlayer checks if a player ID is one of the initial players.
+func (s *Store) IsInitialPlayer(playerID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var isInitial bool
@@ -274,7 +277,7 @@ func (s *ClubStore) IsInitialPlayer(playerID string) bool {
 }
 
 // GetAllPlayers returns a list of all players in the store.
-func (s *ClubStore) GetAllPlayers() ([]PlayerInfo, error) {
+func (s *Store) GetAllPlayers() ([]PlayerInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -300,12 +303,12 @@ func (s *ClubStore) GetAllPlayers() ([]PlayerInfo, error) {
 }
 
 // GetAllMatches returns a list of all matches in the store.
-func (s *ClubStore) GetAllMatches() ([]playtomic.PadelMatch, error) {
+func (s *Store) GetAllMatches() ([]playtomic.PadelMatch, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, resource_name, access_code, price, tenant_id, tenant_name, teams_json, results_json, ball_bringer_id, ball_bringer_name 
+		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, resource_name, access_code, price, tenant_id, tenant_name, teams_json, results_json, ball_bringer_id, ball_bringer_name, results_status 
 		FROM matches
 	`)
 	if err != nil {
@@ -316,17 +319,17 @@ func (s *ClubStore) GetAllMatches() ([]playtomic.PadelMatch, error) {
 	var matches []playtomic.PadelMatch
 	for rows.Next() {
 		var m playtomic.PadelMatch
-		var teamsJSON, resultsJSON, ballBringerID, ballBringerName sql.NullString
+		var teamsJSON, resultsJSON, ballBringerID, ballBringerName, resultsStatus sql.NullString
 		err := rows.Scan(
 			&m.MatchID, &m.OwnerID, &m.OwnerName, &m.Start, &m.End, &m.CreatedAt,
 			&m.Status, &m.GameStatus, &m.ResourceName, &m.AccessCode, &m.Price,
 			&m.Tenant.ID, &m.Tenant.Name, &teamsJSON, &resultsJSON,
-			&ballBringerID, &ballBringerName,
+			&ballBringerID, &ballBringerName, &resultsStatus,
 		)
+
 		if err != nil {
 			return nil, err
 		}
-
 		if teamsJSON.Valid {
 			if err := json.Unmarshal([]byte(teamsJSON.String), &m.Teams); err != nil {
 				log.Error("Failed to unmarshal teams", "error", err)
@@ -339,6 +342,7 @@ func (s *ClubStore) GetAllMatches() ([]playtomic.PadelMatch, error) {
 		}
 		m.BallBringerID = ballBringerID.String
 		m.BallBringerName = ballBringerName.String
+		m.ResultsStatus = playtomic.ResultsStatus(resultsStatus.String)
 		matches = append(matches, m)
 	}
 	return matches, nil

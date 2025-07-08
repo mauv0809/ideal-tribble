@@ -36,7 +36,12 @@ func (c *Client) GetSpecificMatch(matchID string) (PadelMatch, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept-Language", "en-AU,en;q=0.9")
 	req.Header.Set("User-Agent", "PlaytomicGoClient/1.0")
-
+	log.Debug("Requesting match with curl:", "cmd",
+		fmt.Sprintf(
+			`curl -X GET '%s' -H 'Accept: */*' -H 'Content-Type: application/json' -H 'Accept-Language: en-AU,en;q=0.9' -H 'User-Agent: PlaytomicGoClient/1.0'`,
+			url,
+		),
+	)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return PadelMatch{}, fmt.Errorf("failed to execute request: %w", err)
@@ -52,8 +57,7 @@ func (c *Client) GetSpecificMatch(matchID string) (PadelMatch, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&matchResponse); err != nil {
 		return PadelMatch{}, fmt.Errorf("failed to decode response: %w", err)
 	}
-
-	log.Info("matchResponse:", "matchResponse", matchResponse)
+	log.Debug("matchResponse:", "matchResponse", matchResponse)
 
 	paymentStatus := make(map[string]bool)
 	for _, reg := range matchResponse.RegistrationInfo.Registrations {
@@ -119,19 +123,43 @@ func (c *Client) GetSpecificMatch(matchID string) (PadelMatch, error) {
 		results = append(results, set)
 	}
 
+	var gameStatus GameStatus
+	switch matchResponse.GameStatus {
+	case string(GameStatusPending):
+		gameStatus = GameStatusPending
+	case string(GameStatusPlayed):
+		gameStatus = GameStatusPlayed
+	default:
+		gameStatus = GameStatusUnknown
+		log.Warn("Unknown game status received from Playtomic API", "status", matchResponse.GameStatus)
+	}
+	var resultsStatus ResultsStatus
+	switch matchResponse.ResultsStatus {
+	case string(ResultsStatusPending):
+		resultsStatus = ResultsStatusPending
+	case string(ResultsStatusConfirmed):
+		resultsStatus = ResultsStatusConfirmed
+	case string(ResultsStatusInvalid):
+		resultsStatus = ResultsStatusInvalid
+	case string(ResultsStatusNotAllowed):
+		resultsStatus = ResultsStatusNotAllowed
+	default:
+		log.Warn("Unknown results status received from Playtomic API", "status", matchResponse.ResultsStatus)
+	}
 	padelMatch := PadelMatch{
-		MatchID:      matchID,
-		OwnerID:      matchResponse.OwnerID,
-		OwnerName:    ownerName,
-		Start:        startTime.Local().Unix(),
-		End:          endTime.Local().Unix(),
-		CreatedAt:    createdAtTime.Local().Unix(),
-		Teams:        teams,
-		GameStatus:   matchResponse.GameStatus,
-		Status:       matchResponse.Status,
-		Results:      results,
-		ResourceName: matchResponse.ResourceName,
-		Price:        matchResponse.Price,
+		MatchID:       matchID,
+		OwnerID:       matchResponse.OwnerID,
+		OwnerName:     ownerName,
+		Start:         startTime.Local().Unix(),
+		End:           endTime.Local().Unix(),
+		CreatedAt:     createdAtTime.Local().Unix(),
+		Teams:         teams,
+		GameStatus:    gameStatus,
+		Status:        matchResponse.Status,
+		Results:       results,
+		ResultsStatus: resultsStatus,
+		ResourceName:  matchResponse.ResourceName,
+		Price:         matchResponse.Price,
 		Tenant: Tenant{
 			ID:   matchResponse.Tenant.ID,
 			Name: matchResponse.Tenant.Name,
@@ -155,6 +183,7 @@ type playtomicMatchResponse struct {
 	GameStatus         string                       `json:"game_status"`
 	Teams              []playtomicTeamResponse      `json:"teams"`
 	Results            []playtomicResult            `json:"results"`
+	ResultsStatus      string                       `json:"results_status"`
 	RegistrationInfo   playtomicRegistrationInfo    `json:"registration_info"`
 	ResourceName       string                       `json:"resource_name"`
 	MerchantAccessCode *playtomicMerchantAccessCode `json:"merchant_access_code"`
