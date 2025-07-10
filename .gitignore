@@ -7,7 +7,6 @@
 *.dll
 *.so
 *.dylib
-*.db
 # Test binary, built with `go test -c`
 *.test
 
@@ -33,7 +32,7 @@ go.work.sum
 
 # Local Environment
 *.db
-*.db-journal
+*.db-*
 
 # Go build outputs
 *.exe

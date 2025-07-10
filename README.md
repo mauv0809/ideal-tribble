@@ -1,6 +1,16 @@
-# Playtomic to Slack Notifier
+# ideal-tribble
 
-This is a Go application designed to run as a serverless container on Google Cloud Run. It periodically fetches upcoming bookings from a Playtomic account, filters for specific club matches, and posts notifications to a designated Slack channel.
+`ideal-tribble` is the project name for a backend service that helps a private Padel club manage their match bookings and player coordination.
+
+## Meet Wally 👋
+
+The primary user interface for the club members is a Slack bot named **Wally**. Wally is responsible for:
+
+- Announcing new matches as they are booked.
+- Reporting the results of finished matches.
+- Helping manage who is bringing balls to the game.
+
+The name "Wally" is inspired by the helpful robot and the glass walls of the padel court.
 
 ## Features
 
@@ -9,6 +19,10 @@ This is a Go application designed to run as a serverless container on Google Clo
 - Discovers and saves new club members automatically.
 - Assigns a "ball boy" for each match to ensure fairness.
 - Posts formatted notifications to a Slack channel.
+- Tracks player statistics (win/loss records, sets/games won) and provides a leaderboard.
+- Provides two leaderboards accessible via Slack commands: `/leaderboard` (sorted by win percentage) and `/level-leaderboard` (sorted by player level).
+- Allows looking up individual player stats via the `/padel-stats [name]` command.
+- Resiliently processes matches through a state machine to ensure notifications are sent and stats are updated reliably.
 - Infrastructure is managed via Terraform for consistent, repeatable deployments.
 - Includes a simple hot-reloading setup for easy local development.
 
@@ -19,7 +33,8 @@ This is a Go application designed to run as a serverless container on Google Clo
 - **Infrastructure as Code:** Terraform
 - **Platform:** Docker
 - **Deployment:** Google Cloud Run, Google Cloud Scheduler
-- **CI/CD:** Google Cloud Build
+- **CI/CD:** GitHub Actions
+- **Testing:** Go standard library, Testify
 
 ## Local Development
 
@@ -112,47 +127,61 @@ The final step is to tell Terraform to mount these secrets as environment variab
 
 Our Terraform script (`iam.tf`) automatically handles granting the Cloud Run service the necessary `Secret Manager Secret Accessor` role for all secrets listed in the `secret_names` variable. There are no manual IAM permissions to configure.
 
-### Deployment Steps
+### Automated Deployment with GitHub Actions
 
-1.  **Build and Push the Docker Image:**
-    First, build your application's Docker image and push it to the Google Artifact Registry (or Container Registry).
+This project uses a GitHub Actions workflow to automate the entire testing, building, and deployment process. The workflow is defined in `.github/workflows/ci-cd.yml`.
 
-    ```bash
-    # Replace YOUR_PROJECT_ID with your actual GCP Project ID
-    gcloud builds submit --config cloudbuild.yaml . --substitutions=_IMAGE_NAME="gcr.io/YOUR_PROJECT_ID/ideal-tribble"
-    ```
+**Workflow Trigger:**
+The CI/CD pipeline is automatically triggered on every `push` to the `main` branch.
 
-2.  **Initialize Terraform:**
-    Navigate to the `terraform` directory and run `init`, providing the name of your GCS bucket for the backend state.
+**Workflow Steps:**
 
-    ```bash
-    cd terraform
-    terraform init \
-      -backend-config="bucket=your-terraform-state-bucket-name"
-    ```
+1.  **Build and Push:** The workflow builds the application's Docker image and pushes it to the Google Artifact Registry, tagged with the Git commit SHA.
+2.  **Deploy with Terraform:** It then uses Terraform to deploy the new image to Google Cloud Run. It passes the new image tag to the Terraform configuration, ensuring that your infrastructure state is always in sync.
 
-3.  **Create and Apply a Plan:**
-    Create a `terraform.tfvars` file to specify your project and image name.
-    ```hcl
-    # terraform/terraform.tfvars
-    gcp_project_id = "your-gcp-project-id"
-    image_name     = "gcr.io/your-gcp-project-id/ideal-tribble"
-    ```
-    Now, create and apply the plan.
-    ```bash
-    terraform plan -out=tfplan
-    terraform apply "tfplan"
-    ```
+**Setup for Your Fork:**
+To get the automated deployment working on your own fork of this repository, you must configure the following secrets in your GitHub repository's settings (`Settings` > `Secrets and variables` > `Actions`):
+
+- `GCP_PROJECT_ID`: Your Google Cloud project ID.
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: The full name of your Workload Identity Provider (e.g., `projects/123.../locations/global/workloadIdentityPools/my-pool/providers/my-provider`). This is the recommended, most secure way to authenticate.
+- `GCP_SERVICE_ACCOUNT`: The email of the GCP service account that you've granted permissions to deploy to Cloud Run and push to Artifact Registry.
+
+You must also update the `TERRAFORM_STATE_BUCKET` environment variable in the `.github/workflows/ci-cd.yml` file to point to your own GCS bucket.
 
 Once applied, Terraform will create all resources and output the URL of your new Cloud Run service. The Cloud Scheduler job will already be configured to trigger it automatically.
 
+## Testing
+
+This project includes a comprehensive test suite covering core business logic, API handlers, and client wrappers.
+
+The application also tracks key operational metrics (e.g., number of checks run, Playtomic API calls, Slack notifications sent) and exposes them via a dedicated endpoint.
+
+To run all tests locally, use the following command:
+
+```bash
+go test -v -race ./...
+```
+
+The tests are also automatically executed by the GitHub Actions workflow on every push to the `main` branch.
+
 ## API Endpoints
 
-- `GET /check`: Manually triggers a check for new matches.
+The application exposes the following HTTP endpoints:
+
+- `POST /fetch`: Manually triggers a fetch for new matches from Playtomic.
+- `POST /process`: Manually triggers the processing of fetched matches (sending notifications, updating stats, etc.).
 - `GET /health`: A simple health check endpoint that returns `OK!`.
 - `GET /members`: Returns a JSON list of all known club members.
 - `GET /matches`: Returns a JSON list of all processed matches.
+- `GET /leaderboard`: Returns a JSON object with the current player statistics.
+- `GET /metrics`: Returns a JSON object with operational metrics.
 - `POST /clear`: Clears the internal store. Can accept a `matchID` query param to clear a specific match.
+
+The application also exposes an endpoint to be used with a Slack slash command:
+
+- `POST /command/leaderboard`: Responds with the formatted player leaderboard (by win %).
+- `POST /command/level-leaderboard`: Responds with the formatted player leaderboard (by level).
+- `POST /command/player-stats`: Responds with the stats for a specific player.
 
 ## Roadmap
 
@@ -164,8 +193,30 @@ Here's a look at our future development plans:
   - Based on player availability and skill levels, the system will automatically propose a set of matches for the week, including suggested player pairings.
   - For each proposed match, it will assign one player to be responsible for booking the court and another to be responsible for bringing balls, ensuring fairness.
   - These "proposed" matches will be stored in the database. When a real booking from Playtomic matches a proposed match (based on players, date, and booking owner), the system will automatically link them, tracking the match from proposal to completion.
-- **GitHub Actions CI/CD:** Implement a full CI/CD pipeline using GitHub Actions to automate testing and deployment to Google Cloud Run.
-- **Unit & Integration Testing:** Introduce a robust testing suite to ensure code quality and reliability.
+- **Endpoint Authentication:** Secure the `/fetch` and `/process` endpoints to prevent unauthorized access, ensuring that only trusted sources like Google Cloud Scheduler or authorized users can trigger them.
+
+  - **Strategy 1: OIDC for Service-to-Service (Recommended for Prod):**
+    - Secure the `/fetch` and `/process` endpoints so they can only be invoked by Google Cloud Scheduler.
+    - Configure the Cloud Run service to only accept requests with a valid OIDC token from a specific service account.
+    - Configure the Cloud Scheduler job to use this service account to authenticate its requests.
+  - **Strategy 2: API Key for Manual/Admin Access:**
+    - Secure administrative endpoints like `/clear`, `/matches`, and `/members`.
+    - Implement a middleware that checks for a secret `X-API-Key` header.
+    - The API key will be stored securely in Google Secret Manager.
+  - **Strategy 3: Slack Request Signing for Commands:**
+    - Secure the `/command/leaderboard` endpoint by verifying the `X-Slack-Signature` header.
+    - This is a standard security practice to ensure that incoming webhook requests are genuinely from Slack.
+
+- **API Documentation:** Create comprehensive API documentation using an OpenAPI (Swagger) specification and update this README with endpoint details.
+- **Enhanced Slack Interactivity & Commands:**
+  - Use interactive buttons and modals for setting availability or confirming match participation.
+  - Introduce slash commands like `/padel-availability` for quick access to information.
+- **Remote Metrics & Monitoring:**
+  - Export the application's operational metrics to a dedicated monitoring system for advanced visualization, alerting, and long-term storage.
+  - Potential tools for this include Google Cloud Monitoring, Prometheus with Grafana, or Datadog.
+- **Guest Player Management:**
+  - Add a way to include guest players in a match without permanently adding them to the club's member list.
+- **Update CLI testing tool to support all API endpoints with dryRun and verbose options**
 
 ## License
 

@@ -6,7 +6,7 @@ variable "gcp_project_id" {
 variable "gcp_region" {
   description = "The GCP region to deploy resources in."
   type        = string
-  default     = "us-central1"
+  default     = "europe-west3"
 }
 
 variable "service_name" {
@@ -29,5 +29,5 @@ variable "scheduler_cron" {
 variable "secret_names" {
   description = "A list of secret names to grant the Cloud Run service access to."
   type        = list(string)
-  default     = ["SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID", "PLAYER_IDS", "TENANT_ID", "BOOKING_FILTER", "PORT", "STORE_FILE"]
+  default     = ["SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID", "TENANT_ID", "BOOKING_FILTER", "PORT", "TURSO_PRIMARY_URL", "TURSO_AUTH_TOKEN", "DB_NAME", ]
 } 

@@ -1,0 +1,16 @@
+package config
+
+// Config holds all configuration for the application.
+type Config struct {
+	DBName         string
+	Port           string
+	SlackBotToken  string
+	SlackChannelID string
+	BookingFilter  string
+	TenantID       string
+	Turso          TursoConfig
+}
+type TursoConfig struct {
+	PrimaryURL string
+	AuthToken  string
+}

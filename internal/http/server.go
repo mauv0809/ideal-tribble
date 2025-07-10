@@ -1,0 +1,48 @@
+package http
+
+import (
+	"net/http"
+
+	"github.com/mauv0809/ideal-tribble/internal/club"
+	"github.com/mauv0809/ideal-tribble/internal/config"
+	"github.com/mauv0809/ideal-tribble/internal/metrics"
+	"github.com/mauv0809/ideal-tribble/internal/playtomic"
+	"github.com/mauv0809/ideal-tribble/internal/processor"
+	"github.com/mauv0809/ideal-tribble/internal/slack"
+)
+
+func NewServer(store club.ClubStore, metricsStore metrics.MetricsStore, cfg config.Config, playtomicClient playtomic.PlaytomicClient, slackClient *slack.SlackClient, processor *processor.Processor) *Server {
+	server := &Server{
+		Store:           store,
+		Metrics:         metricsStore,
+		Cfg:             cfg,
+		PlaytomicClient: playtomicClient,
+		SlackClient:     slackClient,
+		Processor:       processor,
+		Router:          http.NewServeMux(),
+	}
+
+	server.routes()
+	return server
+}
+
+func (s *Server) routes() {
+	// All handlers are wrapped with middleware using the Chain helper.
+	// This makes it easy to add more middlewares in the future, like an authentication middleware.
+	// e.g. Chain(s.MyHandler(), paramsMiddleware, authMiddleware)
+	s.Router.Handle("/metrics", Chain(s.MetricsHandler(), paramsMiddleware))
+	s.Router.Handle("/health", Chain(s.HealthCheckHandler(), paramsMiddleware))
+	s.Router.Handle("/clear", Chain(s.ClearStoreHandler(), paramsMiddleware))
+	s.Router.Handle("/members", Chain(s.ListMembersHandler(), paramsMiddleware))
+	s.Router.Handle("/matches", Chain(s.ListMatchesHandler(), paramsMiddleware))
+	s.Router.Handle("/fetch", Chain(s.FetchMatchesHandler(), paramsMiddleware))
+	s.Router.Handle("/process", Chain(s.ProcessMatchesHandler(), paramsMiddleware))
+	s.Router.Handle("/leaderboard", Chain(s.LeaderboardHandler(), paramsMiddleware))
+	s.Router.Handle("/slack/command/leaderboard", Chain(s.LeaderboardCommandHandler(), paramsMiddleware))
+	s.Router.Handle("/slack/command/player-stats", Chain(s.PlayerStatsCommandHandler(), paramsMiddleware))
+	s.Router.Handle("/slack/command/level-leaderboard", Chain(s.LevelLeaderboardCommandHandler(), paramsMiddleware))
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.Router.ServeHTTP(w, r)
+}

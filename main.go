@@ -4,37 +4,47 @@ import (
 	"net/http"
 
 	"github.com/charmbracelet/log"
-	"github.com/mauv0809/ideal-tribble/api"
-	"github.com/mauv0809/ideal-tribble/club"
-	"github.com/mauv0809/ideal-tribble/config"
-	"github.com/mauv0809/ideal-tribble/database"
+	"github.com/mauv0809/ideal-tribble/internal/club"
+	"github.com/mauv0809/ideal-tribble/internal/config"
+	"github.com/mauv0809/ideal-tribble/internal/database"
+	server "github.com/mauv0809/ideal-tribble/internal/http"
+	"github.com/mauv0809/ideal-tribble/internal/metrics"
+	"github.com/mauv0809/ideal-tribble/internal/playtomic"
+	"github.com/mauv0809/ideal-tribble/internal/processor"
+	"github.com/mauv0809/ideal-tribble/internal/slack"
 )
 
 func main() {
-	// Load configuration from environment variables
-	cfg, initialPlayerIDs, storeFile := config.Load()
-
-	db, err := database.InitDB(storeFile)
+	log.SetFormatter(log.JSONFormatter)
+	cfg := config.Load()
+	db, err := database.InitDB(cfg.DBName, cfg.Turso.PrimaryURL, cfg.Turso.AuthToken)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %s", err)
 	}
-	defer db.Close()
+	defer func() {
+		log.Info("Closing database connection")
+		db.Close()
+	}()
 
 	clubStore := club.New(db)
-	clubStore.AddInitialPlayers(initialPlayerIDs)
+	metricsStore := metrics.New(db)
 
-	server := api.NewServer(clubStore, cfg)
+	playtomicClient := playtomic.NewClient()
+	slackClient := slack.NewClient(cfg.SlackBotToken, cfg.SlackChannelID)
+	processor := processor.New(clubStore, slackClient, metricsStore)
 
-	// Set up the HTTP handler
-	http.HandleFunc("/check", server.CheckAndNotifyHandler())
-	http.HandleFunc("/health", server.HealthCheckHandler())
-	http.HandleFunc("/clear", server.ClearStoreHandler())
-	http.HandleFunc("/members", server.ListMembersHandler())
-	http.HandleFunc("/matches", server.ListMatchesHandler())
+	s := server.NewServer(
+		clubStore,
+		metricsStore,
+		cfg,
+		playtomicClient,
+		slackClient,
+		processor,
+	)
 
-	// Start the server
-	log.Info("Starting server", "port", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, nil); err != nil {
-		log.Fatalf("failed to start server: %s\n", err)
+	log.Info("Server started", "port", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, s); err != nil {
+		log.Fatal("Could not start server", "error", err)
 	}
+	log.Info("Server stopped")
 }
