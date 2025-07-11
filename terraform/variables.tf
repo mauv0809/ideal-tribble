@@ -20,14 +20,28 @@ variable "image_name" {
   type        = string
 }
 
-variable "scheduler_cron" {
-  description = "The cron schedule for the checker job."
+variable "fetch_cron_schedule" {
+  description = "The cron schedule for the fetch job."
   type        = string
-  default     = "0 * * * *" # Every hour
+  default     = "*/5 * * * *" # Every 5 minutes
+}
+
+variable "process_cron_schedule" {
+  description = "The cron schedule for the process job."
+  type        = string
+  default     = "* * * * *" # Every minute
 }
 
 variable "secret_names" {
   description = "A list of secret names to grant the Cloud Run service access to."
   type        = list(string)
-  default     = ["SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID", "TENANT_ID", "BOOKING_FILTER", "PORT", "TURSO_PRIMARY_URL", "TURSO_AUTH_TOKEN", "DB_NAME", ]
+  default = [
+    "DB_NAME",
+    "SLACK_BOT_TOKEN",
+    "SLACK_CHANNEL_ID",
+    "BOOKING_FILTER",
+    "TENANT_ID",
+    "TURSO_PRIMARY_URL",
+    "TURSO_AUTH_TOKEN"
+  ]
 } 

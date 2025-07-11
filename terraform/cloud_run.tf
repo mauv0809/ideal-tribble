@@ -17,20 +17,73 @@ resource "google_cloud_run_v2_service" "main" {
       ports {
         container_port = 8080
       }
-      # Note: Environment variables should be configured here.
-      # For sensitive values like API keys and tokens, it is highly
-      # recommended to use Google Cloud Secret Manager.
-      #
-      # example:
-      # env {
-      #   name = "SLACK_BOT_TOKEN"
-      #   value_source {
-      #     secret_key_ref {
-      #       secret  = "your-slack-token-secret-name"
-      #       version = "latest"
-      #     }
-      #   }
-      # }
+      env {
+        name  = "PORT"
+        value = "8080"
+      }
+      env {
+        name = "DB_NAME"
+        value_source {
+          secret_key_ref {
+            secret  = "DB_NAME"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "SLACK_BOT_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = "SLACK_BOT_TOKEN"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "SLACK_CHANNEL_ID"
+        value_source {
+          secret_key_ref {
+            secret  = "SLACK_CHANNEL_ID"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "BOOKING_FILTER"
+        value_source {
+          secret_key_ref {
+            secret  = "BOOKING_FILTER"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "TENANT_ID"
+        value_source {
+          secret_key_ref {
+            secret  = "TENANT_ID"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "TURSO_PRIMARY_URL"
+        value_source {
+          secret_key_ref {
+            secret  = "TURSO_PRIMARY_URL"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "TURSO_AUTH_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = "TURSO_AUTH_TOKEN"
+            version = "latest"
+          }
+        }
+      }
     }
   }
 

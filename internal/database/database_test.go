@@ -14,9 +14,13 @@ func TestInitDB_CreatesTables(t *testing.T) {
 	require.NoError(t, err)
 	defer os.Remove(tmpfile.Name()) // Clean up the file
 
-	db, err := InitDB(tmpfile.Name(), "", "")
+	db, teardown, err := InitDB(tmpfile.Name(), "", "")
 	require.NoError(t, err, "InitDB should not return an error")
-	defer db.Close()
+	if teardown != nil {
+		defer teardown()
+	} else {
+		defer db.Close()
+	}
 
 	// Check if the 'players' table was created
 	var playersTableName string

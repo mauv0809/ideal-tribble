@@ -37,30 +37,46 @@ var _ PlaytomicClient = (*APIClient)(nil)
 
 // GetMatches fetches a list of matches based on the provided search parameters.
 func (c *APIClient) GetMatches(params *SearchMatchesParams) ([]MatchSummary, error) {
-	externalParams := &models.SearchMatchesParams{
-		SportID:       params.SportID,
-		HasPlayers:    params.HasPlayers,
-		Sort:          params.Sort,
-		TenantIDs:     params.TenantIDs,
-		FromStartDate: params.FromStartDate,
-	}
+	const pageSize = 300
+	var (
+		allMatches []MatchSummary
+		page       = 0
+	)
 
-	log.Debug("Fetching matches from Playtomic API", "params", externalParams)
-	summaries, err := c.apiClient.GetMatches(context.Background(), externalParams)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching matches from playtomic api: %w", err)
-	}
+	for {
+		externalParams := &models.SearchMatchesParams{
+			SportID:       params.SportID,
+			HasPlayers:    params.HasPlayers,
+			Sort:          params.Sort,
+			TenantIDs:     params.TenantIDs,
+			FromStartDate: params.FromStartDate,
+			Size:          pageSize,
+			Page:          page,
+		}
 
-	log.Debug("Successfully fetched matches", "count", len(summaries))
-	var result []MatchSummary
-	for _, s := range summaries {
-		result = append(result, MatchSummary{
-			MatchID: s.MatchID,
-			OwnerID: s.OwnerID,
-		})
-	}
+		log.Debug("Fetching matches from Playtomic API", "params", externalParams)
+		matches, err := c.apiClient.GetMatches(context.Background(), externalParams)
+		if err != nil {
+			return nil, fmt.Errorf("error fetching matches from playtomic api: %w", err)
+		}
 
-	return result, nil
+		log.Info("Successfully fetched matches", "count", len(matches), "page", page)
+		for _, m := range matches {
+			allMatches = append(allMatches, MatchSummary{
+				MatchID: m.MatchID,
+				OwnerID: m.OwnerID,
+			})
+		}
+
+		// If we got less than pageSize, we've reached the last page
+		if len(matches) < pageSize {
+			log.Info("Reached last page", "page", page)
+			break
+		}
+		page++
+	}
+	log.Info("Fetched all matches", "count", len(allMatches))
+	return allMatches, nil
 }
 
 // GetSpecificMatch fetches a specific match by its ID.

@@ -1,14 +1,16 @@
 package processor
 
 import (
+	"time"
+
 	"github.com/charmbracelet/log"
+	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
-	"github.com/mauv0809/ideal-tribble/internal/slack"
 )
 
 // New creates a new Processor.
-func New(store Store, notifier Notifier, metrics metrics.MetricsStore) *Processor {
+func New(store Store, notifier Notifier, metrics metrics.Metrics) *Processor {
 	return &Processor{
 		store:    store,
 		notifier: notifier,
@@ -32,7 +34,10 @@ func (p *Processor) ProcessMatches(dryRun bool) {
 
 	log.Info("Found matches to process", "count", len(matches))
 	for _, match := range matches {
+		startTime := time.Now()
 		p.processMatch(match, dryRun)
+		duration := time.Since(startTime).Milliseconds()
+		p.metrics.ObserveProcessingDuration(float64(duration))
 	}
 	log.Info("Match processing finished.")
 }
@@ -46,23 +51,46 @@ func (p *Processor) processMatch(match *playtomic.PadelMatch, dryRun bool) {
 
 		switch currentState {
 		case playtomic.StatusNew:
+			// Ensure all players from the match are in our database.
+			var playersToUpsert []club.PlayerInfo
+			for _, team := range match.Teams {
+				for _, player := range team.Players {
+					playersToUpsert = append(playersToUpsert, club.PlayerInfo{
+						ID:    player.UserID,
+						Name:  player.Name,
+						Level: player.Level,
+					})
+				}
+			}
+			if len(playersToUpsert) > 0 {
+				if err := p.store.UpsertPlayers(playersToUpsert); err != nil {
+					log.Error("Failed to upsert players for match", "error", err, "matchID", match.MatchID)
+				}
+			}
+
 			// If a match is already played, we never want to send a booking notification.
 			if match.GameStatus == playtomic.GameStatusPlayed {
 				// If results are also confirmed, we can jump straight to processing the result.
 				if match.ResultsStatus == playtomic.ResultsStatusConfirmed {
 					log.Info("Match is new but already played with confirmed results. Skipping booking notification and advancing to result available.", "matchID", match.MatchID)
 					p.updateStatus(match, playtomic.StatusResultAvailable, dryRun)
+				} else if match.ResultsStatus == playtomic.ResultsStatusExpired {
+					log.Info("Match is new and already played, but results are expired. Setting match to completed.", "matchID", match.MatchID)
+					p.updateStatus(match, playtomic.StatusCompleted, dryRun)
 				} else {
 					// If played but results are not ready, just mark booking as "notified" to prevent future booking notifications.
 					log.Info("Match is new and already played, but results are not confirmed. Skipping booking notification.", "matchID", match.MatchID)
 					p.updateStatus(match, playtomic.StatusBookingNotified, dryRun)
 				}
+			} else if match.GameStatus == playtomic.GameStatusCanceled {
+				log.Info("Match is canceled. Setting match to completed.", "matchID", match.MatchID)
+				p.updateStatus(match, playtomic.StatusCompleted, dryRun)
 			} else {
 				// This is a normal, upcoming match. Send the booking notification.
 				log.Info("Match is new. Sending booking notification.", "matchID", match.MatchID)
-				p.notifier.SendNotification(match, slack.BookingNotification, p.metrics, dryRun)
+				p.assignBallBringer(match, dryRun)
+				p.notifier.SendBookingNotification(match, dryRun)
 				p.updateStatus(match, playtomic.StatusBookingNotified, dryRun)
-				p.metrics.Increment("matches_processed")
 			}
 
 		case playtomic.StatusBookingNotified:
@@ -73,7 +101,12 @@ func (p *Processor) processMatch(match *playtomic.PadelMatch, dryRun bool) {
 
 		case playtomic.StatusResultAvailable:
 			log.Info("Match result is available. Sending result notification.", "matchID", match.MatchID)
-			p.notifier.SendNotification(match, slack.ResultNotification, p.metrics, dryRun)
+			timeEnded := time.Unix(match.End, 0)
+			timeSinceEnd := time.Since(timeEnded)
+			//If game is ended more than 1 day ago we should not send results and just set update stats. This way we can fetch historic data without sending notifications.
+			if timeSinceEnd < 24*time.Hour {
+				p.notifier.SendResultNotification(match, dryRun)
+			}
 			p.updateStatus(match, playtomic.StatusResultNotified, dryRun)
 
 		case playtomic.StatusResultNotified:
@@ -103,6 +136,61 @@ func (p *Processor) processMatch(match *playtomic.PadelMatch, dryRun bool) {
 		}
 	}
 	log.Info("Finished processing match", "matchID", match.MatchID, "final_status", match.ProcessingStatus)
+}
+
+func (p *Processor) assignBallBringer(match *playtomic.PadelMatch, dryRun bool) {
+	if match.BallBringerID != "" {
+		log.Debug("Ball bringer already assigned", "matchID", match.MatchID, "player", match.BallBringerName)
+		return
+	}
+
+	var playerIDs []string
+	for _, team := range match.Teams {
+		for _, player := range team.Players {
+			playerIDs = append(playerIDs, player.UserID)
+		}
+	}
+
+	if len(playerIDs) == 0 {
+		log.Warn("No players found in match to assign a ball bringer", "matchID", match.MatchID)
+		return
+	}
+
+	players, err := p.store.GetPlayers(playerIDs)
+	if err != nil {
+		log.Error("Failed to get players for ball bringer assignment", "error", err, "matchID", match.MatchID)
+		return
+	}
+
+	if len(players) == 0 {
+		log.Warn("Could not find any of the match players in the database", "matchID", match.MatchID, "playerIDs", playerIDs)
+		return
+	}
+
+	// Find player with the minimum ball_bringer_count
+	var ballBringer club.PlayerInfo
+	minCount := -1
+	for _, p := range players {
+		if minCount == -1 || p.BallBringerCount < minCount {
+			minCount = p.BallBringerCount
+			ballBringer = p
+		}
+	}
+
+	log.Info("Assigning ball bringer", "matchID", match.MatchID, "player", ballBringer.Name, "count", ballBringer.BallBringerCount)
+	if !dryRun {
+		err := p.store.SetBallBringer(match.MatchID, ballBringer.ID, ballBringer.Name)
+		if err != nil {
+			log.Error("Failed to set ball bringer in store", "error", err, "matchID", match.MatchID)
+			return
+		}
+	} else {
+		log.Info("[Dry Run] Would have assigned ball bringer", "player", ballBringer.Name)
+	}
+
+	// Update the in-memory match object so the notifier has the correct data
+	match.BallBringerID = ballBringer.ID
+	match.BallBringerName = ballBringer.Name
 }
 
 func (p *Processor) updateStatus(match *playtomic.PadelMatch, newStatus playtomic.ProcessingStatus, dryRun bool) {

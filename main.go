@@ -1,7 +1,12 @@
 package main
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
@@ -9,42 +14,90 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/database"
 	server "github.com/mauv0809/ideal-tribble/internal/http"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
+	"github.com/mauv0809/ideal-tribble/internal/notifier/slack"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
-	"github.com/mauv0809/ideal-tribble/internal/slack"
 )
 
 func main() {
+	// Start profiling timer
+	startTime := time.Now()
+
 	log.SetFormatter(log.JSONFormatter)
 	cfg := config.Load()
-	db, err := database.InitDB(cfg.DBName, cfg.Turso.PrimaryURL, cfg.Turso.AuthToken)
+	db, dbTeardown, err := database.InitDB(cfg.DBName, cfg.Turso.PrimaryURL, cfg.Turso.AuthToken)
+	dbInitDuration := time.Since(startTime)
+	log.Info("Database initialization time recorded", "duration_ms", dbInitDuration.Milliseconds())
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %s", err)
 	}
 	defer func() {
 		log.Info("Closing database connection")
-		db.Close()
+		dbTeardown()
 	}()
 
 	clubStore := club.New(db)
-	metricsStore := metrics.New(db)
-
+	metricsSvc := metrics.NewService()
+	metricsHandler := metrics.NewMetricsHandler()
 	playtomicClient := playtomic.NewClient()
-	slackClient := slack.NewClient(cfg.SlackBotToken, cfg.SlackChannelID)
-	processor := processor.New(clubStore, slackClient, metricsStore)
+	notifier := slack.NewNotifier(cfg.SlackBotToken, cfg.SlackChannelID, metricsSvc)
+	processor := processor.New(clubStore, notifier, metricsSvc)
 
 	s := server.NewServer(
 		clubStore,
-		metricsStore,
+		metricsSvc,
+		metricsHandler,
 		cfg,
 		playtomicClient,
-		slackClient,
+		notifier,
 		processor,
 	)
+	metricsSvc.SetStartupTime(float64(dbInitDuration.Milliseconds()) / 1000)
 
-	log.Info("Server started", "port", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, s); err != nil {
-		log.Fatal("Could not start server", "error", err)
+	// --- Record startup time ---
+	startupDuration := time.Since(startTime)
+	metricsSvc.SetStartupTime(startupDuration.Seconds())
+	log.Info("Startup time recorded", "duration_ms", startupDuration.Milliseconds())
+
+	// --- Graceful shutdown setup ---
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: s,
 	}
-	log.Info("Server stopped")
+
+	// Channel to listen for errors coming from the server
+	serverErrors := make(chan error, 1)
+
+	// Start the server in a goroutine
+	go func() {
+		log.Info("Server started", "port", cfg.Port)
+		serverErrors <- srv.ListenAndServe()
+	}()
+
+	// Channel to listen for interrupt signals
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	// Block until we receive a signal or an error
+	select {
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	case sig := <-shutdown:
+		log.Info("Shutdown signal received", "signal", sig)
+
+		// Create a context with a timeout for the shutdown.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Attempt to gracefully shut down the server.
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Error("Server shutdown failed", "error", err)
+		} else {
+			log.Info("Server gracefully stopped")
+		}
+	}
+
+	log.Info("Server process shutting down")
 }

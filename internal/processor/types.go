@@ -8,5 +8,5 @@ import (
 type Processor struct {
 	store    Store
 	notifier Notifier
-	metrics  metrics.MetricsStore
+	metrics  metrics.Metrics
 }

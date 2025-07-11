@@ -30,5 +30,5 @@ type PlayerInfo struct {
 	ID               string
 	Name             string
 	BallBringerCount int
-	Level            float32
+	Level            float64
 }

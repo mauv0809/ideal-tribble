@@ -8,7 +8,9 @@ import (
 )
 
 var (
-	host string
+	host    string
+	dryRun  bool
+	verbose bool
 )
 
 var rootCmd = &cobra.Command{
@@ -20,6 +22,8 @@ of the ideal-tribble application.`,
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&host, "host", "http://localhost:8080", "The host address of the server")
+	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "Print the request without sending it")
+	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Print the response body")
 }
 
 func Execute() {
@@ -30,5 +34,6 @@ func Execute() {
 }
 
 func main() {
+	addCommands(rootCmd)
 	Execute()
 }

@@ -63,92 +63,186 @@ A simple hot-reloading environment is configured using [Air](https://github.com/
     ```
     The server will be running on the port specified in your `.env` file (default: `8080`).
 
-## Deployment with Terraform
+## Cloud Deployment with Terraform and GitHub Actions
 
-This project uses Terraform to manage all required Google Cloud infrastructure as code. This is the **only supported way** to deploy and manage the application's resources.
+This guide provides a complete walkthrough for deploying the application to Google Cloud Run using Terraform for infrastructure management and GitHub Actions for continuous deployment.
 
-### Prerequisites
+#### Prerequisites
 
-1.  [Install Terraform](https://learn.hashicorp.com/tutorials/terraform/install-cli).
-2.  [Install the gcloud CLI](https://cloud.google.com/sdk/docs/install) and authenticate:
+1.  **Google Cloud Project:** You must have a GCP project with billing enabled.
+2.  **`gcloud` CLI:** [Install](https://cloud.google.com/sdk/docs/install) and authenticate the CLI to your account:
     ```bash
+    gcloud auth login
     gcloud auth application-default login
     ```
-3.  Ensure your user account has the necessary permissions in the GCP project (e.g., `Owner`, or a custom role with permissions for Cloud Run, Cloud Scheduler, IAM, Secret Manager, and Cloud Storage).
-4.  Create a [Google Cloud Storage bucket](https://cloud.google.com/storage/docs/creating-buckets) to store the Terraform state remotely. This is a critical best practice.
+3.  **Terraform:** [Install the Terraform CLI](https://learn.hashicorp.com/tutorials/terraform/install-cli).
+4.  **A Fork of This Repository:** You should be working from your own fork of the project.
 
-### Managing Secrets in GCP
+---
 
-Hardcoding secrets (like API tokens) is a major security risk. The recommended approach is to use [Google Secret Manager](https://cloud.google.com/secret-manager). The Terraform configuration is set up to automatically handle creating, securing, and providing access to these secrets.
+#### Step 1: Configure Your GCP Project
 
-**1. Create the Secrets in Google Cloud:**
-For each environment variable your application needs (see `.env.example`), create a corresponding secret in Google Secret Manager. You can do this via the GCP Console or the `gcloud` CLI.
-
-**Example using `gcloud`:**
+First, set your project context for the `gcloud` CLI and enable all the necessary APIs.
 
 ```bash
-# Create the secret
+# Replace "your-gcp-project-id" with your actual project ID
+export GCP_PROJECT_ID="your-gcp-project-id"
+gcloud config set project $GCP_PROJECT_ID
+
+# Enable the required APIs for the project
+gcloud services enable \
+  run.googleapis.com \
+  cloudscheduler.googleapis.com \
+  secretmanager.googleapis.com \
+  iam.googleapis.com \
+  artifactregistry.googleapis.com \
+  cloudresourcemanager.googleapis.com
+```
+
+---
+
+#### Step 2: Create a Bucket for Terraform State
+
+It is a critical best practice to store your Terraform state file remotely.
+
+```bash
+# Replace "your-unique-bucket-name" with a globally unique name
+export TF_STATE_BUCKET="your-unique-bucket-name"
+gcloud storage buckets create gs://$TF_STATE_BUCKET --project=$GCP_PROJECT_ID --location=europe-west3
+```
+
+**Note:** You must update the `ci-cd.yml` workflow later to use this bucket name.
+
+---
+
+#### Step 3: Create Secrets in Secret Manager
+
+Our application loads its configuration from secrets. Create a secret for each required environment variable.
+
+**Example for one secret:**
+
+```bash
+# 1. Create the secret container
 gcloud secrets create SLACK_BOT_TOKEN --replication-policy="automatic"
 
-# Add the first version of the secret value
+# 2. Add the secret value (this reads from your terminal)
 printf "your-xoxb-slack-token-here" | gcloud secrets versions add SLACK_BOT_TOKEN --data-file=-
 ```
 
-Repeat this process for `SLACK_CHANNEL_ID`, `PLAYER_IDS`, etc.
+**Repeat the process above for all of the following secrets:**
 
-**2. Mount Secrets in Terraform:**
-The final step is to tell Terraform to mount these secrets as environment variables in the Cloud Run container. Open `terraform/cloud_run.tf` and add an `env` block for each secret.
+- `DB_NAME`
+- `SLACK_BOT_TOKEN`
+- `SLACK_CHANNEL_ID`
+- `BOOKING_FILTER`
+- `TENANT_ID`
+- `TURSO_PRIMARY_URL`
+- `TURSO_AUTH_TOKEN`
 
-```terraform
-# In terraform/cloud_run.tf inside the container definition
+---
 
-# ...
-      env {
-        name = "SLACK_BOT_TOKEN"
-        value_source {
-          secret_key_ref {
-            secret  = "SLACK_BOT_TOKEN" # The name of the secret in Secret Manager
-            version = "latest"
-          }
-        }
-      }
-      env {
-        name = "SLACK_CHANNEL_ID"
-        value_source {
-          secret_key_ref {
-            secret  = "SLACK_CHANNEL_ID"
-            version = "latest"
-          }
-        }
-      }
-      # Add blocks for PLAYER_IDS, TENANT_ID, etc.
-# ...
+#### Step 4: Configure Workload Identity Federation
+
+This is the key step to allow GitHub Actions to securely authenticate with GCP.
+
+**4a. Create a GCP Service Account for GitHub Actions**
+This service account is what GitHub will impersonate.
+
+```bash
+export GITHUB_SA="github-actions-runner"
+gcloud iam service-accounts create $GITHUB_SA \
+  --display-name="GitHub Actions Runner SA"
 ```
 
-Our Terraform script (`iam.tf`) automatically handles granting the Cloud Run service the necessary `Secret Manager Secret Accessor` role for all secrets listed in the `secret_names` variable. There are no manual IAM permissions to configure.
+**4b. Grant the Service Account Permissions**
+This service account needs permission to manage the resources defined in our Terraform files.
 
-### Automated Deployment with GitHub Actions
+```bash
+# Get the full email of the service account
+export GITHUB_SA_EMAIL=$(gcloud iam service-accounts list --filter="displayName:GitHub Actions Runner SA" --format="value(email)")
 
-This project uses a GitHub Actions workflow to automate the entire testing, building, and deployment process. The workflow is defined in `.github/workflows/ci-cd.yml`.
+# Grant permissions
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:$GITHUB_SA_EMAIL" \
+  --role="roles/run.admin"
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:$GITHUB_SA_EMAIL" \
+  --role="roles/iam.serviceAccountUser"
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:$GITHUB_SA_EMAIL" \
+  --role="roles/secretmanager.admin"
+```
 
-**Workflow Trigger:**
-The CI/CD pipeline is automatically triggered on every `push` to the `main` branch.
+You also need to grant it permission to write to the Terraform state bucket:
 
-**Workflow Steps:**
+```bash
+gcloud storage buckets add-iam-member gs://$TF_STATE_BUCKET \
+  --member="serviceAccount:$GITHUB_SA_EMAIL" \
+  --role="roles/storage.objectAdmin"
+```
 
-1.  **Build and Push:** The workflow builds the application's Docker image and pushes it to the Google Artifact Registry, tagged with the Git commit SHA.
-2.  **Deploy with Terraform:** It then uses Terraform to deploy the new image to Google Cloud Run. It passes the new image tag to the Terraform configuration, ensuring that your infrastructure state is always in sync.
+**4c. Create the Workload Identity Pool and Provider**
+This creates the trust relationship between GCP and GitHub.
 
-**Setup for Your Fork:**
-To get the automated deployment working on your own fork of this repository, you must configure the following secrets in your GitHub repository's settings (`Settings` > `Secrets and variables` > `Actions`):
+```bash
+gcloud iam workload-identity-pools create "github-pool" \
+  --location="global" \
+  --display-name="GitHub Actions Pool"
 
-- `GCP_PROJECT_ID`: Your Google Cloud project ID.
-- `GCP_WORKLOAD_IDENTITY_PROVIDER`: The full name of your Workload Identity Provider (e.g., `projects/123.../locations/global/workloadIdentityPools/my-pool/providers/my-provider`). This is the recommended, most secure way to authenticate.
-- `GCP_SERVICE_ACCOUNT`: The email of the GCP service account that you've granted permissions to deploy to Cloud Run and push to Artifact Registry.
+# Get the full ID of the new pool
+export WORKLOAD_POOL_ID=$(gcloud iam workload-identity-pools list --location="global" --filter="displayName:GitHub Actions Pool" --format="value(name)")
 
-You must also update the `TERRAFORM_STATE_BUCKET` environment variable in the `.github/workflows/ci-cd.yml` file to point to your own GCS bucket.
+# Create the provider, restricting it to your repository
+export GITHUB_REPO="your-github-username/ideal-tribble"
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --workload-identity-pool-id="$WORKLOAD_POOL_ID" \
+  --location="global" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository"
+```
 
-Once applied, Terraform will create all resources and output the URL of your new Cloud Run service. The Cloud Scheduler job will already be configured to trigger it automatically.
+**4d. Link the GCP Service Account to the GitHub Identity**
+This is the final step that allows an action running in your repo to impersonate the service account.
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding "$GITHUB_SA_EMAIL" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/$WORKLOAD_POOL_ID/attribute.repository/$GITHUB_REPO"
+```
+
+---
+
+#### Step 5: Configure Your GitHub Repository
+
+1.  **Update the CI/CD Workflow:**
+
+    - Open the `.github/workflows/ci-cd.yml` file.
+    - Find the `TERRAFORM_STATE_BUCKET` environment variable and replace the placeholder with the unique bucket name you created in Step 2.
+
+2.  **Add Secrets to GitHub Actions:**
+    - In your forked GitHub repository, go to `Settings` > `Secrets and variables` > `Actions`.
+    - Create the following three secrets:
+
+| Secret Name                      | Value                                                                                                                                                                                      |
+| :------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GCP_PROJECT_ID`                 | Your GCP Project ID (e.g., `your-gcp-project-id`).                                                                                                                                         |
+| `GCP_SERVICE_ACCOUNT`            | The full email of the service account you created in Step 4a.                                                                                                                              |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | The full name of the provider. Get this by running: <br> `gcloud iam workload-identity-pools providers list --location=global --workload-identity-pool=github-pool --format="value(name)"` |
+
+---
+
+#### Step 6: Deploy!
+
+With the setup complete, simply **push a commit to the `main` branch** of your forked repository.
+
+The GitHub Actions workflow will automatically trigger. It will:
+
+1.  Authenticate to Google Cloud using Workload Identity Federation.
+2.  Build the application's Docker image.
+3.  Push the image to Google Artifact Registry.
+4.  Run `terraform apply` to provision the Cloud Run service, IAM roles, and Cloud Scheduler jobs with the new image.
+
+The URL of your live service will be available in the output of the "Deploy with Terraform" step in the GitHub Actions log.
 
 ## Testing
 
@@ -210,13 +304,12 @@ Here's a look at our future development plans:
 - **API Documentation:** Create comprehensive API documentation using an OpenAPI (Swagger) specification and update this README with endpoint details.
 - **Enhanced Slack Interactivity & Commands:**
   - Use interactive buttons and modals for setting availability or confirming match participation.
-  - Introduce slash commands like `/padel-availability` for quick access to information.
+  - Introduce slash command `/upcomming-mathces` for access to upcomming matches
 - **Remote Metrics & Monitoring:**
   - Export the application's operational metrics to a dedicated monitoring system for advanced visualization, alerting, and long-term storage.
   - Potential tools for this include Google Cloud Monitoring, Prometheus with Grafana, or Datadog.
 - **Guest Player Management:**
   - Add a way to include guest players in a match without permanently adding them to the club's member list.
-- **Update CLI testing tool to support all API endpoints with dryRun and verbose options**
 
 ## License
 

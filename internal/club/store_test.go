@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS matches (
 	tenant_name TEXT NOT NULL,
 	processing_status TEXT NOT NULL DEFAULT 'NEW',
 	match_type TEXT NOT NULL,
-	teams_json TEXT,
-	results_json TEXT,
+	teams_blob BLOB,
+	results_blob BLOB,
 	ball_bringer_id TEXT,
 	ball_bringer_name TEXT,
 	FOREIGN KEY (owner_id) REFERENCES players(id) ON DELETE SET NULL,
@@ -123,6 +123,76 @@ func TestUpsertMatch(t *testing.T) {
 	assert.Equal(t, playtomic.StatusNew, matches[0].ProcessingStatus)
 }
 
+func TestGetPlayers(t *testing.T) {
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
+
+	_, err := db.Exec(`INSERT INTO players (id, name, level, ball_bringer_count) VALUES 
+		('p1', 'Player One', 1.0, 1),
+		('p2', 'Player Two', 2.0, 2),
+		('p3', 'Player Three', 3.0, 3)`)
+	require.NoError(t, err)
+
+	t.Run("gets multiple players", func(t *testing.T) {
+		players, err := store.GetPlayers([]string{"p1", "p3"})
+		require.NoError(t, err)
+		require.Len(t, players, 2)
+
+		// Check if the correct players are returned, regardless of order
+		playerMap := make(map[string]club.PlayerInfo)
+		for _, p := range players {
+			playerMap[p.ID] = p
+		}
+
+		assert.Contains(t, playerMap, "p1")
+		assert.Contains(t, playerMap, "p3")
+		assert.Equal(t, "Player One", playerMap["p1"].Name)
+		assert.Equal(t, 1, playerMap["p1"].BallBringerCount)
+		assert.Equal(t, "Player Three", playerMap["p3"].Name)
+		assert.Equal(t, 3, playerMap["p3"].BallBringerCount)
+	})
+
+	t.Run("returns empty slice for no matches", func(t *testing.T) {
+		players, err := store.GetPlayers([]string{"p4", "p5"})
+		require.NoError(t, err)
+		assert.Len(t, players, 0)
+	})
+
+	t.Run("returns empty slice for empty id slice", func(t *testing.T) {
+		players, err := store.GetPlayers([]string{})
+		require.NoError(t, err)
+		assert.Len(t, players, 0)
+	})
+}
+
+func TestSetBallBringer(t *testing.T) {
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Setup initial data
+	_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count) VALUES ('p1', 'Player One', 5)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, tenant_id, tenant_name, match_type) VALUES ('m1', 'p1', 'Player One', 0, 0, 0, 'status', 'game_status', 'results_status', 'resource', 'tenant', 'tenant_name', 'type')`)
+	require.NoError(t, err)
+
+	// Set the ball bringer
+	err = store.SetBallBringer("m1", "p1", "Player One")
+	require.NoError(t, err)
+
+	// Verify match is updated
+	var ballBringerID, ballBringerName string
+	err = db.QueryRow("SELECT ball_bringer_id, ball_bringer_name FROM matches WHERE id = 'm1'").Scan(&ballBringerID, &ballBringerName)
+	require.NoError(t, err)
+	assert.Equal(t, "p1", ballBringerID)
+	assert.Equal(t, "Player One", ballBringerName)
+
+	// Verify player's count is incremented
+	var count int
+	err = db.QueryRow("SELECT ball_bringer_count FROM players WHERE id = 'p1'").Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 6, count)
+}
+
 func TestUpdateProcessingStatus(t *testing.T) {
 	store, db, teardown := setupTestDB(t)
 	defer teardown()
@@ -201,7 +271,7 @@ func TestGetPlayersSortedByLevel(t *testing.T) {
 	require.Len(t, players, 3)
 
 	assert.Equal(t, "Player A", players[0].Name)
-	assert.Equal(t, float32(4.5), players[0].Level)
+	assert.Equal(t, float64(4.5), players[0].Level)
 	assert.Equal(t, "Player B", players[1].Name)
 	assert.Equal(t, "Player C", players[2].Name)
 }

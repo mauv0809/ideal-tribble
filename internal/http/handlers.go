@@ -4,31 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
-	slackclient "github.com/slack-go/slack"
+	"github.com/slack-go/slack"
 )
-
-func (s *Server) MetricsHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		log.Debug("Received metrics request")
-		metrics, err := s.Metrics.GetAll()
-		if err != nil {
-			log.Error("Failed to get metrics", "error", err)
-			http.Error(w, "Failed to retrieve metrics", http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(metrics); err != nil {
-			log.Error("Failed to write metrics response", "error", err)
-		}
-	}
-}
 
 func (s *Server) HealthCheckHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -60,17 +44,31 @@ func (s *Server) ClearStoreHandler() http.HandlerFunc {
 func (s *Server) FetchMatchesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Info("Starting match fetch...")
-		s.Metrics.Increment("fetcher_runs")
+		s.Metrics.IncFetcherRuns()
 		isDryRun := isDryRunFromContext(r)
+
+		daysStr := r.URL.Query().Get("days")
+		daysToSubtract := 0
+		if daysStr != "" {
+			parsedDays, err := strconv.Atoi(daysStr)
+			if err == nil && parsedDays > 0 {
+				daysToSubtract = parsedDays
+				log.Info("Fetching historical matches", "days", daysToSubtract)
+			} else {
+				log.Warn("Invalid 'days' parameter provided. Defaulting to 0.", "days_param", daysStr)
+			}
+		}
+
+		startDate := time.Now().AddDate(0, 0, -daysToSubtract)
 
 		params := &playtomic.SearchMatchesParams{
 			SportID:       s.Cfg.BookingFilter,
 			HasPlayers:    true,
 			Sort:          "start_date,ASC",
 			TenantIDs:     []string{s.Cfg.TenantID},
-			FromStartDate: time.Now().Format("2006-01-02") + "T00:00:00",
+			FromStartDate: startDate.Format("2006-01-02") + "T00:00:00",
 		}
-
+		log.Info("Fetching matches from", "startDate", startDate)
 		matches, err := s.PlaytomicClient.GetMatches(params)
 		if err != nil {
 			log.Error("Error fetching Playtomic bookings", "error", err)
@@ -79,8 +77,11 @@ func (s *Server) FetchMatchesHandler() http.HandlerFunc {
 		}
 
 		log.Info("Found matches from API", "count", len(matches))
-		var clubMatches int
+
+		var clubMatchesToUpsert []*playtomic.PadelMatch
+		var mu sync.Mutex
 		var wg sync.WaitGroup
+
 		for _, match := range matches {
 			if match.OwnerID == nil || !s.Store.IsKnownPlayer(*match.OwnerID) {
 				continue
@@ -99,29 +100,29 @@ func (s *Server) FetchMatchesHandler() http.HandlerFunc {
 					return
 				}
 
-				for _, team := range specificMatch.Teams {
-					for _, player := range team.Players {
-						s.Store.AddPlayer(player.UserID, player.Name, player.Level)
-					}
-				}
-
-				if !isDryRun {
-					if err := s.Store.UpsertMatch(&specificMatch); err != nil {
-						log.Error("Failed to upsert match", "error", err, "matchID", specificMatch.MatchID)
-					} else {
-						log.Info("Successfully upserted match", "matchID", specificMatch.MatchID)
-						clubMatches++
-					}
-				} else {
-					log.Info("[Dry Run] Would have upserted match", "matchID", specificMatch.MatchID)
-				}
+				mu.Lock()
+				clubMatchesToUpsert = append(clubMatchesToUpsert, &specificMatch)
+				mu.Unlock()
 			}(match.MatchID)
 		}
 		wg.Wait()
 
+		if len(clubMatchesToUpsert) > 0 {
+			if !isDryRun {
+				log.Info("Upserting club matches", "count", len(clubMatchesToUpsert))
+				if err := s.Store.UpsertMatches(clubMatchesToUpsert); err != nil {
+					log.Error("Failed to bulk upsert matches", "error", err)
+					http.Error(w, "Failed to save matches", http.StatusInternalServerError)
+					return
+				}
+			} else {
+				log.Info("[Dry Run] Would have upserted club matches", "count", len(clubMatchesToUpsert))
+			}
+		}
+
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "Match fetch completed.")
-		log.Info("Match fetch finished.", "matches", len(matches), "clubMatches", clubMatches)
+		log.Info("Match fetch finished.", "total_api_matches", len(matches), "club_matches_found", len(clubMatchesToUpsert))
 	}
 }
 
@@ -211,6 +212,15 @@ func (s *Server) LeaderboardHandler() http.HandlerFunc {
 	}
 }
 
+// respondWithSlackMsg is a helper to format and write a Slack message as an HTTP response.
+func respondWithSlackMsg(w http.ResponseWriter, msg slack.Message) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(msg); err != nil {
+		log.Error("Failed to encode slack message to JSON", "error", err)
+	}
+}
+
 // LeaderboardCommandHandler returns a handler for the /leaderboard Slack command.
 func (s *Server) LeaderboardCommandHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -221,12 +231,21 @@ func (s *Server) LeaderboardCommandHandler() http.HandlerFunc {
 			return
 		}
 
-		message := s.SlackClient.FormatLeaderboard(stats)
-		s.SlackClient.SendMessage(message, s.Metrics, isDryRunFromContext(r))
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(message); err != nil {
-			log.Error("Failed to encode leaderboard message to JSON", "error", err)
+		msg, err := s.Notifier.FormatLeaderboardResponse(stats)
+		if err != nil {
+			http.Error(w, "Failed to format leaderboard", http.StatusInternalServerError)
+			log.Error("Failed to format leaderboard", "error", err)
+			return
 		}
+
+		slackMsg, ok := msg.(slack.Message)
+		if !ok {
+			http.Error(w, "Invalid message format for Slack", http.StatusInternalServerError)
+			log.Error("Failed to cast message to slack.Message")
+			return
+		}
+
+		respondWithSlackMsg(w, slackMsg)
 	}
 }
 
@@ -242,23 +261,31 @@ func (s *Server) PlayerStatsCommandHandler() http.HandlerFunc {
 			http.Error(w, "Player name is required.", http.StatusBadRequest)
 			return
 		}
-		// Example curl command to fetch stats for "Morten Voss":
-		// curl -X POST -d "text=Morten Voss" http://localhost:8080/slack/command/player-stats
+
 		log.Info("Received player stats command", "player", playerName)
 
 		stats, err := s.Store.GetPlayerStatsByName(playerName)
-		var message slackclient.Message
+		var msg any
 		if err != nil {
 			log.Warn("Could not find player stats", "player", playerName, "error", err)
-			message = s.SlackClient.FormatPlayerNotFound(playerName)
+			msg, err = s.Notifier.FormatPlayerNotFoundResponse(playerName)
 		} else {
-			message = s.SlackClient.FormatPlayerStats(stats, playerName)
+			msg, err = s.Notifier.FormatPlayerStatsResponse(stats, playerName)
 		}
-		s.SlackClient.SendMessage(message, s.Metrics, isDryRunFromContext(r))
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(message); err != nil {
-			log.Error("Failed to encode player stats message to JSON", "error", err)
+
+		if err != nil {
+			http.Error(w, "Failed to format player stats", http.StatusInternalServerError)
+			log.Error("Failed to format player stats", "error", err)
+			return
 		}
+
+		slackMsg, ok := msg.(slack.Message)
+		if !ok {
+			http.Error(w, "Invalid message format for Slack", http.StatusInternalServerError)
+			log.Error("Failed to cast message to slack.Message")
+			return
+		}
+		respondWithSlackMsg(w, slackMsg)
 	}
 }
 
@@ -272,11 +299,20 @@ func (s *Server) LevelLeaderboardCommandHandler() http.HandlerFunc {
 			return
 		}
 
-		message := s.SlackClient.FormatLevelLeaderboard(players)
-		s.SlackClient.SendMessage(message, s.Metrics, isDryRunFromContext(r))
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(message); err != nil {
-			log.Error("Failed to encode level leaderboard message to JSON", "error", err)
+		msg, err := s.Notifier.FormatLevelLeaderboardResponse(players)
+		if err != nil {
+			http.Error(w, "Failed to format level leaderboard", http.StatusInternalServerError)
+			log.Error("Failed to format level leaderboard", "error", err)
+			return
 		}
+
+		slackMsg, ok := msg.(slack.Message)
+		if !ok {
+			http.Error(w, "Invalid message format for Slack", http.StatusInternalServerError)
+			log.Error("Failed to cast message to slack.Message")
+			return
+		}
+
+		respondWithSlackMsg(w, slackMsg)
 	}
 }

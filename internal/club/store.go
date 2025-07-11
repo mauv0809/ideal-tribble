@@ -2,11 +2,12 @@ package club
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 // New creates a new ClubStore.
@@ -27,12 +28,12 @@ func (s *store) UpsertMatch(match *playtomic.PadelMatch) error {
 		return err
 	}
 
-	teamsJSON, err := json.Marshal(match.Teams)
+	teamsBlob, err := msgpack.Marshal(match.Teams)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
-	resultsJSON, err := json.Marshal(match.Results)
+	resultsBlob, err := msgpack.Marshal(match.Results)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -41,7 +42,7 @@ func (s *store) UpsertMatch(match *playtomic.PadelMatch) error {
 	// This statement is the heart of the "dumb upsert".
 	// ON CONFLICT, it updates all fields EXCEPT processing_status.
 	stmt, err := tx.Prepare(`
-		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_json, results_json, processing_status)
+		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, processing_status)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			owner_id = excluded.owner_id,
@@ -58,8 +59,8 @@ func (s *store) UpsertMatch(match *playtomic.PadelMatch) error {
 			tenant_id = excluded.tenant_id,
 			tenant_name = excluded.tenant_name,
 			match_type = excluded.match_type,
-			teams_json = excluded.teams_json,
-			results_json = excluded.results_json;
+			teams_blob = excluded.teams_blob,
+			results_blob = excluded.results_blob;
 	`)
 	if err != nil {
 		tx.Rollback()
@@ -67,10 +68,67 @@ func (s *store) UpsertMatch(match *playtomic.PadelMatch) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsJSON, resultsJSON, playtomic.StatusNew)
+	_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew)
 	if err != nil {
 		tx.Rollback()
 		return err
+	}
+
+	return tx.Commit()
+}
+
+// UpsertMatches inserts or updates multiple matches in a single transaction.
+func (s *store) UpsertMatches(matches []*playtomic.PadelMatch) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	// Rollback is deferred to execute only if the transaction is not committed.
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, processing_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			owner_id = excluded.owner_id,
+			owner_name = excluded.owner_name,
+			start_time = excluded.start_time,
+			end_time = excluded.end_time,
+			created_at = excluded.created_at,
+			status = excluded.status,
+			game_status = excluded.game_status,
+			results_status = excluded.results_status,
+			resource_name = excluded.resource_name,
+			access_code = excluded.access_code,
+			price = excluded.price,
+			tenant_id = excluded.tenant_id,
+			tenant_name = excluded.tenant_name,
+			match_type = excluded.match_type,
+			teams_blob = excluded.teams_blob,
+			results_blob = excluded.results_blob;
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, match := range matches {
+		teamsBlob, err := msgpack.Marshal(match.Teams)
+		if err != nil {
+			return fmt.Errorf("failed to marshal teams for match %s: %w", match.MatchID, err)
+		}
+		resultsBlob, err := msgpack.Marshal(match.Results)
+		if err != nil {
+			return fmt.Errorf("failed to marshal results for match %s: %w", match.MatchID, err)
+		}
+
+		_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew)
+		if err != nil {
+			return fmt.Errorf("failed to execute statement for match %s: %w", match.MatchID, err)
+		}
 	}
 
 	return tx.Commit()
@@ -91,7 +149,7 @@ func (s *store) GetMatchesForProcessing() ([]*playtomic.PadelMatch, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_json, results_json, ball_bringer_id, ball_bringer_name, processing_status
+		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status
 		FROM matches
 		WHERE processing_status != ?
 	`, playtomic.StatusCompleted)
@@ -115,12 +173,13 @@ func (s *store) GetMatchesForProcessing() ([]*playtomic.PadelMatch, error) {
 // scanMatch is a helper function to scan a single match row.
 func (s *store) scanMatch(scanner interface{ Scan(...any) error }) (*playtomic.PadelMatch, error) {
 	var match playtomic.PadelMatch
-	var teamsJSON, resultsJSON, ballBringerID, ballBringerName sql.NullString
+	var teamsBlob, resultsBlob []byte
+	var ballBringerID, ballBringerName sql.NullString
 
 	err := scanner.Scan(
 		&match.MatchID, &match.OwnerID, &match.OwnerName, &match.Start, &match.End, &match.CreatedAt,
 		&match.Status, &match.GameStatus, &match.ResultsStatus, &match.ResourceName, &match.AccessCode, &match.Price,
-		&match.Tenant.ID, &match.Tenant.Name, &match.MatchType, &teamsJSON, &resultsJSON,
+		&match.Tenant.ID, &match.Tenant.Name, &match.MatchType, &teamsBlob, &resultsBlob,
 		&ballBringerID, &ballBringerName, &match.ProcessingStatus,
 	)
 	if err != nil {
@@ -130,17 +189,17 @@ func (s *store) scanMatch(scanner interface{ Scan(...any) error }) (*playtomic.P
 	match.BallBringerID = ballBringerID.String
 	match.BallBringerName = ballBringerName.String
 
-	if teamsJSON.Valid && teamsJSON.String != "" {
-		if err := json.Unmarshal([]byte(teamsJSON.String), &match.Teams); err != nil {
-			log.Error("Failed to unmarshal teams_json", "error", err, "matchID", match.MatchID)
+	if len(teamsBlob) > 0 {
+		if err := msgpack.Unmarshal(teamsBlob, &match.Teams); err != nil {
+			log.Error("Failed to unmarshal teams_blob", "error", err, "matchID", match.MatchID)
 		}
 	} else {
 		match.Teams = []playtomic.Team{}
 	}
 
-	if resultsJSON.Valid && resultsJSON.String != "" {
-		if err := json.Unmarshal([]byte(resultsJSON.String), &match.Results); err != nil {
-			log.Error("Failed to unmarshal results_json", "error", err, "matchID", match.MatchID)
+	if len(resultsBlob) > 0 {
+		if err := msgpack.Unmarshal(resultsBlob, &match.Results); err != nil {
+			log.Error("Failed to unmarshal results_blob", "error", err, "matchID", match.MatchID)
 		}
 	} else {
 		match.Results = []playtomic.SetResult{}
@@ -397,6 +456,43 @@ func (s *store) AddPlayer(playerID, name string, level float64) {
 	}
 }
 
+// UpsertPlayers inserts or updates multiple players in a single transaction.
+func (s *store) UpsertPlayers(players []PlayerInfo) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO players (id, name, level)
+		VALUES (?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			level = excluded.level;
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement for players: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, player := range players {
+		if player.ID == "" {
+			log.Warn("Skipping player with empty ID")
+			continue
+		}
+		_, err := stmt.Exec(player.ID, player.Name, player.Level)
+		if err != nil {
+			return fmt.Errorf("failed to execute statement for player %s: %w", player.ID, err)
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (s *store) IsKnownPlayer(playerID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -475,10 +571,75 @@ func (s *store) GetAllPlayers() ([]PlayerInfo, error) {
 			continue
 		}
 		p.Name = name.String // handle NULL name from db
-		p.Level = float32(level.Float64)
+		p.Level = level.Float64
 		players = append(players, p)
 	}
 	return players, nil
+}
+
+// GetPlayers retrieves information for a specific list of players.
+func (s *store) GetPlayers(playerIDs []string) ([]PlayerInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(playerIDs) == 0 {
+		return []PlayerInfo{}, nil
+	}
+
+	query := "SELECT id, name, ball_bringer_count, level FROM players WHERE id IN (?" + strings.Repeat(",?", len(playerIDs)-1) + ")"
+	args := make([]interface{}, len(playerIDs))
+	for i, id := range playerIDs {
+		args[i] = id
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		log.Error("Failed to query players by IDs", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var players []PlayerInfo
+	for rows.Next() {
+		var p PlayerInfo
+		var name sql.NullString
+		var level sql.NullFloat64
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCount, &level); err != nil {
+			log.Error("Failed to scan player row", "error", err)
+			continue // Or handle error more gracefully
+		}
+		p.Name = name.String
+		p.Level = level.Float64
+		players = append(players, p)
+	}
+	return players, nil
+}
+
+// SetBallBringer assigns a player as the ball bringer for a match and increments their count.
+func (s *store) SetBallBringer(matchID, playerID, playerName string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Update the match with the ball bringer's details
+	_, err = tx.Exec("UPDATE matches SET ball_bringer_id = ?, ball_bringer_name = ? WHERE id = ?", playerID, playerName, matchID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to update match with ball bringer: %w", err)
+	}
+
+	// Increment the player's ball bringer count
+	_, err = tx.Exec("UPDATE players SET ball_bringer_count = ball_bringer_count + 1 WHERE id = ?", playerID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to increment ball bringer count: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 // GetPlayersSortedByLevel retrieves all players from the database, sorted by their level.
@@ -503,7 +664,7 @@ func (s *store) GetPlayersSortedByLevel() ([]PlayerInfo, error) {
 			continue
 		}
 		p.Name = name.String
-		p.Level = float32(level.Float64)
+		p.Level = level.Float64
 		players = append(players, p)
 	}
 	return players, nil
@@ -513,9 +674,10 @@ func (s *store) GetPlayersSortedByLevel() ([]PlayerInfo, error) {
 func (s *store) GetAllMatches() ([]*playtomic.PadelMatch, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	rows, err := s.db.Query(`
-		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_json, results_json, ball_bringer_id, ball_bringer_name, processing_status
-		FROM matches ORDER BY start_time DESC
+		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status
+		FROM matches
 	`)
 	if err != nil {
 		log.Error("Failed to query all matches", "error", err)
