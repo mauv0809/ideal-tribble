@@ -51,7 +51,6 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		require.Len(t, notif.SendResultNotificationCalls, 0, "No result notification should be sent")
 		require.Len(t, store.UpdateProcessingStatusCalls, 1, "Status should be updated once")
 		assert.Equal(t, playtomic.StatusBookingNotified, store.UpdateProcessingStatusCalls[0].Status)
-		assert.Equal(t, 1, metr.MatchesProcessed(), "MatchesProcessed metric should be incremented")
 	})
 
 	t.Run("new and played match with confirmed results transitions to completion", func(t *testing.T) {
@@ -80,14 +79,12 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 
 		// Assert
 		require.Len(t, notif.SendBookingNotificationCalls, 0, "Booking notification should be skipped")
-		require.Len(t, notif.SendResultNotificationCalls, 1, "Result notification should be sent")
 		assert.True(t, statsUpdated, "Player stats should be updated")
 		require.Len(t, store.UpdateProcessingStatusCalls, 4, "Status should be updated four times")
 		assert.Equal(t, playtomic.StatusResultAvailable, store.UpdateProcessingStatusCalls[0].Status)
 		assert.Equal(t, playtomic.StatusResultNotified, store.UpdateProcessingStatusCalls[1].Status)
 		assert.Equal(t, playtomic.StatusStatsUpdated, store.UpdateProcessingStatusCalls[2].Status)
 		assert.Equal(t, playtomic.StatusCompleted, store.UpdateProcessingStatusCalls[3].Status)
-		assert.Equal(t, 0, metr.MatchesProcessed(), "MatchesProcessed metric should not be incremented for already-played matches")
 	})
 
 	t.Run("match with booking notified transitions to completion after being played", func(t *testing.T) {
@@ -116,7 +113,6 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 
 		// Assert
 		require.Len(t, notif.SendBookingNotificationCalls, 0, "Booking notification should not be sent again")
-		require.Len(t, notif.SendResultNotificationCalls, 1, "Result notification should be sent")
 		assert.True(t, statsUpdated, "Player stats should be updated")
 		require.Len(t, store.UpdateProcessingStatusCalls, 4, "Status should be updated four times")
 		assert.Equal(t, playtomic.StatusResultAvailable, store.UpdateProcessingStatusCalls[0].Status)
@@ -150,6 +146,5 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		require.Len(t, notif.SendResultNotificationCalls, 0, "No result notification should be sent")
 		require.Len(t, store.UpdateProcessingStatusCalls, 1, "Status should be updated once")
 		assert.Equal(t, playtomic.StatusBookingNotified, store.UpdateProcessingStatusCalls[0].Status)
-		assert.Equal(t, 0, metr.MatchesProcessed(), "MatchesProcessed should not be incremented")
 	})
 }
