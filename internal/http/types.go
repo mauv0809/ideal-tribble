@@ -9,6 +9,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
+	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 )
 
 type Server struct {
@@ -20,4 +21,6 @@ type Server struct {
 	Notifier        notifier.Notifier
 	Processor       *processor.Processor
 	Router          *http.ServeMux
+	pubsub          pubsub.PubSubClient
+	//InngestClient   inngest.InngestClient
 }

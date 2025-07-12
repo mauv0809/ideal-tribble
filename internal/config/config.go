@@ -34,6 +34,12 @@ func Load() Config {
 			PrimaryURL: getEnv("TURSO_PRIMARY_URL"),
 			AuthToken:  getEnv("TURSO_AUTH_TOKEN"),
 		},
+		Inngest: InngestConfig{
+			AppID:      getEnv("INNGEST_APP_ID"),
+			SingingKey: getEnv("INNGEST_SIGNING_KEY"),
+			EventKey:   getEnv("INNGEST_EVENT_KEY"),
+		},
 	}
+	log.Info("PUBSUB HOST", "host", getEnv("PUBSUB_EMULATOR_HOST"))
 	return cfg
 }

@@ -1,12 +1,15 @@
 package http
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
+
+	"io"
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
@@ -146,7 +149,80 @@ func isClubMatch(match playtomic.PadelMatch, store club.ClubStore) bool {
 	}
 	return false
 }
+func (s *Server) BallBoyHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("Failed to read request body", "error", err)
+			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+			return
+		}
+		log.Debug("Received ball boy message", "body", string(bodyBytes))
+		// Define a small struct to decode the incoming JSON's `data` field
+		var pubsubMsg struct {
+			Subscription string `json:"subscription"`
+			Message      struct {
+				Data string `json:"data"` // base64-encoded message payload
+				// You can add other fields if needed
+			} `json:"message"`
+		}
 
+		// Parse the outer JSON to get `data`
+		if err := json.Unmarshal(bodyBytes, &pubsubMsg); err != nil {
+			log.Error("Failed to unmarshal wrapper JSON", "error", err)
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		// Decode base64 to raw MessagePack bytes
+		rawData, err := base64.StdEncoding.DecodeString(pubsubMsg.Message.Data)
+		if err != nil {
+			log.Error("Failed to decode base64 data", "error", err)
+			http.Error(w, "Invalid base64 data", http.StatusBadRequest)
+			return
+		}
+		match := playtomic.PadelMatch{}
+		s.pubsub.ProcessMessage(rawData, &match)
+		s.Processor.AssignBallBringer(&match, false)
+		w.Write([]byte("OK"))
+	}
+}
+func (s *Server) UpdatePlayerStatsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("Failed to read request body", "error", err)
+			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+			return
+		}
+		log.Debug("Received update player stats message", "body", string(bodyBytes))
+		// Define a small struct to decode the incoming JSON's `data` field
+		var pubsubMsg struct {
+			Subscription string `json:"subscription"`
+			Message      struct {
+				Data string `json:"data"` // base64-encoded message payload
+				// You can add other fields if needed
+			} `json:"message"`
+		}
+
+		// Parse the outer JSON to get `data`
+		if err := json.Unmarshal(bodyBytes, &pubsubMsg); err != nil {
+			log.Error("Failed to unmarshal wrapper JSON", "error", err)
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		// Decode base64 to raw MessagePack bytes
+		rawData, err := base64.StdEncoding.DecodeString(pubsubMsg.Message.Data)
+		if err != nil {
+			log.Error("Failed to decode base64 data", "error", err)
+			http.Error(w, "Invalid base64 data", http.StatusBadRequest)
+			return
+		}
+		match := playtomic.PadelMatch{}
+		s.pubsub.ProcessMessage(rawData, &match)
+		s.Processor.UpdatePlayerStats(&match)
+		w.Write([]byte("OK"))
+	}
+}
 func (s *Server) ProcessMatchesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Info("Starting match processing...")
@@ -316,3 +392,12 @@ func (s *Server) LevelLeaderboardCommandHandler() http.HandlerFunc {
 		respondWithSlackMsg(w, slackMsg)
 	}
 }
+
+/*func (s *Server) SendInngestEventHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data := map[string]interface{}{"matchId": "1234-556435", "test": "test"}
+		s.InngestClient.SendEvent("test", data)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	}
+}*/

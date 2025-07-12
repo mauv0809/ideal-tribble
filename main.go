@@ -17,12 +17,12 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/notifier/slack"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
+	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 )
 
 func main() {
 	// Start profiling timer
 	startTime := time.Now()
-
 	log.SetFormatter(log.JSONFormatter)
 	cfg := config.Load()
 	db, dbTeardown, err := database.InitDB(cfg.DBName, cfg.Turso.PrimaryURL, cfg.Turso.AuthToken)
@@ -35,13 +35,26 @@ func main() {
 		log.Info("Closing database connection")
 		dbTeardown()
 	}()
-
+	/*dev := true
+	options := inngestgo.ClientOpts{
+		AppID:      cfg.Inngest.AppID,
+		SigningKey: &cfg.Inngest.SingingKey,
+		EventKey:   &cfg.Inngest.EventKey,
+		Dev:        &dev,
+	}
+	inngestProvider, err := inngestgo.NewClient(options)
+	if err != nil {
+		log.Fatalf("Failed to initialize inngest: %s", err)
+	}
+	inngestClient := inngest.New(inngestProvider)
+	*/
 	clubStore := club.New(db)
 	metricsSvc := metrics.NewService()
 	metricsHandler := metrics.NewMetricsHandler()
 	playtomicClient := playtomic.NewClient()
 	notifier := slack.NewNotifier(cfg.SlackBotToken, cfg.SlackChannelID, metricsSvc)
-	processor := processor.New(clubStore, notifier, metricsSvc)
+	pubsub := pubsub.New("TEST")
+	processor := processor.New(clubStore, notifier, metricsSvc, pubsub)
 
 	s := server.NewServer(
 		clubStore,
@@ -51,6 +64,8 @@ func main() {
 		playtomicClient,
 		notifier,
 		processor,
+		pubsub,
+		//inngestClient,
 	)
 	metricsSvc.SetStartupTime(float64(dbInitDuration.Milliseconds()) / 1000)
 

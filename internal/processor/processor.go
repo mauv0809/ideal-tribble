@@ -7,12 +7,14 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
+	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 )
 
 // New creates a new Processor.
-func New(store Store, notifier Notifier, metrics metrics.Metrics) *Processor {
+func New(store Store, notifier Notifier, metrics metrics.Metrics, pubsub pubsub.PubSubClient) *Processor {
 	return &Processor{
 		store:    store,
+		pubsub:   pubsub,
 		notifier: notifier,
 		metrics:  metrics,
 	}
@@ -44,7 +46,6 @@ func (p *Processor) ProcessMatches(dryRun bool) {
 
 func (p *Processor) processMatch(match *playtomic.PadelMatch, dryRun bool) {
 	log.Info("Processing match", "matchID", match.MatchID, "initial_status", match.ProcessingStatus, "game_status", match.GameStatus)
-
 	for {
 		currentState := match.ProcessingStatus
 		log.Debug("Evaluating match state", "matchID", match.MatchID, "status", currentState)
@@ -69,26 +70,30 @@ func (p *Processor) processMatch(match *playtomic.PadelMatch, dryRun bool) {
 			}
 
 			// If a match is already played, we never want to send a booking notification.
-			if match.GameStatus == playtomic.GameStatusPlayed {
+			switch match.GameStatus {
+			case playtomic.GameStatusPlayed:
 				// If results are also confirmed, we can jump straight to processing the result.
-				if match.ResultsStatus == playtomic.ResultsStatusConfirmed {
+				switch match.ResultsStatus {
+				case playtomic.ResultsStatusConfirmed:
 					log.Info("Match is new but already played with confirmed results. Skipping booking notification and advancing to result available.", "matchID", match.MatchID)
 					p.updateStatus(match, playtomic.StatusResultAvailable, dryRun)
-				} else if match.ResultsStatus == playtomic.ResultsStatusExpired {
+				case playtomic.ResultsStatusExpired:
 					log.Info("Match is new and already played, but results are expired. Setting match to completed.", "matchID", match.MatchID)
 					p.updateStatus(match, playtomic.StatusCompleted, dryRun)
-				} else {
+				default:
 					// If played but results are not ready, just mark booking as "notified" to prevent future booking notifications.
 					log.Info("Match is new and already played, but results are not confirmed. Skipping booking notification.", "matchID", match.MatchID)
 					p.updateStatus(match, playtomic.StatusBookingNotified, dryRun)
 				}
-			} else if match.GameStatus == playtomic.GameStatusCanceled {
+			case playtomic.GameStatusCanceled:
 				log.Info("Match is canceled. Setting match to completed.", "matchID", match.MatchID)
 				p.updateStatus(match, playtomic.StatusCompleted, dryRun)
-			} else {
+			default:
 				// This is a normal, upcoming match. Send the booking notification.
 				log.Info("Match is new. Sending booking notification.", "matchID", match.MatchID)
-				p.assignBallBringer(match, dryRun)
+				if !dryRun {
+					p.pubsub.SendMessage("ball-boy", match)
+				}
 				p.notifier.SendBookingNotification(match, dryRun)
 				p.updateStatus(match, playtomic.StatusBookingNotified, dryRun)
 			}
@@ -112,7 +117,8 @@ func (p *Processor) processMatch(match *playtomic.PadelMatch, dryRun bool) {
 		case playtomic.StatusResultNotified:
 			log.Info("Match result has been notified. Updating player stats.", "matchID", match.MatchID)
 			if !dryRun {
-				p.store.UpdatePlayerStats(match)
+				p.pubsub.SendMessage("update-player-stats", match)
+
 			}
 			p.updateStatus(match, playtomic.StatusStatsUpdated, dryRun)
 
@@ -137,8 +143,11 @@ func (p *Processor) processMatch(match *playtomic.PadelMatch, dryRun bool) {
 	}
 	log.Info("Finished processing match", "matchID", match.MatchID, "final_status", match.ProcessingStatus)
 }
-
-func (p *Processor) assignBallBringer(match *playtomic.PadelMatch, dryRun bool) {
+func (p *Processor) UpdatePlayerStats(match *playtomic.PadelMatch) {
+	log.Debug("Updating player stats", "matchID", match.MatchID)
+	p.store.UpdatePlayerStats(match)
+}
+func (p *Processor) AssignBallBringer(match *playtomic.PadelMatch, dryRun bool) {
 	if match.BallBringerID != "" {
 		log.Debug("Ball bringer already assigned", "matchID", match.MatchID, "player", match.BallBringerName)
 		return

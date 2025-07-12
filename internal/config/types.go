@@ -9,8 +9,14 @@ type Config struct {
 	BookingFilter  string
 	TenantID       string
 	Turso          TursoConfig
+	Inngest        InngestConfig
 }
 type TursoConfig struct {
 	PrimaryURL string
 	AuthToken  string
+}
+type InngestConfig struct {
+	SingingKey string
+	EventKey   string
+	AppID      string
 }

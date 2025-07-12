@@ -9,9 +9,10 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
+	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 )
 
-func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler http.Handler, cfg config.Config, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier, processor *processor.Processor) *Server {
+func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler http.Handler, cfg config.Config, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier, processor *processor.Processor, pubsub pubsub.PubSubClient /*inngestClient inngest.InngestClient*/) *Server {
 	server := &Server{
 		Store:           store,
 		Metrics:         metricsSvc,
@@ -21,6 +22,8 @@ func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler 
 		Notifier:        notifier,
 		Processor:       processor,
 		Router:          http.NewServeMux(),
+		pubsub:          pubsub,
+		//InngestClient:   inngestClient,
 	}
 
 	server.routes()
@@ -38,9 +41,13 @@ func (s *Server) routes() {
 	s.Router.Handle("/matches", Chain(s.ListMatchesHandler(), paramsMiddleware))
 	s.Router.Handle("/fetch", Chain(s.FetchMatchesHandler(), paramsMiddleware))
 	s.Router.Handle("/process", Chain(s.ProcessMatchesHandler(), paramsMiddleware))
+	s.Router.Handle("/assign-ball-boy", Chain(s.BallBoyHandler(), paramsMiddleware))
+	s.Router.Handle("/update-player-stats", Chain(s.UpdatePlayerStatsHandler(), paramsMiddleware))
 	s.Router.Handle("/slack/command/leaderboard", Chain(s.LeaderboardCommandHandler(), paramsMiddleware))
 	s.Router.Handle("/slack/command/player-stats", Chain(s.PlayerStatsCommandHandler(), paramsMiddleware))
 	s.Router.Handle("/slack/command/level-leaderboard", Chain(s.LevelLeaderboardCommandHandler(), paramsMiddleware))
+	//s.Router.Handle("/inngest/send", s.SendInngestEventHandler())
+	//s.Router.Handle("/api/inngest", s.InngestClient.Serve())
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

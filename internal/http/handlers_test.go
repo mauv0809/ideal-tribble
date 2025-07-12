@@ -38,7 +38,7 @@ func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, no
 	proc := processor.New(clubStore, notifier, metricsSvc)
 
 	// A real mux is needed to prevent the router from being nil.
-	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc)
+	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, nil)
 
 	teardown := func() {
 		if dbTeardown != nil {

@@ -304,7 +304,7 @@ Here's a look at our future development plans:
 - **API Documentation:** Create comprehensive API documentation using an OpenAPI (Swagger) specification and update this README with endpoint details.
 - **Enhanced Slack Interactivity & Commands:**
   - Use interactive buttons and modals for setting availability or confirming match participation.
-  - Introduce slash command `/upcomming-mathces` for access to upcomming matches
+  - Introduce slash command `/upcoming-matches` for access to upcoming matches.
 - **Remote Metrics & Monitoring:**
   - Export the application's operational metrics to a dedicated monitoring system for advanced visualization, alerting, and long-term storage.
   - Potential tools for this include Google Cloud Monitoring, Prometheus with Grafana, or Datadog.
