@@ -8,7 +8,8 @@ type Config struct {
 	SlackChannelID string
 	TenantID       string
 	Turso          TursoConfig
-	Inngest        InngestConfig
+	//Inngest        InngestConfig
+	ProjectID string
 }
 type TursoConfig struct {
 	PrimaryURL string

@@ -11,7 +11,7 @@ import (
 func Load() Config {
 	err := godotenv.Load()
 	if err != nil {
-		log.Warn("No .env file found, reading from environment variables")
+		log.Info("No .env file found, reading from environment variables")
 	}
 
 	// A helper function to get a required env var. It will fail if the env var is not set.
@@ -33,12 +33,12 @@ func Load() Config {
 			PrimaryURL: getEnv("TURSO_PRIMARY_URL"),
 			AuthToken:  getEnv("TURSO_AUTH_TOKEN"),
 		},
-		Inngest: InngestConfig{
+		/*Inngest: InngestConfig{
 			AppID:      getEnv("INNGEST_APP_ID"),
 			SingingKey: getEnv("INNGEST_SIGNING_KEY"),
 			EventKey:   getEnv("INNGEST_EVENT_KEY"),
-		},
+		},*/
+		ProjectID: getEnv("GCP_PROJECT"),
 	}
-	log.Info("PUBSUB HOST", "host", getEnv("PUBSUB_EMULATOR_HOST"))
 	return cfg
 }

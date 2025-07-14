@@ -7,7 +7,7 @@ resource "google_project_service" "scheduler_api" {
 resource "google_cloud_scheduler_job" "fetch_job" {
   project          = var.gcp_project_id
   name             = "${var.service_name}-fetch"
-  description      = "Triggers the /fetch endpoint to get new matches from Playtomic."
+  description      = "Triggers the ${var.fetch_path} endpoint to get new matches from Playtomic."
   schedule         = var.fetch_cron_schedule
   time_zone        = "Etc/UTC"
   attempt_deadline = "320s"
@@ -15,20 +15,24 @@ resource "google_cloud_scheduler_job" "fetch_job" {
 
   http_target {
     http_method = "POST"
-    uri         = "${google_cloud_run_v2_service.main.uri}/fetch"
+    uri         = "${google_cloud_run_v2_service.main.uri}${var.fetch_path}"
 
     oidc_token {
       service_account_email = google_service_account.scheduler_invoker.email
     }
   }
 
-  depends_on = [google_project_service.scheduler_api]
+  depends_on = [
+    google_project_service.scheduler_api,
+    google_cloud_run_v2_service.main,
+    google_service_account.scheduler_invoker
+  ]
 }
 
 resource "google_cloud_scheduler_job" "process_job" {
   project          = var.gcp_project_id
   name             = "${var.service_name}-process"
-  description      = "Triggers the /process endpoint to handle fetched matches."
+  description      = "Triggers the ${var.process_path} endpoint to handle fetched matches."
   schedule         = var.process_cron_schedule
   time_zone        = "Etc/UTC"
   attempt_deadline = "320s"
@@ -36,12 +40,16 @@ resource "google_cloud_scheduler_job" "process_job" {
 
   http_target {
     http_method = "POST"
-    uri         = "${google_cloud_run_v2_service.main.uri}/process"
+    uri         = "${google_cloud_run_v2_service.main.uri}${var.process_path}"
 
     oidc_token {
       service_account_email = google_service_account.scheduler_invoker.email
     }
   }
 
-  depends_on = [google_project_service.scheduler_api]
-} 
+  depends_on = [
+    google_project_service.scheduler_api,
+    google_cloud_run_v2_service.main,
+    google_service_account.scheduler_invoker
+  ]
+}

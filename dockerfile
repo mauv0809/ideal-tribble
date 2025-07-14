@@ -1,38 +1,28 @@
-
-# Use the official Golang image to build the application
-# Using a specific version is a good practice
+# Builder stage
 FROM golang:1.24-bullseye AS builder
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Install gcc, musl-dev (standard libc headers), and other build tools needed for CGO
-RUN apt-get update && apt-get install -y build-essential
-RUN apt-get update && apt-get install -y build-essential
+# Install build dependencies needed for CGO (libsqlite3-dev as example)
+RUN apt-get update && apt-get install -y build-essential libsqlite3-dev
 
-# Copy go.mod and go.sum files to download dependencies
+# Copy Go module files and download dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the rest of the application source code
+# Copy all source code
 COPY . .
 
-# Build the Go application
-# -o /app/server creates the binary named 'server'
-# CGO_ENABLED=0 is important for creating a static binary
-# -ldflags="-w -s" strips debug information to make the binary smaller
-RUN CGO_ENABLED=1 GOOS=linux CGO_LDFLAGS="-ldl" go build -a -installsuffix cgo -o /app/server -ldflags="-w -s" .
+# Build the binary with CGO enabled
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o /app/server -ldflags="-w -s -linkmode=external -extldflags=-ldl" .
 
-# ---
-# Create the final, small image
-# Using a distroless image for a smaller and more secure final image
-FROM gcr.io/distroless/static-debian11
+# Final stage: distroless image that supports dynamic libraries
+FROM gcr.io/distroless/cc-debian11
 
-# Set the working directory
 WORKDIR /
 
-# Copy the built binary from the builder stage
+# Copy the binary from the builder stage
 COPY --from=builder /app/server /server
 
-# The command to run when the container starts
+# Run the binary
 ENTRYPOINT ["/server"]

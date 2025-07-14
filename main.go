@@ -53,7 +53,7 @@ func main() {
 	metricsHandler := metrics.NewMetricsHandler()
 	playtomicClient := playtomic.NewClient()
 	notifier := slack.NewNotifier(cfg.SlackBotToken, cfg.SlackChannelID, metricsSvc)
-	pubsub := pubsub.New("TEST")
+	pubsub := pubsub.New(cfg.ProjectID)
 	processor := processor.New(clubStore, notifier, metricsSvc, pubsub)
 
 	s := server.NewServer(

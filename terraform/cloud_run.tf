@@ -14,12 +14,25 @@ resource "google_cloud_run_v2_service" "main" {
 
     containers {
       image = var.image_name
-      ports {
-        container_port = 8080
+      startup_probe {
+        initial_delay_seconds = 5
+        timeout_seconds = 240 
+        period_seconds = 240
+        failure_threshold = 1
+        tcp_socket {
+          port = 8080
+        }
       }
-      env {
-        name  = "PORT"
-        value = "8080"
+      liveness_probe {
+        http_get {
+          path = "/health"
+        }
+      }
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
       }
       env {
         name = "DB_NAME"
@@ -44,15 +57,6 @@ resource "google_cloud_run_v2_service" "main" {
         value_source {
           secret_key_ref {
             secret  = "SLACK_CHANNEL_ID"
-            version = "latest"
-          }
-        }
-      }
-      env {
-        name = "BOOKING_FILTER"
-        value_source {
-          secret_key_ref {
-            secret  = "BOOKING_FILTER"
             version = "latest"
           }
         }
@@ -84,11 +88,28 @@ resource "google_cloud_run_v2_service" "main" {
           }
         }
       }
+       env {
+        name  = "GCP_PROJECT"
+        value = var.gcp_project_id
+      }
     }
+    scaling {
+      max_instance_count = 1
+    }
+    
   }
+  traffic {
+  type     = "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"
+  revision = var.stable_revision
+  percent  = 100
+}
 
+traffic {
+  type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
+  percent = 0
+}
   # Make the service private, only allowing authenticated invocations
   ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   depends_on = [google_project_service.run_api]
-} 
+}
