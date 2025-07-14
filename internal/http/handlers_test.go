@@ -15,6 +15,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
+	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/slack-go/slack"
 	"github.com/stretchr/testify/assert"
@@ -35,7 +36,8 @@ func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, no
 	reg := prometheus.NewRegistry()
 	metricsSvc := metrics.NewService(reg)
 	metricsHandler := metrics.NewMetricsHandler(reg)
-	proc := processor.New(clubStore, notifier, metricsSvc)
+	pubsub := pubsub.NewMock("TEST")
+	proc := processor.New(clubStore, notifier, metricsSvc, pubsub)
 
 	// A real mux is needed to prevent the router from being nil.
 	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, nil)
@@ -213,6 +215,7 @@ func TestFetchMatchesHandler(t *testing.T) {
 	server.Store.AddPlayer("p1", "Player One", 1.0)
 	server.Store.AddPlayer("p2", "Player Two", 1.0)
 	server.Store.AddPlayer("p3", "Player Three", 1.0)
+	server.Store.AddPlayer("p4", "Player Four", 1.0)
 
 	req, err := http.NewRequest("GET", "/fetch", nil)
 	require.NoError(t, err)

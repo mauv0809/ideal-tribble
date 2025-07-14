@@ -7,6 +7,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
+	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,8 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store := club.NewMock()
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
-		p := New(store, notif, metr)
+		pubsub := pubsub.NewMock("TEST")
+		p := New(store, notif, metr, pubsub)
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",
@@ -58,7 +60,8 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store := club.NewMock()
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
-		p := New(store, notif, metr)
+		pubsub := pubsub.NewMock("TEST")
+		p := New(store, notif, metr, pubsub)
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",
@@ -69,17 +72,19 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store.GetMatchesForProcessingFunc = func() ([]*playtomic.PadelMatch, error) {
 			return []*playtomic.PadelMatch{match}, nil
 		}
-		var statsUpdated bool
-		store.UpdatePlayerStatsFunc = func(m *playtomic.PadelMatch) {
-			statsUpdated = true
-		}
 
 		// Execute
 		p.ProcessMatches(false)
 
 		// Assert
 		require.Len(t, notif.SendBookingNotificationCalls, 0, "Booking notification should be skipped")
-		assert.True(t, statsUpdated, "Player stats should be updated")
+		// The processor's responsibility is to SEND the message, not to update the stats itself.
+		// The stats update is handled by a separate handler that consumes the pub/sub message.
+		require.Len(t, pubsub.SendMessageCalls, 1, "A pubsub message should be sent to update stats")
+		assert.Equal(t, "update-player-stats", pubsub.SendMessageCalls[0].Topic)
+		sentMatch, ok := pubsub.SendMessageCalls[0].Data.(*playtomic.PadelMatch)
+		require.True(t, ok, "Data sent to pubsub should be a PadelMatch")
+		assert.Equal(t, "m1", sentMatch.MatchID)
 		require.Len(t, store.UpdateProcessingStatusCalls, 4, "Status should be updated four times")
 		assert.Equal(t, playtomic.StatusResultAvailable, store.UpdateProcessingStatusCalls[0].Status)
 		assert.Equal(t, playtomic.StatusResultNotified, store.UpdateProcessingStatusCalls[1].Status)
@@ -92,7 +97,8 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store := club.NewMock()
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
-		p := New(store, notif, metr)
+		pubsub := pubsub.NewMock("TEST")
+		p := New(store, notif, metr, pubsub)
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",
@@ -103,17 +109,19 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store.GetMatchesForProcessingFunc = func() ([]*playtomic.PadelMatch, error) {
 			return []*playtomic.PadelMatch{match}, nil
 		}
-		var statsUpdated bool
-		store.UpdatePlayerStatsFunc = func(m *playtomic.PadelMatch) {
-			statsUpdated = true
-		}
 
 		// Execute
 		p.ProcessMatches(false)
 
 		// Assert
 		require.Len(t, notif.SendBookingNotificationCalls, 0, "Booking notification should not be sent again")
-		assert.True(t, statsUpdated, "Player stats should be updated")
+		// The processor's responsibility is to SEND the message, not to update the stats itself.
+		// The stats update is handled by a separate handler that consumes the pub/sub message.
+		require.Len(t, pubsub.SendMessageCalls, 1, "A pubsub message should be sent to update stats")
+		assert.Equal(t, "update-player-stats", pubsub.SendMessageCalls[0].Topic)
+		sentMatch, ok := pubsub.SendMessageCalls[0].Data.(*playtomic.PadelMatch)
+		require.True(t, ok, "Data sent to pubsub should be a PadelMatch")
+		assert.Equal(t, "m1", sentMatch.MatchID)
 		require.Len(t, store.UpdateProcessingStatusCalls, 4, "Status should be updated four times")
 		assert.Equal(t, playtomic.StatusResultAvailable, store.UpdateProcessingStatusCalls[0].Status)
 		assert.Equal(t, playtomic.StatusResultNotified, store.UpdateProcessingStatusCalls[1].Status)
@@ -126,7 +134,8 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store := club.NewMock()
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
-		p := New(store, notif, metr)
+		pubsub := pubsub.NewMock("TEST")
+		p := New(store, notif, metr, pubsub)
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",

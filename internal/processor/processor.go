@@ -89,11 +89,9 @@ func (p *Processor) processMatch(match *playtomic.PadelMatch, dryRun bool) {
 				log.Info("Match is canceled. Setting match to completed.", "matchID", match.MatchID)
 				p.updateStatus(match, playtomic.StatusCompleted, dryRun)
 			default:
-				// This is a normal, upcoming match. Send the booking notification.
+				// This is a normal, upcoming match. Assign ball bringer and send notification.
+				p.AssignBallBringer(match, dryRun)
 				log.Info("Match is new. Sending booking notification.", "matchID", match.MatchID)
-				if !dryRun {
-					p.pubsub.SendMessage("ball-boy", match)
-				}
 				p.notifier.SendBookingNotification(match, dryRun)
 				p.updateStatus(match, playtomic.StatusBookingNotified, dryRun)
 			}
