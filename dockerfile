@@ -6,6 +6,9 @@ FROM golang:1.24-alpine AS builder
 # Set the working directory inside the container
 WORKDIR /app
 
+# Install gcc, musl-dev (standard libc headers), and other build tools needed for CGO
+RUN apk add --no-cache gcc musl-dev
+
 # Copy go.mod and go.sum files to download dependencies
 COPY go.mod go.sum ./
 RUN go mod download
@@ -17,7 +20,7 @@ COPY . .
 # -o /app/server creates the binary named 'server'
 # CGO_ENABLED=0 is important for creating a static binary
 # -ldflags="-w -s" strips debug information to make the binary smaller
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/server -ldflags="-w -s" .
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o /app/server -ldflags="-w -s" .
 
 # ---
 # Create the final, small image
