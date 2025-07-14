@@ -1,13 +1,13 @@
 
 # Use the official Golang image to build the application
 # Using a specific version is a good practice
-FROM golang:1.24-alpine AS builder
+FROM golang:1.24-bullseye AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
 
 # Install gcc, musl-dev (standard libc headers), and other build tools needed for CGO
-RUN apk add --no-cache gcc musl-dev
+RUN apt-get update && apt-get install -y build-essential
 
 # Copy go.mod and go.sum files to download dependencies
 COPY go.mod go.sum ./
