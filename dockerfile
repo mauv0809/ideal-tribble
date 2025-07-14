@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Install gcc, musl-dev (standard libc headers), and other build tools needed for CGO
 RUN apt-get update && apt-get install -y build-essential
-RUN apk add --no-cache gcc musl-dev
+RUN apt-get update && apt-get install -y build-essential
 
 # Copy go.mod and go.sum files to download dependencies
 COPY go.mod go.sum ./
