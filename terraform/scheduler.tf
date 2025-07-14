@@ -11,6 +11,7 @@ resource "google_cloud_scheduler_job" "fetch_job" {
   schedule         = var.fetch_cron_schedule
   time_zone        = "Etc/UTC"
   attempt_deadline = "320s"
+  paused           = true
 
   http_target {
     http_method = "POST"
@@ -31,6 +32,7 @@ resource "google_cloud_scheduler_job" "process_job" {
   schedule         = var.process_cron_schedule
   time_zone        = "Etc/UTC"
   attempt_deadline = "320s"
+  paused           = true
 
   http_target {
     http_method = "POST"
