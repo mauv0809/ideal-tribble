@@ -21,7 +21,7 @@ env:
   GCP_REGION: "europe-west3" # e.g.,
   ARTIFACT_REGISTRY_REPO: "ideal-tribble-repo" # Your Artifact Registry repository name
   IMAGE_NAME: "ideal-tribble"
-  TERRAFORM_STATE_BUCKET: "your-terraform-state-bucket-name" # <-- IMPORTANT: Replace this value
+  TERRAFORM_STATE_BUCKET: "ideal-tribble-terraform-state"
 
 jobs:
   test:

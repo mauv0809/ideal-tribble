@@ -65,7 +65,7 @@ func (s *Server) FetchMatchesHandler() http.HandlerFunc {
 		startDate := time.Now().AddDate(0, 0, -daysToSubtract)
 
 		params := &playtomic.SearchMatchesParams{
-			SportID:       s.Cfg.BookingFilter,
+			SportID:       "PADEL",
 			HasPlayers:    true,
 			Sort:          "start_date,ASC",
 			TenantIDs:     []string{s.Cfg.TenantID},
@@ -141,7 +141,7 @@ func isClubMatch(match playtomic.PadelMatch, store club.ClubStore) bool {
 		}
 	}
 
-	if totalPlayers >= 4 && knownPlayers >= 3 {
+	if totalPlayers >= 4 && knownPlayers >= 4 {
 		return true
 	}
 	if totalPlayers > 0 && totalPlayers < 4 && knownPlayers == totalPlayers {

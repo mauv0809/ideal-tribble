@@ -27,7 +27,6 @@ func Load() Config {
 		DBName:         getEnv("DB_NAME"),
 		SlackBotToken:  getEnv("SLACK_BOT_TOKEN"),
 		SlackChannelID: getEnv("SLACK_CHANNEL_ID"),
-		BookingFilter:  getEnv("BOOKING_FILTER"),
 		TenantID:       getEnv("TENANT_ID"),
 		Port:           getEnv("PORT"),
 		Turso: TursoConfig{

@@ -6,7 +6,6 @@ type Config struct {
 	Port           string
 	SlackBotToken  string
 	SlackChannelID string
-	BookingFilter  string
 	TenantID       string
 	Turso          TursoConfig
 	Inngest        InngestConfig

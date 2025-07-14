@@ -134,7 +134,6 @@ printf "your-xoxb-slack-token-here" | gcloud secrets versions add SLACK_BOT_TOKE
 - `DB_NAME`
 - `SLACK_BOT_TOKEN`
 - `SLACK_CHANNEL_ID`
-- `BOOKING_FILTER`
 - `TENANT_ID`
 - `TURSO_PRIMARY_URL`
 - `TURSO_AUTH_TOKEN`
