@@ -139,6 +139,49 @@ func createTables(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+
+	// Create indexes for efficient querying
+	createMatchesProcessingIndex := `
+	CREATE INDEX IF NOT EXISTS idx_matches_processing_game_results
+	ON matches (processing_status, game_status, results_status);
+	`
+	_, err = db.Exec(createMatchesProcessingIndex)
+	if err != nil {
+		return err
+	}
+
+	createPlayersNameIndex := `
+	CREATE INDEX IF NOT EXISTS idx_players_name ON players (name COLLATE NOCASE);
+	`
+	_, err = db.Exec(createPlayersNameIndex)
+	if err != nil {
+		return err
+	}
+
+	createPlayerStatsRankIndex := `
+	CREATE INDEX IF NOT EXISTS idx_player_stats_rank ON player_stats (matches_won DESC, sets_won DESC, games_won DESC);
+	`
+	_, err = db.Exec(createPlayerStatsRankIndex)
+	if err != nil {
+		return err
+	}
+
+	createPlayersBallBringerRankIndex := `
+	CREATE INDEX IF NOT EXISTS idx_players_ball_bringer_rank ON players (ball_bringer_count ASC, name ASC);
+	`
+	_, err = db.Exec(createPlayersBallBringerRankIndex)
+	if err != nil {
+		return err
+	}
+
+	createPlayersLevelIndex := `
+	CREATE INDEX IF NOT EXISTS idx_players_level ON players (level DESC);
+	`
+	_, err = db.Exec(createPlayersLevelIndex)
+	if err != nil {
+		return err
+	}
+
 	_, err = db.Exec(createPlayerStatsTable)
 	if err != nil {
 		return err

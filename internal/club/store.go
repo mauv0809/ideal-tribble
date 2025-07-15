@@ -152,7 +152,9 @@ func (s *store) GetMatchesForProcessing() ([]*playtomic.PadelMatch, error) {
 		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status
 		FROM matches
 		WHERE processing_status != ?
-	`, playtomic.StatusCompleted)
+		AND game_status != ?
+		OR (game_status != ? AND results_status != ?)
+	`, playtomic.StatusCompleted, playtomic.GameStatusCanceled, playtomic.GameStatusPlayed, playtomic.ResultsStatusWaitingFor)
 	if err != nil {
 		return nil, err
 	}
