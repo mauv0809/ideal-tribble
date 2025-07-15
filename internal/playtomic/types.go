@@ -42,12 +42,14 @@ type PadelMatch struct {
 type ProcessingStatus string
 
 const (
-	StatusNew             ProcessingStatus = "NEW"
-	StatusBookingNotified ProcessingStatus = "BOOKING_NOTIFIED"
-	StatusResultAvailable ProcessingStatus = "RESULT_AVAILABLE"
-	StatusResultNotified  ProcessingStatus = "RESULT_NOTIFIED"
-	StatusStatsUpdated    ProcessingStatus = "STATS_UPDATED"
-	StatusCompleted       ProcessingStatus = "COMPLETED"
+	StatusNew                  ProcessingStatus = "NEW"
+	StatusAssigningBallBringer ProcessingStatus = "ASSIGNING_BALL_BRINGER"
+	StatusBallBoyAssigned      ProcessingStatus = "BALL_BOY_ASSIGNED"
+	StatusBookingNotified      ProcessingStatus = "BOOKING_NOTIFIED"
+	StatusResultAvailable      ProcessingStatus = "RESULT_AVAILABLE"
+	StatusResultNotified       ProcessingStatus = "RESULT_NOTIFIED"
+	StatusStatsUpdated         ProcessingStatus = "STATS_UPDATED"
+	StatusCompleted            ProcessingStatus = "COMPLETED"
 )
 
 // MatchType defines the type of match.

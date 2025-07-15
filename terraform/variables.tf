@@ -25,13 +25,13 @@ variable "image_name" {
 variable "fetch_cron_schedule" {
   description = "The cron schedule for the fetch job."
   type        = string
-  default     = "*/5 * * * *" # Every 5 minutes
+  default     = "0 * * * *" # Every 60 minutes
 }
 
 variable "process_cron_schedule" {
   description = "The cron schedule for the process job."
   type        = string
-  default     = "* * * * *" # Every minute
+  default     = "/5 * * * *" # Every 5 minutes
 }
 
 variable "secret_names" {

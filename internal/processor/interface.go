@@ -10,11 +10,9 @@ import (
 type Store interface {
 	GetMatchesForProcessing() ([]*playtomic.PadelMatch, error)
 	UpdateProcessingStatus(matchID string, status playtomic.ProcessingStatus) error
-	UpdatePlayerStats(match *playtomic.PadelMatch)
-	GetPlayers(playerIDs []string) ([]club.PlayerInfo, error)
-	SetBallBringer(matchID, playerID, playerName string) error
-	AddPlayer(playerID, name string, level float64)
 	UpsertPlayers(players []club.PlayerInfo) error
+	AssignBallBringerAtomically(matchID string, playerIDs []string) (string, string, error)
+	UpdatePlayerStats(match *playtomic.PadelMatch)
 }
 
 // Notifier defines the notification operations required by the processor.

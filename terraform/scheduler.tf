@@ -9,7 +9,7 @@ resource "google_cloud_scheduler_job" "fetch_job" {
   name             = "${var.service_name}-fetch"
   description      = "Triggers the ${var.fetch_path} endpoint to get new matches from Playtomic."
   schedule         = var.fetch_cron_schedule
-  time_zone        = "Etc/UTC"
+  time_zone        = "Europe/Copenhagen"
   attempt_deadline = "320s"
   paused           = true
 
@@ -34,7 +34,7 @@ resource "google_cloud_scheduler_job" "process_job" {
   name             = "${var.service_name}-process"
   description      = "Triggers the ${var.process_path} endpoint to handle fetched matches."
   schedule         = var.process_cron_schedule
-  time_zone        = "Etc/UTC"
+  time_zone        = "Europe/Copenhagen"
   attempt_deadline = "320s"
   paused           = true
 

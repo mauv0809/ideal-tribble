@@ -10,7 +10,7 @@ type MockPubSubClient struct {
 	mu sync.Mutex
 
 	// Spies for method calls
-	SendMessageFunc    func(topic string, data any) error
+	SendMessageFunc    func(topic EventType, data any) error
 	ProcessMessageFunc func(data []byte, returnValue any) error
 
 	// Call records
@@ -44,10 +44,10 @@ func (m *MockPubSubClient) Reset() {
 }
 
 // SendMessage records the call and executes the mock function if provided.
-func (m *MockPubSubClient) SendMessage(topic string, data any) error {
+func (m *MockPubSubClient) SendMessage(topic EventType, data any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.SendMessageCalls = append(m.SendMessageCalls, SendMessageCall{Topic: topic, Data: data})
+	m.SendMessageCalls = append(m.SendMessageCalls, SendMessageCall{Topic: string(topic), Data: data})
 	if m.SendMessageFunc != nil {
 		return m.SendMessageFunc(topic, data)
 	}

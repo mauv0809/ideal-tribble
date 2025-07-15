@@ -180,9 +180,10 @@ func (s *Server) BallBoyHandler() http.HandlerFunc {
 			http.Error(w, "Invalid base64 data", http.StatusBadRequest)
 			return
 		}
+		isDryRun := isDryRunFromContext(r)
 		match := playtomic.PadelMatch{}
 		s.pubsub.ProcessMessage(rawData, &match)
-		s.Processor.AssignBallBringer(&match, false)
+		s.Processor.AssignBallBringer(&match, isDryRun)
 		w.Write([]byte("OK"))
 	}
 }
@@ -217,9 +218,96 @@ func (s *Server) UpdatePlayerStatsHandler() http.HandlerFunc {
 			http.Error(w, "Invalid base64 data", http.StatusBadRequest)
 			return
 		}
+		isDryRun := isDryRunFromContext(r)
 		match := playtomic.PadelMatch{}
 		s.pubsub.ProcessMessage(rawData, &match)
-		s.Processor.UpdatePlayerStats(&match)
+		s.Processor.UpdatePlayerStats(&match, isDryRun)
+		w.Write([]byte("OK"))
+	}
+}
+func (s *Server) NotifyBookingHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("Failed to read request body", "error", err)
+			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+			return
+		}
+		log.Debug("Recieved notify booking message", "body", string(bodyBytes))
+		// Define a small struct to decode the incoming JSON's `data` field
+		var pubsubMsg struct {
+			Subscription string `json:"subscription"`
+			Message      struct {
+				Data string `json:"data"` // base64-encoded message payload
+				// You can add other fields if needed
+			} `json:"message"`
+		}
+
+		// Parse the outer JSON to get `data`
+		if err := json.Unmarshal(bodyBytes, &pubsubMsg); err != nil {
+			log.Error("Failed to unmarshal wrapper JSON", "error", err)
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		// Decode base64 to raw MessagePack bytes
+		rawData, err := base64.StdEncoding.DecodeString(pubsubMsg.Message.Data)
+		if err != nil {
+			log.Error("Failed to decode base64 data", "error", err)
+			http.Error(w, "Invalid base64 data", http.StatusBadRequest)
+			return
+		}
+		isDryRun := isDryRunFromContext(r)
+		match := playtomic.PadelMatch{}
+		s.pubsub.ProcessMessage(rawData, &match)
+		err = s.Processor.NotifyBooking(&match, isDryRun)
+		if err != nil {
+			log.Error("Failed to notify booking", "error", err)
+			http.Error(w, "Failed to notify booking", http.StatusInternalServerError)
+			return
+		}
+		w.Write([]byte("OK"))
+	}
+}
+func (s *Server) NotifyResultHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("Failed to read request body", "error", err)
+			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+			return
+		}
+		log.Debug("Recieved notify booking message", "body", string(bodyBytes))
+		// Define a small struct to decode the incoming JSON's `data` field
+		var pubsubMsg struct {
+			Subscription string `json:"subscription"`
+			Message      struct {
+				Data string `json:"data"` // base64-encoded message payload
+				// You can add other fields if needed
+			} `json:"message"`
+		}
+
+		// Parse the outer JSON to get `data`
+		if err := json.Unmarshal(bodyBytes, &pubsubMsg); err != nil {
+			log.Error("Failed to unmarshal wrapper JSON", "error", err)
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		// Decode base64 to raw MessagePack bytes
+		rawData, err := base64.StdEncoding.DecodeString(pubsubMsg.Message.Data)
+		if err != nil {
+			log.Error("Failed to decode base64 data", "error", err)
+			http.Error(w, "Invalid base64 data", http.StatusBadRequest)
+			return
+		}
+		isDryRun := isDryRunFromContext(r)
+		match := playtomic.PadelMatch{}
+		s.pubsub.ProcessMessage(rawData, &match)
+		err = s.Processor.NotifyResult(&match, isDryRun)
+		if err != nil {
+			log.Error("Failed to notify result", "error", err)
+			http.Error(w, "Failed to notify result", http.StatusInternalServerError)
+			return
+		}
 		w.Write([]byte("OK"))
 	}
 }

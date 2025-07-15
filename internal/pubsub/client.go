@@ -10,6 +10,7 @@ import (
 
 func New(projectID string) PubSubClient {
 	ctx := context.Background()
+	log.Info("GCP Project", "projectId", projectID)
 	pubSubC, err := pubsub.NewClient(ctx, projectID)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
@@ -24,7 +25,7 @@ func New(projectID string) PubSubClient {
 	}
 
 }
-func (c *client) SendMessage(topic string, data any) error {
+func (c *client) SendMessage(topic EventType, data any) error {
 	ctx := context.Background()
 	msgpackData, err := msgpack.Marshal(data)
 	if err != nil {
@@ -34,7 +35,7 @@ func (c *client) SendMessage(topic string, data any) error {
 	message := &pubsub.Message{
 		Data: msgpackData,
 	}
-	result := c.client.Topic(topic).Publish(ctx, message)
+	result := c.client.Topic(string(topic)).Publish(ctx, message)
 	serverID, err := result.Get(ctx)
 	if err != nil {
 		log.Error("Failed to publish message", "error", err, "topic", topic)

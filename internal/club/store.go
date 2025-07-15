@@ -616,6 +616,7 @@ func (s *store) GetPlayers(playerIDs []string) ([]PlayerInfo, error) {
 }
 
 // SetBallBringer assigns a player as the ball bringer for a match and increments their count.
+// This function is now deprecated and replaced by AssignBallBringerAtomically to prevent race conditions.
 func (s *store) SetBallBringer(matchID, playerID, playerName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -640,6 +641,65 @@ func (s *store) SetBallBringer(matchID, playerID, playerName string) error {
 	}
 
 	return tx.Commit()
+}
+
+// AssignBallBringerAtomically finds the player with the minimum ball_bringer_count among the given player IDs,
+// assigns them as the ball bringer for the match, and atomically increments their count.
+func (s *store) AssignBallBringerAtomically(matchID string, playerIDs []string) (string, string, error) {
+	s.mu.Lock() // Ensure only one ball bringer assignment process runs at a time
+	defer s.mu.Unlock()
+
+	if len(playerIDs) == 0 {
+		return "", "", fmt.Errorf("no player IDs provided for ball bringer assignment")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to begin transaction for atomic ball bringer assignment: %w", err)
+	}
+	defer tx.Rollback() // Rollback on error by default
+
+	// Find the player with the minimum ball_bringer_count among the provided playerIDs
+	// Using SQL to find the minimum and then update ensures atomicity for selection and increment.
+	query := `
+		SELECT id, name
+		FROM players
+		WHERE id IN (
+			?` + strings.Repeat(",?", len(playerIDs)-1) + `
+		)
+		ORDER BY ball_bringer_count ASC, name ASC -- Order by name for deterministic tie-breaking
+		LIMIT 1;
+	`
+	args := ToAnySlice(playerIDs) // Helper to convert []string to []any
+
+	var selectedPlayerID string
+	var selectedPlayerName string
+	err = tx.QueryRow(query, args...).Scan(&selectedPlayerID, &selectedPlayerName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", "", fmt.Errorf("no eligible players found for ball bringer assignment among IDs: %v", playerIDs)
+		}
+		return "", "", fmt.Errorf("failed to select next ball bringer: %w", err)
+	}
+
+	// Atomically increment the selected player's ball bringer count
+	_, err = tx.Exec("UPDATE players SET ball_bringer_count = ball_bringer_count + 1 WHERE id = ?", selectedPlayerID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to increment ball bringer count for player %s: %w", selectedPlayerID, err)
+	}
+
+	// Update the match with the ball bringer's details
+	_, err = tx.Exec("UPDATE matches SET ball_bringer_id = ?, ball_bringer_name = ? WHERE id = ?", selectedPlayerID, selectedPlayerName, matchID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to update match %s with ball bringer %s: %w", matchID, selectedPlayerID, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", "", fmt.Errorf("failed to commit atomic ball bringer assignment transaction: %w", err)
+	}
+
+	log.Info("Atomically assigned ball bringer", "matchID", matchID, "playerID", selectedPlayerID, "playerName", selectedPlayerName)
+	return selectedPlayerID, selectedPlayerName, nil
 }
 
 // GetPlayersSortedByLevel retrieves all players from the database, sorted by their level.
