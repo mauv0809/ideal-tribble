@@ -36,7 +36,7 @@ resource "google_cloud_scheduler_job" "process_job" {
   schedule         = var.process_cron_schedule
   time_zone        = "Europe/Copenhagen"
   attempt_deadline = "320s"
-  paused           = true
+  paused           = false
 
   http_target {
     http_method = "POST"
