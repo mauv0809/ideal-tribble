@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary with CGO enabled
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o /app/server -ldflags="-w -s -linkmode=external -extldflags=-ldl" .
+RUN CGO_ENABLED=1 go build -o /app/server -ldflags="-w -s -linkmode=external -extldflags=-ldl" .
 
 # Final stage: distroless image that supports dynamic libraries
 FROM gcr.io/distroless/cc-debian11
