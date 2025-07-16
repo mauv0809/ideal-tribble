@@ -11,8 +11,8 @@ type client struct {
 type EventType string
 
 const (
-	EventAssignBallBoy     EventType = "assign-ball-boy"
-	EventUpdatePlayerStats EventType = "update-player-stats"
-	EventNotifyBooking     EventType = "notify-booking"
-	EventNotifyResult      EventType = "notify-result"
+	EventAssignBallBoy     EventType = "assign_ball_boy"
+	EventUpdatePlayerStats EventType = "update_player_stats"
+	EventNotifyBooking     EventType = "notify_booking"
+	EventNotifyResult      EventType = "notify_result"
 )
