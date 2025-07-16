@@ -135,8 +135,8 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 			log.Info("Match result is available. Notifying result.", "matchID", match.MatchID)
 			timeEnded := time.Unix(match.End, 0)
 			timeSinceEnd := time.Since(timeEnded)
-			//If game is ended more than 1 day ago we should not send results and just set update stats. This way we can fetch historic data without sending notifications.
-			if timeSinceEnd < 24*time.Hour {
+			//If game is ended more than 2 days ago we should not send results and just set update stats. This way we can fetch historic data without sending notifications.
+			if timeSinceEnd < 48*time.Hour {
 				if !dryRun {
 					err := p.pubsub.SendMessage(pubsub.EventNotifyResult, match)
 					if err != nil {
