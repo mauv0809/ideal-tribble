@@ -39,3 +39,13 @@ resource "google_pubsub_topic_iam_member" "publisher_bindings" {
   role   = "roles/pubsub.publisher"
   member = "serviceAccount:${google_service_account.cloud_run.email}"
 }
+
+resource "google_cloud_run_v2_service_iam_member" "pubsub_invoker" {
+  location = google_cloud_run_v2_service.main.location
+  project  = google_cloud_run_v2_service.main.project
+  name     = google_cloud_run_v2_service.main.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_run.email}"
+
+  depends_on = [google_cloud_run_v2_service.main]
+}

@@ -114,7 +114,7 @@ traffic {
 }
 
   # Make the service private, only allowing authenticated invocations
-  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  ingress = "INGRESS_TRAFFIC_ALL"
 
   depends_on = [google_project_service.run_api]
 }
