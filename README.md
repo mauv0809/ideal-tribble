@@ -311,6 +311,8 @@ Here's a look at our future development plans:
   - Potential tools for this include Google Cloud Monitoring, Prometheus with Grafana, or Datadog.
 - **Guest Player Management:**
   - Add a way to include guest players in a match without permanently adding them to the club's member list.
+- **Weekly Stats Notification:**
+  - Send a Slack notification every Sunday with the statistics (wins/losses, sets/games won) from matches played in the last 7 days. This will involve querying the `matches` table and processing the data to generate a summary of recent player performance, without storing this weekly data persistently.
 
 ## License
 
