@@ -24,5 +24,8 @@ WORKDIR /
 # Copy the binary from the builder stage
 COPY --from=builder /app/server /server
 
+# Copy migrations directory from builder stage to final image
+COPY --from=builder /app/migrations /migrations
+
 # Run the binary
 ENTRYPOINT ["/server"]
