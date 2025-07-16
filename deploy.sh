@@ -26,6 +26,18 @@ fi
 
 echo "✅ Current stable revision: $STABLE_REVISION"
 
+IMAGE=$(gcloud run revisions describe "$STABLE_REVISION" \
+  --project="$PROJECT_ID" \
+  --region="$REGION" \
+  --format="value(spec.containers[0].image)")
+
+if [[ -z "$IMAGE" ]]; then
+  echo "❌ Failed to fetch stable image. Is the service deployed yet?"
+  exit 1
+fi
+
+echo "✅ Current stable image: $IMAGE"
+
 # ----------------------
 # RUN TERRAFORM APPLY
 # ----------------------
@@ -42,6 +54,8 @@ fi
 terraform -chdir="$TERRAFORM_DIR" apply -auto-approve \
   -var="gcp_project_id=$PROJECT_ID" \
   -var="gcp_region=$REGION" \
-  -var="stable_revision=$STABLE_REVISION"
+  -var="stable_revision=$STABLE_REVISION" \
+  -var="image_name=$IMAGE"
+
 
 echo "🚀 Deployment complete."

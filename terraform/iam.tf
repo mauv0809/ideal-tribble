@@ -31,3 +31,11 @@ resource "google_secret_manager_secret_iam_member" "secret_accessor" {
 
   depends_on = [google_service_account.cloud_run]
 }
+# Allow Cloud Run service to publish to each Pub/Sub topic
+resource "google_pubsub_topic_iam_member" "publisher_bindings" {
+  for_each = var.pubsub_topics
+
+  topic  = each.key
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:${google_service_account.cloud_run.email}"
+}

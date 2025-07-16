@@ -30,7 +30,7 @@ variable "fetch_cron_schedule" {
 variable "process_cron_schedule" {
   description = "The cron schedule for the process job."
   type        = string
-  default     = "/5 * * * *" # Every 5 minutes
+  default     = "0 * * * *" # Every 5 minutes
 }
 
 variable "secret_names" {
@@ -40,7 +40,7 @@ variable "secret_names" {
     "DB_NAME",
     "SLACK_BOT_TOKEN",
     "SLACK_CHANNEL_ID",
-    "SLACK_SIGNING_SECRET
+    "SLACK_SIGNING_SECRET",
     "TENANT_ID",
     "TURSO_PRIMARY_URL",
     "TURSO_AUTH_TOKEN"
@@ -61,4 +61,15 @@ variable "process_path" {
 variable "stable_revision" {
   description = "Stable revision to keep 100% traffic on"
   type        = string
+}
+# Define topic-to-path mapping
+variable "pubsub_topics" {
+  type = map(string)
+  default = {
+    assign_ball_boy     = "/assign-ball-boy"
+    update_player_stats = "/update-player-stats"
+    notify_booking      = "/notify-booking"
+    notify_result       = "/notify-result"
+  }
+  description = "Map of Pub/Sub topic names to Cloud Run URL paths"
 }
