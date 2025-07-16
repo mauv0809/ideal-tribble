@@ -29,3 +29,4 @@ COPY --from=builder /app/migrations /migrations
 
 # Run the binary
 ENTRYPOINT ["/server"]
+
