@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/charmbracelet/log"
 	"github.com/slack-go/slack"
@@ -62,19 +63,26 @@ func (s *Server) VerifySlackSignature(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		verifier, err := slack.NewSecretsVerifier(r.Header, s.Cfg.Slack.SigningSecret)
 		if err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Error("failed to create secrets verifier", "error", err)
+
+			// Return 401 if error relates to signature or headers
+			if strings.Contains(err.Error(), "missing headers") ||
+				strings.Contains(err.Error(), "invalid byte") ||
+				strings.Contains(err.Error(), "timestamp is too old") {
+				http.Error(w, "Unauthorized: Slack signature verification failed", http.StatusUnauthorized)
+			} else {
+				// For unknown/unexpected errors, return 500
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
 			return
 		}
 
-		// TeeReader copies the reader's input to the writer and returns a new Reader.
-		// This allows us to read the request body for signature verification without consuming it for the next handler.
 		r.Body = io.NopCloser(io.TeeReader(r.Body, &verifier))
 
-		// Call the next handler in the chain to process the request
 		next.ServeHTTP(w, r)
 
-		// After the handler has processed the request, ensure the signature
 		if err = verifier.Ensure(); err != nil {
+			log.Error("Slack signature verification failed", "error", err)
 			http.Error(w, "Unauthorized: Slack signature verification failed", http.StatusUnauthorized)
 			return
 		}

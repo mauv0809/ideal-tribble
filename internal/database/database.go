@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/charmbracelet/log"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/pressly/goose/v3" // NEW: Import goose
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
@@ -25,8 +26,10 @@ func InitDB(dbName string, primaryUrl string, authToken string, migrationsDir st
 			db.Close() // Close on error
 			return nil, nil, fmt.Errorf("failed to create tables for local db: %w", err)
 		}
-		// No connector is returned for a simple local database.
-		return db, nil, nil
+		teardown := func() {
+			db.Close()
+		}
+		return db, teardown, nil
 	}
 	//Remote only database
 	log.Info("Initializing Turso database", "url", primaryUrl)

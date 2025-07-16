@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/config"
 	"github.com/mauv0809/ideal-tribble/internal/database"
@@ -85,12 +86,13 @@ func createSlackCommandRequest(t *testing.T, targetURL string, form url.Values, 
 	req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	baseString := fmt.Sprintf("v0:%d:%s", timestamp, string(bodyBytes))
-
+	log.Info("Signing secret", "signingSecret", signingSecret, "baseString", baseString)
 	h := hmac.New(sha256.New, []byte(signingSecret))
 	h.Write([]byte(baseString))
 	signature := hex.EncodeToString(h.Sum(nil))
 
 	req.Header.Set("X-Slack-Signature", "v0="+signature)
+	log.Info("Generated Slack signature", "signature", "v0="+signature)
 
 	return req
 }
@@ -169,7 +171,7 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 		form := url.Values{}
 		form.Set("text", "Morten")
 
-		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
+		req := createSlackCommandRequest(t, "/slack/command/player-stats", form, testSlackSigningSecret)
 
 		rr := httptest.NewRecorder()
 		server.Router.ServeHTTP(rr, req)
@@ -181,7 +183,7 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 		form := url.Values{}
 		form.Set("text", "Unknown")
 
-		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
+		req := createSlackCommandRequest(t, "/slack/command/player-stats", form, testSlackSigningSecret)
 
 		rr := httptest.NewRecorder()
 		server.Router.ServeHTTP(rr, req)
@@ -190,7 +192,7 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 	})
 
 	t.Run("handles missing player name", func(t *testing.T) {
-		req := createSlackCommandRequest(t, "/command/player-stats", url.Values{}, testSlackSigningSecret)
+		req := createSlackCommandRequest(t, "/slack/command/player-stats", url.Values{}, testSlackSigningSecret)
 
 		rr := httptest.NewRecorder()
 		server.Router.ServeHTTP(rr, req)
@@ -202,7 +204,7 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 		form := url.Values{}
 		form.Set("text", "Morten")
 
-		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
+		req := createSlackCommandRequest(t, "/slack/command/player-stats", form, testSlackSigningSecret)
 
 		// Tamper with the signature to make it invalid
 		req.Header.Set("X-Slack-Signature", "v0=invalid-signature")
@@ -217,7 +219,7 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 		form := url.Values{}
 		form.Set("text", "Morten")
 
-		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
+		req := createSlackCommandRequest(t, "/slack/command/player-stats", form, testSlackSigningSecret)
 
 		// Remove the signature header
 		req.Header.Del("X-Slack-Signature")
@@ -232,7 +234,7 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 		form := url.Values{}
 		form.Set("text", "Morten")
 
-		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
+		req := createSlackCommandRequest(t, "/slack/command/player-stats", form, testSlackSigningSecret)
 
 		// Set an outdated timestamp (e.g., 6 minutes ago)
 		req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(time.Now().Add(-6*time.Minute).Unix(), 10))
@@ -257,7 +259,7 @@ func TestLevelLeaderboardCommandHandler(t *testing.T) {
 	server.Store.AddPlayer("p2", "Player B", 3.5)
 	server.Store.AddPlayer("p3", "Player C", 2.5)
 
-	req := createSlackCommandRequest(t, "/command/level-leaderboard", url.Values{}, testSlackSigningSecret)
+	req := createSlackCommandRequest(t, "/slack/command/level-leaderboard", url.Values{}, testSlackSigningSecret)
 
 	rr := httptest.NewRecorder()
 	server.Router.ServeHTTP(rr, req)

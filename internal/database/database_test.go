@@ -1,7 +1,6 @@
 package database
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,12 +8,8 @@ import (
 )
 
 func TestInitDB_CreatesTables(t *testing.T) {
-	// Create a temporary file for the SQLite database
-	tmpfile, err := os.CreateTemp("", "testdb_*.sqlite")
-	require.NoError(t, err)
-	defer os.Remove(tmpfile.Name()) // Clean up the file
 
-	db, teardown, err := InitDB(tmpfile.Name(), "", "", "../../migrations")
+	db, teardown, err := InitDB(":memory:", "", "", "../../migrations")
 	require.NoError(t, err, "InitDB should not return an error")
 	if teardown != nil {
 		defer teardown()

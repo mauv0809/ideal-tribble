@@ -531,9 +531,6 @@ func (s *store) UpsertPlayers(players []PlayerInfo) error {
 }
 
 func (s *store) IsKnownPlayer(playerID string) bool {
-	if s.db == nil {
-		log.Error("DB is nil inside IsKnownPlayer")
-	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -543,6 +540,7 @@ func (s *store) IsKnownPlayer(playerID string) bool {
 		log.Error("Failed to check if player exists", "error", err, "playerID", playerID)
 		return false
 	}
+	log.Info("Checked if player exists", "playerID", playerID, "exists", exists)
 	return exists
 }
 
