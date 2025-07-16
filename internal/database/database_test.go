@@ -14,7 +14,7 @@ func TestInitDB_CreatesTables(t *testing.T) {
 	require.NoError(t, err)
 	defer os.Remove(tmpfile.Name()) // Clean up the file
 
-	db, teardown, err := InitDB(tmpfile.Name(), "", "")
+	db, teardown, err := InitDB(tmpfile.Name(), "", "", "../../migrations")
 	require.NoError(t, err, "InitDB should not return an error")
 	if teardown != nil {
 		defer teardown()
@@ -33,4 +33,10 @@ func TestInitDB_CreatesTables(t *testing.T) {
 	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='matches'").Scan(&matchesTableName)
 	require.NoError(t, err, "Querying for matches table should not produce an error")
 	assert.Equal(t, "matches", matchesTableName, "The 'matches' table should be created")
+
+	// Check if the 'players_stats' table was created
+	var playersStatsTableName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='player_stats'").Scan(&playersStatsTableName)
+	require.NoError(t, err, "Querying for players_stats table should not produce an error")
+	assert.Equal(t, "player_stats", playersStatsTableName, "The 'players_stats' table should be created")
 }

@@ -2,9 +2,11 @@ package http
 
 import (
 	"context"
+	"io"
 	"net/http"
 
 	"github.com/charmbracelet/log"
+	"github.com/slack-go/slack"
 )
 
 // Middleware defines the standard signature for an HTTP middleware.
@@ -53,4 +55,28 @@ func paramsMiddleware(next http.Handler) http.Handler {
 func isDryRunFromContext(r *http.Request) bool {
 	dryRun, ok := r.Context().Value(dryRunKey).(bool)
 	return ok && dryRun
+}
+
+// VerifySlackSignature is a middleware that verifies the Slack request signature.
+func (s *Server) VerifySlackSignature(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		verifier, err := slack.NewSecretsVerifier(r.Header, s.Cfg.Slack.SigningSecret)
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		// TeeReader copies the reader's input to the writer and returns a new Reader.
+		// This allows us to read the request body for signature verification without consuming it for the next handler.
+		r.Body = io.NopCloser(io.TeeReader(r.Body, &verifier))
+
+		// Call the next handler in the chain to process the request
+		next.ServeHTTP(w, r)
+
+		// After the handler has processed the request, ensure the signature
+		if err = verifier.Ensure(); err != nil {
+			http.Error(w, "Unauthorized: Slack signature verification failed", http.StatusUnauthorized)
+			return
+		}
+	})
 }

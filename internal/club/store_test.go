@@ -4,76 +4,23 @@ import (
 	"database/sql"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/mauv0809/ideal-tribble/internal/club"
+	"github.com/mauv0809/ideal-tribble/internal/database"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const testSchema = `
-CREATE TABLE IF NOT EXISTS players (
-	id TEXT PRIMARY KEY,
-	name TEXT,
-	level DOUBLE NOT NULL DEFAULT 0,
-	ball_bringer_count INTEGER NOT NULL DEFAULT 0,
-	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS matches (
-	id TEXT PRIMARY KEY,
-	owner_id TEXT NOT NULL,
-	owner_name TEXT NOT NULL,
-	start_time INTEGER NOT NULL,
-	end_time INTEGER NOT NULL,
-	created_at INTEGER NOT NULL,
-	status TEXT NOT NULL,
-	game_status TEXT NOT NULL,
-	results_status TEXT NOT NULL,
-	resource_name TEXT NOT NULL,
-	access_code TEXT,
-	price TEXT,
-	tenant_id TEXT NOT NULL,
-	tenant_name TEXT NOT NULL,
-	processing_status TEXT NOT NULL DEFAULT 'NEW',
-	match_type TEXT NOT NULL,
-	teams_blob BLOB,
-	results_blob BLOB,
-	ball_bringer_id TEXT,
-	ball_bringer_name TEXT,
-	FOREIGN KEY (owner_id) REFERENCES players(id) ON DELETE SET NULL,
-	FOREIGN KEY (ball_bringer_id) REFERENCES players(id) ON DELETE SET NULL
-);
-CREATE TABLE IF NOT EXISTS player_stats (
-	player_id TEXT PRIMARY KEY,
-	matches_played INTEGER NOT NULL DEFAULT 0,
-	matches_won INTEGER NOT NULL DEFAULT 0,
-	matches_lost INTEGER NOT NULL DEFAULT 0,
-	sets_won INTEGER NOT NULL DEFAULT 0,
-	sets_lost INTEGER NOT NULL DEFAULT 0,
-	games_won INTEGER NOT NULL DEFAULT 0,
-	games_lost INTEGER NOT NULL DEFAULT 0,
-	win_percentage REAL NOT NULL DEFAULT 0,
-	FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS metrics (
-	key TEXT PRIMARY KEY,
-	value INTEGER NOT NULL DEFAULT 0
-);
-`
-
 // setupTestDB creates a temporary in-memory SQLite database for testing.
 func setupTestDB(t *testing.T) (club.ClubStore, *sql.DB, func()) {
 	t.Helper()
 
-	db, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-
-	_, err = db.Exec(testSchema)
+	db, dbTeardown, err := database.InitDB(":memory:", "", "", "../../migrations")
 	require.NoError(t, err)
 
 	store := club.New(db)
-
 	teardown := func() {
+		dbTeardown()
 		db.Close()
 	}
 
@@ -259,42 +206,49 @@ func TestGetPlayersSortedByLevel(t *testing.T) {
 	store, db, teardown := setupTestDB(t)
 	defer teardown()
 
-	_, err := db.Exec(`INSERT INTO players (id, name, level) VALUES
-		('player1', 'Player B', 3.5),
-		('player2', 'Player C', 2.5),
-		('player3', 'Player A', 4.5)
-	`)
+	_, err := db.Exec(`INSERT INTO players (id, name) VALUES ('owner1', 'owner name')`)
 	require.NoError(t, err)
 
-	players, err := store.GetPlayersSortedByLevel()
-	require.NoError(t, err)
-	require.Len(t, players, 3)
+	players := []club.PlayerInfo{
+		{ID: "p1", Name: "Player A", Level: 1.5},
+		{ID: "p2", Name: "Player B", Level: 2.5},
+		{ID: "p3", Name: "Player C", Level: 0.5},
+	}
 
-	assert.Equal(t, "Player A", players[0].Name)
-	assert.Equal(t, float64(4.5), players[0].Level)
-	assert.Equal(t, "Player B", players[1].Name)
-	assert.Equal(t, "Player C", players[2].Name)
+	for _, p := range players {
+		store.AddPlayer(p.ID, p.Name, p.Level)
+	}
+
+	sortedPlayers, err := store.GetPlayersSortedByLevel()
+	require.NoError(t, err)
+	assert.Len(t, sortedPlayers, 3)
+
+	assert.Equal(t, "Player B", sortedPlayers[0].Name)
+	assert.Equal(t, "Player A", sortedPlayers[1].Name)
+	assert.Equal(t, "Player C", sortedPlayers[2].Name)
 }
 
 func TestClear(t *testing.T) {
-	store, db, teardown := setupTestDB(t)
+	store, _, teardown := setupTestDB(t)
 	defer teardown()
 
-	_, err := db.Exec(`INSERT INTO players (id, name) VALUES ('p1', 'p1 name')`)
-	require.NoError(t, err)
-	err = store.UpsertMatch(&playtomic.PadelMatch{MatchID: "m1", OwnerID: "p1"})
+	// Add some data
+	store.AddPlayer("player1", "Player One", 1.0)
+	match := &playtomic.PadelMatch{MatchID: "m1", OwnerID: "player1"}
+	err := store.UpsertMatch(match)
 	require.NoError(t, err)
 
+	// Clear the database
 	store.Clear()
 
-	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM matches").Scan(&count)
+	// Verify all data is cleared
+	allPlayers, err := store.GetAllPlayers()
 	require.NoError(t, err)
-	assert.Zero(t, count)
+	assert.Len(t, allPlayers, 0)
 
-	err = db.QueryRow("SELECT COUNT(*) FROM players").Scan(&count)
+	matches, err := store.GetMatchesForProcessing()
 	require.NoError(t, err)
-	assert.Zero(t, count)
+	assert.Len(t, matches, 0)
 }
 
 func TestUpdatePlayerStats(t *testing.T) {
@@ -344,4 +298,55 @@ func TestUpdatePlayerStats(t *testing.T) {
 		assert.Equal(t, 13, stats.GamesLost)
 		assert.InDelta(t, 0.0, stats.WinPercentage, 0.01)
 	})
+}
+
+func TestUpdateNotificationTimestamp(t *testing.T) {
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Insert a player to satisfy foreign key constraint
+	_, err := db.Exec(`INSERT INTO players (id, name) VALUES ('p1', 'Player One')`)
+	require.NoError(t, err)
+
+	// Insert a match with initial null timestamps
+	match := &playtomic.PadelMatch{
+		MatchID:          "test_match_id",
+		OwnerID:          "p1",
+		OwnerName:        "Player One",
+		Start:            1678886400, // Example Unix timestamp
+		End:              1678890000,
+		CreatedAt:        1678880000,
+		Status:           "STATUS_OPEN",
+		GameStatus:       "GAME_STATUS_UNKNOWN",
+		ResultsStatus:    "RESULTS_STATUS_WAITING",
+		ResourceName:     "Court 1",
+		Tenant:           playtomic.Tenant{ID: "tenant1", Name: "Tenant Name"},
+		ProcessingStatus: "NEW",
+		MatchType:        "PADEL_MATCH",
+	}
+	require.NoError(t, store.UpsertMatch(match))
+
+	// Test updating booking_notified_ts
+	err = store.UpdateNotificationTimestamp("test_match_id", "booking")
+	require.NoError(t, err)
+
+	var bookingTS sql.NullInt64
+	err = db.QueryRow("SELECT booking_notified_ts FROM matches WHERE id = ?", "test_match_id").Scan(&bookingTS)
+	require.NoError(t, err)
+	assert.True(t, bookingTS.Valid)
+	assert.NotZero(t, bookingTS.Int64) // Check that a timestamp was set
+
+	// Test updating result_notified_ts
+	err = store.UpdateNotificationTimestamp("test_match_id", "result")
+	require.NoError(t, err)
+
+	var resultTS sql.NullInt64
+	err = db.QueryRow("SELECT result_notified_ts FROM matches WHERE id = ?", "test_match_id").Scan(&resultTS)
+	require.NoError(t, err)
+	assert.True(t, resultTS.Valid)
+	assert.NotZero(t, resultTS.Int64) // Check that a timestamp was set
+
+	// Test updating a non-existent match (should return no error, but no rows affected)
+	err = store.UpdateNotificationTimestamp("non_existent_match", "booking")
+	require.NoError(t, err)
 }

@@ -25,7 +25,7 @@ func main() {
 	startTime := time.Now()
 	log.SetFormatter(log.JSONFormatter)
 	cfg := config.Load()
-	db, dbTeardown, err := database.InitDB(cfg.DBName, cfg.Turso.PrimaryURL, cfg.Turso.AuthToken)
+	db, dbTeardown, err := database.InitDB(cfg.DBName, cfg.Turso.PrimaryURL, cfg.Turso.AuthToken, cfg.MigrationsDir)
 	dbInitDuration := time.Since(startTime)
 	log.Info("Database initialization time recorded", "duration_ms", dbInitDuration.Milliseconds())
 	if err != nil {
@@ -52,7 +52,7 @@ func main() {
 	metricsSvc := metrics.NewService()
 	metricsHandler := metrics.NewMetricsHandler()
 	playtomicClient := playtomic.NewClient()
-	notifier := slack.NewNotifier(cfg.SlackBotToken, cfg.SlackChannelID, metricsSvc)
+	notifier := slack.NewNotifier(cfg.Slack.Token, cfg.Slack.ChannelID, metricsSvc)
 	pubsub := pubsub.New(cfg.ProjectID)
 	processor := processor.New(clubStore, notifier, metricsSvc, pubsub)
 

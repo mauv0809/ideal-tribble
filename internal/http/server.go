@@ -45,9 +45,9 @@ func (s *Server) routes() {
 	s.Router.Handle("/update-player-stats", Chain(s.UpdatePlayerStatsHandler(), paramsMiddleware))
 	s.Router.Handle("/notify-booking", Chain(s.NotifyBookingHandler(), paramsMiddleware))
 	s.Router.Handle("/notify-result", Chain(s.NotifyResultHandler(), paramsMiddleware))
-	s.Router.Handle("/slack/command/leaderboard", Chain(s.LeaderboardCommandHandler(), paramsMiddleware))
-	s.Router.Handle("/slack/command/player-stats", Chain(s.PlayerStatsCommandHandler(), paramsMiddleware))
-	s.Router.Handle("/slack/command/level-leaderboard", Chain(s.LevelLeaderboardCommandHandler(), paramsMiddleware))
+	s.Router.Handle("/slack/command/leaderboard", Chain(s.LeaderboardCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
+	s.Router.Handle("/slack/command/player-stats", Chain(s.PlayerStatsCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
+	s.Router.Handle("/slack/command/level-leaderboard", Chain(s.LevelLeaderboardCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
 	//s.Router.Handle("/inngest/send", s.SendInngestEventHandler())
 	//s.Router.Handle("/api/inngest", s.InngestClient.Serve())
 }

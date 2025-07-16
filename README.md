@@ -17,12 +17,13 @@ The name "Wally" is inspired by the helpful robot and the glass walls of the pad
 - Fetches upcoming bookings using the [go-playtomic-api](https://github.com/rafa-garcia/go-playtomic-api).
 - Intelligently filters for "club matches" based on the number of known members participating.
 - Discovers and saves new club members automatically.
-- Assigns a "ball boy" for each match to ensure fairness.
-- Posts formatted notifications to a Slack channel.
+- Assigns a "ball boy" for each match atomically to ensure fairness and prevent race conditions, making the assignment idempotent.
+- Posts formatted Slack notifications for match bookings and results idempotently, preventing duplicate notifications.
 - Tracks player statistics (win/loss records, sets/games won) and provides a leaderboard.
 - Provides two leaderboards accessible via Slack commands: `/leaderboard` (sorted by win percentage) and `/level-leaderboard` (sorted by player level).
 - Allows looking up individual player stats via the `/padel-stats [name]` command.
-- Resiliently processes matches through a state machine to ensure notifications are sent and stats are updated reliably.
+- Resiliently processes matches through a state machine, leveraging PubSub for asynchronous processing and ensuring status updates and notifications are handled reliably and idempotently across various stages.
+- Secures Slack command endpoints (e.g., `/command/leaderboard`) by verifying the `X-Slack-Signature` header, ensuring requests originate genuinely from Slack.
 - Infrastructure is managed via Terraform for consistent, repeatable deployments.
 - Includes a simple hot-reloading setup for easy local development.
 
@@ -35,6 +36,7 @@ The name "Wally" is inspired by the helpful robot and the glass walls of the pad
 - **Deployment:** Google Cloud Run, Google Cloud Scheduler
 - **CI/CD:** GitHub Actions
 - **Testing:** Go standard library, Testify
+- **Database Migrations:** Goose
 
 ## Local Development
 

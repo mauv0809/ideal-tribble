@@ -22,4 +22,5 @@ type ClubStore interface {
 	GetPlayers(playerIDs []string) ([]PlayerInfo, error)
 	SetBallBringer(matchID, playerID, playerName string) error // Deprecated: Use AssignBallBringerAtomically instead
 	AssignBallBringerAtomically(matchID string, playerIDs []string) (string, string, error)
+	UpdateNotificationTimestamp(matchID string, notificationType string) error
 }

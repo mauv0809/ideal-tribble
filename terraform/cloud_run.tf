@@ -62,6 +62,15 @@ resource "google_cloud_run_v2_service" "main" {
         }
       }
       env {
+        name = "SLACK_SIGNING_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = "SLACK_SIGNING_SECRET"
+            version = "latest"
+          }
+        }
+      }
+      env {
         name = "TENANT_ID"
         value_source {
           secret_key_ref {

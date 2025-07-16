@@ -8,11 +8,12 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/pressly/goose/v3" // NEW: Import goose
 	"github.com/tursodatabase/go-libsql"
 )
 
 // InitDB initializes the database and ensures the schema is up to date.
-func InitDB(dbName string, primaryUrl string, authToken string) (*sql.DB, func(), error) {
+func InitDB(dbName string, primaryUrl string, authToken string, migrationsDir string) (*sql.DB, func(), error) {
 	// For local-only databases, dbName is the filename.
 	// For embedded replicas, dbName is the local file, and primaryUrl is the remote.
 	// We handle the local-only case separately for clarity.
@@ -22,7 +23,7 @@ func InitDB(dbName string, primaryUrl string, authToken string) (*sql.DB, func()
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to open local database: %w", err)
 		}
-		if err = createTables(db); err != nil {
+		if err = createTables(db, migrationsDir); err != nil {
 			db.Close() // Close on error
 			return nil, nil, fmt.Errorf("failed to create tables for local db: %w", err)
 		}
@@ -56,7 +57,7 @@ func InitDB(dbName string, primaryUrl string, authToken string) (*sql.DB, func()
 	}
 
 	db := sql.OpenDB(connector)
-	if err = createTables(db); err != nil {
+	if err = createTables(db, migrationsDir); err != nil {
 		db.Close() // Close on error
 		if connector != nil {
 			connector.Close()
@@ -75,7 +76,7 @@ func InitDB(dbName string, primaryUrl string, authToken string) (*sql.DB, func()
 
 }
 
-func createTables(db *sql.DB) error {
+func createTables(db *sql.DB, migrationsDir string) error {
 	// Foreign key support is not enabled by default in SQLite
 	_, err := db.Exec("PRAGMA foreign_keys = ON;")
 	if err != nil {
@@ -83,109 +84,23 @@ func createTables(db *sql.DB) error {
 		return err
 	}
 
-	createPlayersTable := `
-    CREATE TABLE IF NOT EXISTS players (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        level DOUBLE NOT NULL DEFAULT 0,
-        ball_bringer_count INTEGER NOT NULL DEFAULT 0
-    );`
+	// Use goose for migrations
+	log.Info("Running database migrations with Goose...")
 
-	createMatchesTable := `
-    CREATE TABLE IF NOT EXISTS matches (
-        id TEXT PRIMARY KEY,
-        owner_id TEXT NOT NULL,
-        owner_name TEXT NOT NULL,
-        start_time INTEGER NOT NULL,
-        end_time INTEGER NOT NULL,
-        created_at INTEGER NOT NULL,
-        status TEXT NOT NULL,
-        game_status TEXT NOT NULL,
-        results_status TEXT NOT NULL,
-        resource_name TEXT NOT NULL,
-        access_code TEXT,
-        price TEXT,
-        tenant_id TEXT NOT NULL,
-        tenant_name TEXT NOT NULL,
-        processing_status TEXT NOT NULL DEFAULT 'NEW',
-		match_type TEXT NOT NULL,
-        teams_blob BLOB,
-        results_blob BLOB,
-        ball_bringer_id TEXT,
-        ball_bringer_name TEXT,
-        FOREIGN KEY (owner_id) REFERENCES players(id),
-        FOREIGN KEY (ball_bringer_id) REFERENCES players(id) ON DELETE SET NULL
-    );`
-
-	createPlayerStatsTable := `
-	CREATE TABLE IF NOT EXISTS player_stats (
-		player_id TEXT PRIMARY KEY,
-		matches_played INTEGER NOT NULL DEFAULT 0,
-		matches_won INTEGER NOT NULL DEFAULT 0,
-		matches_lost INTEGER NOT NULL DEFAULT 0,
-		sets_won INTEGER NOT NULL DEFAULT 0,
-		sets_lost INTEGER NOT NULL DEFAULT 0,
-		games_won INTEGER NOT NULL DEFAULT 0,
-		games_lost INTEGER NOT NULL DEFAULT 0,
-		FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
-	);`
-
-	_, err = db.Exec(createPlayersTable)
+	// Set the database dialect for Goose
+	err = goose.SetDialect("sqlite3")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to set goose dialect: %w", err)
 	}
 
-	_, err = db.Exec(createMatchesTable)
+	// Apply migrations
+	err = goose.Up(db, migrationsDir)
 	if err != nil {
-		return err
+		log.Error("Failed to apply migrations with Goose", "error", err)
+		return fmt.Errorf("failed to apply migrations with goose: %w", err)
 	}
 
-	// Create indexes for efficient querying
-	createMatchesProcessingIndex := `
-	CREATE INDEX IF NOT EXISTS idx_matches_processing_game_results
-	ON matches (processing_status, game_status, results_status);
-	`
-	_, err = db.Exec(createMatchesProcessingIndex)
-	if err != nil {
-		return err
-	}
-
-	createPlayersNameIndex := `
-	CREATE INDEX IF NOT EXISTS idx_players_name ON players (name COLLATE NOCASE);
-	`
-	_, err = db.Exec(createPlayersNameIndex)
-	if err != nil {
-		return err
-	}
-
-	createPlayerStatsRankIndex := `
-	CREATE INDEX IF NOT EXISTS idx_player_stats_rank ON player_stats (matches_won DESC, sets_won DESC, games_won DESC);
-	`
-	_, err = db.Exec(createPlayerStatsRankIndex)
-	if err != nil {
-		return err
-	}
-
-	createPlayersBallBringerRankIndex := `
-	CREATE INDEX IF NOT EXISTS idx_players_ball_bringer_rank ON players (ball_bringer_count ASC, name ASC);
-	`
-	_, err = db.Exec(createPlayersBallBringerRankIndex)
-	if err != nil {
-		return err
-	}
-
-	createPlayersLevelIndex := `
-	CREATE INDEX IF NOT EXISTS idx_players_level ON players (level DESC);
-	`
-	_, err = db.Exec(createPlayersLevelIndex)
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec(createPlayerStatsTable)
-	if err != nil {
-		return err
-	}
+	log.Info("Database migrations applied successfully")
 	log.Info("Database initialized successfully")
 	return nil
 }

@@ -19,7 +19,6 @@ variable "service_name" {
 variable "image_name" {
   description = "The full name of the container image to deploy (e.g., 'gcr.io/your-project/ideal-tribble')."
   type        = string
-  default     = "europe-west3-docker.pkg.dev/friendly-cubist-465916-e6/ideal-tribble-repo/ideal-tribble:latest"
 }
 
 variable "fetch_cron_schedule" {
@@ -41,6 +40,7 @@ variable "secret_names" {
     "DB_NAME",
     "SLACK_BOT_TOKEN",
     "SLACK_CHANNEL_ID",
+    "SLACK_SIGNING_SECRET
     "TENANT_ID",
     "TURSO_PRIMARY_URL",
     "TURSO_AUTH_TOKEN"

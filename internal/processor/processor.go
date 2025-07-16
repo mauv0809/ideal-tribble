@@ -123,7 +123,7 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 			} else {
 				log.Info("[Dry Run] Would have sent booking notification", "match", match)
 			}
-			p.updateStatus(match, playtomic.StatusBookingNotified, dryRun)
+			return
 
 		case playtomic.StatusBookingNotified:
 			if match.GameStatus == playtomic.GameStatusPlayed && match.ResultsStatus == playtomic.ResultsStatusConfirmed {
@@ -145,6 +145,7 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 				} else {
 					log.Info("[Dry Run] Would have notified results", "match", match)
 				}
+				return
 			} else {
 				log.Info("Match ended more than 24 hours ago. Skipping result notification and updating status directly.", "matchID", match.MatchID)
 				p.updateStatus(match, playtomic.StatusResultNotified, dryRun)
@@ -184,22 +185,53 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 	log.Info("Finished processing match", "matchID", match.MatchID, "final_status", match.ProcessingStatus)
 }
 func (p *Processor) NotifyResult(match *playtomic.PadelMatch, dryRun bool) error {
+	if match.ResultNotifiedTs != nil {
+		log.Debug("Result notification already sent for match. Skipping.", "matchID", match.MatchID)
+		p.updateStatus(match, playtomic.StatusResultNotified, dryRun) // Ensure in-memory status is updated
+		return nil
+	}
+
 	log.Debug("Notifying result for match", "matchID", match.MatchID)
 	err := p.notifier.SendResultNotification(match, dryRun)
 	if err != nil {
 		log.Error("Failed to send result notification", "error", err, "matchID", match.MatchID)
 		return err
 	}
+
+	if !dryRun {
+		err = p.store.UpdateNotificationTimestamp(match.MatchID, "result")
+		if err != nil {
+			log.Error("Failed to update result notification timestamp", "error", err, "matchID", match.MatchID)
+			return err
+		}
+	}
+
 	p.updateStatus(match, playtomic.StatusResultNotified, dryRun)
 	return nil
 }
 func (p *Processor) NotifyBooking(match *playtomic.PadelMatch, dryRun bool) error {
+	if match.BookingNotifiedTs != nil {
+		log.Debug("Booking notification already sent for match. Skipping.", "matchID", match.MatchID)
+		// Ensure the in-memory status is updated if it somehow wasn't (should be by ProcessMatch calling updateStatus already).
+		p.updateStatus(match, playtomic.StatusBookingNotified, dryRun)
+		return nil
+	}
+
 	log.Debug("Notifying booking for match", "matchID", match.MatchID)
 	err := p.notifier.SendBookingNotification(match, dryRun)
 	if err != nil {
 		log.Error("Failed to send booking notification", "error", err, "matchID", match.MatchID)
 		return err
 	}
+
+	if !dryRun {
+		err = p.store.UpdateNotificationTimestamp(match.MatchID, "booking")
+		if err != nil {
+			log.Error("Failed to update booking notification timestamp", "error", err, "matchID", match.MatchID)
+			return err
+		}
+	}
+
 	p.updateStatus(match, playtomic.StatusBookingNotified, dryRun)
 	return nil
 }
@@ -210,12 +242,6 @@ func (p *Processor) UpdatePlayerStats(match *playtomic.PadelMatch, dryRun bool) 
 	p.updateStatus(match, playtomic.StatusStatsUpdated, dryRun)
 }
 func (p *Processor) AssignBallBringer(match *playtomic.PadelMatch, dryRun bool) {
-	if match.BallBringerID != "" {
-		log.Debug("Ball bringer already assigned", "matchID", match.MatchID, "player", match.BallBringerName)
-		p.updateStatus(match, playtomic.StatusBallBoyAssigned, dryRun)
-		return
-	}
-
 	var playerIDs []string
 	for _, team := range match.Teams {
 		for _, player := range team.Players {
@@ -256,6 +282,7 @@ func (p *Processor) updateStatus(match *playtomic.PadelMatch, newStatus playtomi
 		log.Error("Failed to update processing status", "error", err, "matchID", match.MatchID)
 	} else {
 		log.Debug("Successfully updated status", "matchID", match.MatchID, "from", match.ProcessingStatus, "to", newStatus)
-		match.ProcessingStatus = newStatus // Keep the in-memory object in sync
+		// Crucially, update the in-memory match object even if not in dry run
+		match.ProcessingStatus = newStatus
 	}
 }

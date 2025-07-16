@@ -5,62 +5,39 @@ import (
 )
 
 // MockPubSubClient is a mock implementation of PubSubClient for testing.
-// It is safe for concurrent use.
 type MockPubSubClient struct {
-	mu sync.Mutex
-
-	// Spies for method calls
-	SendMessageFunc    func(topic EventType, data any) error
-	ProcessMessageFunc func(data []byte, returnValue any) error
-
-	// Call records
-	SendMessageCalls    []SendMessageCall
-	ProcessMessageCalls []ProcessMessageCall
-}
-
-// SendMessageCall holds the arguments for a call to SendMessage.
-type SendMessageCall struct {
-	Topic string
-	Data  any
-}
-
-// ProcessMessageCall holds the arguments for a call to ProcessMessage.
-type ProcessMessageCall struct {
-	Data        []byte
-	ReturnValue any
-}
-
-// NewMock creates a new mock PubSubClient. The projectID is ignored.
-func NewMock(projectID string) *MockPubSubClient {
-	return &MockPubSubClient{}
-}
-
-// Reset clears all call records.
-func (m *MockPubSubClient) Reset() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.SendMessageCalls = nil
-	m.ProcessMessageCalls = nil
-}
-
-// SendMessage records the call and executes the mock function if provided.
-func (m *MockPubSubClient) SendMessage(topic EventType, data any) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.SendMessageCalls = append(m.SendMessageCalls, SendMessageCall{Topic: string(topic), Data: data})
-	if m.SendMessageFunc != nil {
-		return m.SendMessageFunc(topic, data)
+	ProjectID        string
+	SendMessageCalls []struct {
+		Topic string // Changed to string to avoid type comparison issues
+		Data  any
 	}
+	ProcessMessageFunc func(data []byte, returnValue any) error // Mock function for ProcessMessage
+	mu                 sync.Mutex                               // Mutex to protect SendMessageCalls
+}
+
+// NewMock creates a new MockPubSubClient.
+func NewMock(projectID string) *MockPubSubClient {
+	return &MockPubSubClient{
+		ProjectID: projectID,
+	}
+}
+
+// SendMessage records the sent message for assertion and returns an error if ReceiveMessageFunc is set.
+func (m *MockPubSubClient) SendMessage(topic EventType, data any) error {
+	m.mu.Lock() // Protect SendMessageCalls from concurrent writes
+	defer m.mu.Unlock()
+
+	m.SendMessageCalls = append(m.SendMessageCalls, struct {
+		Topic string
+		Data  any
+	}{Topic: string(topic), Data: data}) // Cast topic to string when storing
 	return nil
 }
 
-// ProcessMessage records the call and executes the mock function if provided.
+// ProcessMessage is a mock implementation for processing messages.
 func (m *MockPubSubClient) ProcessMessage(data []byte, returnValue any) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.ProcessMessageCalls = append(m.ProcessMessageCalls, ProcessMessageCall{Data: data, ReturnValue: returnValue})
 	if m.ProcessMessageFunc != nil {
 		return m.ProcessMessageFunc(data, returnValue)
 	}
-	return nil
+	return nil // Default to no-op for ProcessMessage
 }

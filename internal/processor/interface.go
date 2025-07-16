@@ -12,6 +12,7 @@ type Store interface {
 	UpdateProcessingStatus(matchID string, status playtomic.ProcessingStatus) error
 	UpsertPlayers(players []club.PlayerInfo) error
 	AssignBallBringerAtomically(matchID string, playerIDs []string) (string, string, error)
+	UpdateNotificationTimestamp(matchID string, notificationType string) error
 	UpdatePlayerStats(match *playtomic.PadelMatch)
 }
 

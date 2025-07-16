@@ -35,7 +35,6 @@ func NewClient() PlaytomicClient {
 // Ensure APIClient implements the PlaytomicClient interface.
 var _ PlaytomicClient = (*APIClient)(nil)
 
-// GetMatches fetches a list of matches based on the provided search parameters.
 func (c *APIClient) GetMatches(params *SearchMatchesParams) ([]MatchSummary, error) {
 	const pageSize = 300
 	var (

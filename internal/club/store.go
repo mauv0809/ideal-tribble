@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
@@ -143,13 +144,37 @@ func (s *store) UpdateProcessingStatus(matchID string, status playtomic.Processi
 	return err
 }
 
+// UpdateNotificationTimestamp updates the timestamp for a specific notification type for a match.
+func (s *store) UpdateNotificationTimestamp(matchID string, notificationType string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var columnName string
+	switch notificationType {
+	case "booking":
+		columnName = "booking_notified_ts"
+	case "result":
+		columnName = "result_notified_ts"
+	default:
+		return fmt.Errorf("invalid notification type: %s", notificationType)
+	}
+
+	query := fmt.Sprintf("UPDATE matches SET %s = ? WHERE id = ?", columnName)
+	_, err := s.db.Exec(query, time.Now().Unix(), matchID)
+	if err != nil {
+		return fmt.Errorf("failed to update %s timestamp for match %s: %w", notificationType, matchID, err)
+	}
+	log.Debug("Successfully updated notification timestamp", "matchID", matchID, "type", notificationType)
+	return nil
+}
+
 // GetMatchesForProcessing retrieves all matches that are not yet in a completed state.
 func (s *store) GetMatchesForProcessing() ([]*playtomic.PadelMatch, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status
+		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status, booking_notified_ts, result_notified_ts
 		FROM matches
 		WHERE processing_status != ?
 		AND game_status != ?
@@ -177,12 +202,14 @@ func (s *store) scanMatch(scanner interface{ Scan(...any) error }) (*playtomic.P
 	var match playtomic.PadelMatch
 	var teamsBlob, resultsBlob []byte
 	var ballBringerID, ballBringerName sql.NullString
+	var bookingNotifiedTs, resultNotifiedTs sql.NullInt64 // New nullable timestamp fields
 
 	err := scanner.Scan(
 		&match.MatchID, &match.OwnerID, &match.OwnerName, &match.Start, &match.End, &match.CreatedAt,
 		&match.Status, &match.GameStatus, &match.ResultsStatus, &match.ResourceName, &match.AccessCode, &match.Price,
 		&match.Tenant.ID, &match.Tenant.Name, &match.MatchType, &teamsBlob, &resultsBlob,
 		&ballBringerID, &ballBringerName, &match.ProcessingStatus,
+		&bookingNotifiedTs, &resultNotifiedTs, // Include new fields here
 	)
 	if err != nil {
 		return nil, err
@@ -190,6 +217,14 @@ func (s *store) scanMatch(scanner interface{ Scan(...any) error }) (*playtomic.P
 
 	match.BallBringerID = ballBringerID.String
 	match.BallBringerName = ballBringerName.String
+
+	// Assign nullable timestamps to match struct
+	if bookingNotifiedTs.Valid {
+		match.BookingNotifiedTs = &bookingNotifiedTs.Int64
+	}
+	if resultNotifiedTs.Valid {
+		match.ResultNotifiedTs = &resultNotifiedTs.Int64
+	}
 
 	if len(teamsBlob) > 0 {
 		if err := msgpack.Unmarshal(teamsBlob, &match.Teams); err != nil {
@@ -496,6 +531,9 @@ func (s *store) UpsertPlayers(players []PlayerInfo) error {
 }
 
 func (s *store) IsKnownPlayer(playerID string) bool {
+	if s.db == nil {
+		log.Error("DB is nil inside IsKnownPlayer")
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -661,6 +699,18 @@ func (s *store) AssignBallBringerAtomically(matchID string, playerIDs []string) 
 	}
 	defer tx.Rollback() // Rollback on error by default
 
+	// Check if a ball bringer is already assigned to this match
+	var existingBallBringerID, existingBallBringerName sql.NullString
+	err = tx.QueryRow("SELECT ball_bringer_id, ball_bringer_name FROM matches WHERE id = ?", matchID).Scan(&existingBallBringerID, &existingBallBringerName)
+	if err != nil && err != sql.ErrNoRows {
+		return "", "", fmt.Errorf("failed to query existing ball bringer for match %s: %w", matchID, err)
+	}
+
+	if existingBallBringerID.Valid && existingBallBringerName.Valid {
+		log.Info("Ball bringer already assigned for match. Returning existing assignment.", "matchID", matchID, "playerID", existingBallBringerID.String, "playerName", existingBallBringerName.String)
+		return existingBallBringerID.String, existingBallBringerName.String, nil
+	}
+
 	// Find the player with the minimum ball_bringer_count among the provided playerIDs
 	// Using SQL to find the minimum and then update ensures atomicity for selection and increment.
 	query := `
@@ -738,7 +788,7 @@ func (s *store) GetAllMatches() ([]*playtomic.PadelMatch, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status
+		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status, booking_notified_ts, result_notified_ts
 		FROM matches
 	`)
 	if err != nil {

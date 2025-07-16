@@ -12,23 +12,25 @@ type MockStore struct {
 	mu sync.Mutex
 
 	// Spies for method calls
-	UpsertMatchFunc             func(match *playtomic.PadelMatch) error
-	UpsertMatchesFunc           func(matches []*playtomic.PadelMatch) error
-	UpdateProcessingStatusFunc  func(matchID string, status playtomic.ProcessingStatus) error
-	GetMatchesForProcessingFunc func() ([]*playtomic.PadelMatch, error)
-	GetPlayerStatsFunc          func() ([]PlayerStats, error)
-	UpdatePlayerStatsFunc       func(match *playtomic.PadelMatch)
-	AddPlayerFunc               func(playerID, name string, level float64)
-	UpsertPlayersFunc           func(players []PlayerInfo) error
-	IsKnownPlayerFunc           func(playerID string) bool
-	ClearFunc                   func()
-	ClearMatchFunc              func(matchID string)
-	GetAllPlayersFunc           func() ([]PlayerInfo, error)
-	GetPlayersSortedByLevelFunc func() ([]PlayerInfo, error)
-	GetAllMatchesFunc           func() ([]*playtomic.PadelMatch, error)
-	GetPlayerStatsByNameFunc    func(playerName string) (*PlayerStats, error)
-	GetPlayersFunc              func(playerIDs []string) ([]PlayerInfo, error)
-	SetBallBringerFunc          func(matchID, playerID, playerName string) error
+	UpsertMatchFunc                 func(match *playtomic.PadelMatch) error
+	UpsertMatchesFunc               func(matches []*playtomic.PadelMatch) error
+	UpdateProcessingStatusFunc      func(matchID string, status playtomic.ProcessingStatus) error
+	GetMatchesForProcessingFunc     func() ([]*playtomic.PadelMatch, error)
+	GetPlayerStatsFunc              func() ([]PlayerStats, error)
+	UpdatePlayerStatsFunc           func(match *playtomic.PadelMatch)
+	AddPlayerFunc                   func(playerID, name string, level float64)
+	UpsertPlayersFunc               func(players []PlayerInfo) error
+	IsKnownPlayerFunc               func(playerID string) bool
+	ClearFunc                       func()
+	ClearMatchFunc                  func(matchID string)
+	GetAllPlayersFunc               func() ([]PlayerInfo, error)
+	GetPlayersSortedByLevelFunc     func() ([]PlayerInfo, error)
+	GetAllMatchesFunc               func() ([]*playtomic.PadelMatch, error)
+	GetPlayerStatsByNameFunc        func(playerName string) (*PlayerStats, error)
+	GetPlayersFunc                  func(playerIDs []string) ([]PlayerInfo, error)
+	SetBallBringerFunc              func(matchID, playerID, playerName string) error
+	AssignBallBringerAtomicallyFunc func(matchID string, playerIDs []string) (string, string, error)
+	UpdateNotificationTimestampFunc func(matchID string, notificationType string) error
 
 	// Call records
 	UpsertPlayersCalls          [][]PlayerInfo
@@ -39,8 +41,12 @@ type MockStore struct {
 		MatchID string
 		Status  playtomic.ProcessingStatus
 	}
-	GetPlayerStatsByNameCalls []string
-	GetPlayersCalls           [][]string
+	GetPlayerStatsByNameCalls        []string
+	GetPlayersCalls                  [][]string
+	AssignBallBringerAtomicallyCalls []struct {
+		MatchID   string
+		PlayerIDs []string
+	}
 }
 
 // NewMockStore creates a new mock instance.
@@ -212,6 +218,30 @@ func (m *MockStore) SetBallBringer(matchID, playerID, playerName string) error {
 	defer m.mu.Unlock()
 	if m.SetBallBringerFunc != nil {
 		return m.SetBallBringerFunc(matchID, playerID, playerName)
+	}
+	return nil
+}
+func (m *MockStore) AssignBallBringerAtomically(matchID string, playerIDs []string) (string, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.AssignBallBringerAtomicallyCalls = append(m.AssignBallBringerAtomicallyCalls, struct {
+		MatchID   string
+		PlayerIDs []string
+	}{
+		MatchID:   matchID,
+		PlayerIDs: playerIDs,
+	})
+	if m.AssignBallBringerAtomicallyFunc != nil {
+		return m.AssignBallBringerAtomicallyFunc(matchID, playerIDs)
+	}
+	return "", "", nil
+}
+
+func (m *MockStore) UpdateNotificationTimestamp(matchID string, notificationType string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.UpdateNotificationTimestampFunc != nil {
+		return m.UpdateNotificationTimestampFunc(matchID, notificationType)
 	}
 	return nil
 }

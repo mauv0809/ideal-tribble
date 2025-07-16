@@ -17,25 +17,27 @@ type MatchSummary struct {
 
 // PadelMatch represents a single padel match with all its details.
 type PadelMatch struct {
-	MatchID          string
-	OwnerID          string
-	OwnerName        string
-	Start            int64
-	End              int64
-	CreatedAt        int64
-	Status           string
-	GameStatus       GameStatus
-	Teams            []Team
-	Results          []SetResult
-	ResultsStatus    ResultsStatus
-	ResourceName     string
-	AccessCode       string
-	Price            string
-	Tenant           Tenant
-	BallBringerID    string
-	BallBringerName  string
-	MatchType        MatchType
-	ProcessingStatus ProcessingStatus
+	MatchID           string
+	OwnerID           string
+	OwnerName         string
+	Start             int64
+	End               int64
+	CreatedAt         int64
+	Status            string
+	GameStatus        GameStatus
+	Teams             []Team
+	Results           []SetResult
+	ResultsStatus     ResultsStatus
+	ResourceName      string
+	AccessCode        string
+	Price             string
+	Tenant            Tenant
+	BallBringerID     string
+	BallBringerName   string
+	BookingNotifiedTs *int64 // Unix timestamp when booking notification was sent
+	ResultNotifiedTs  *int64 // Unix timestamp when result notification was sent
+	MatchType         MatchType
+	ProcessingStatus  ProcessingStatus
 }
 
 // ProcessingStatus defines the internal processing state of a match.

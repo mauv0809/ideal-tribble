@@ -1,9 +1,12 @@
 package http
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,18 +23,25 @@ import (
 	"github.com/slack-go/slack"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 )
 
+const testSlackSigningSecret = "test-signing-secret"
+
 // setupTestServer initializes a new server with a test database and mock clients.
-func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier) (*Server, func()) {
+func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier, slackSigningSecret string) (*Server, func()) {
 	t.Helper()
 
 	// For handlers that use the store, we need a real db connection for now.
-	db, dbTeardown, err := database.InitDB(":memory:", "", "")
+	db, dbTeardown, err := database.InitDB(":memory:", "", "", "../../migrations")
 	require.NoError(t, err)
 
 	clubStore := club.New(db)
-	cfg := config.Config{} // Use a default config
+	cfg := config.Config{Slack: config.SlackConfig{SigningSecret: slackSigningSecret}} // Use a default config with the provided secret
 
 	reg := prometheus.NewRegistry()
 	metricsSvc := metrics.NewService(reg)
@@ -51,8 +61,42 @@ func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, no
 	return server, teardown
 }
 
+// createSlackCommandRequest creates an http.Request suitable for testing Slack slash commands,
+// including the necessary signature and timestamp headers for verification.
+func createSlackCommandRequest(t *testing.T, targetURL string, form url.Values, signingSecret string) *http.Request {
+	t.Helper()
+
+	body := strings.NewReader(form.Encode())
+	req, err := http.NewRequest("POST", targetURL, body)
+	require.NoError(t, err)
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	// Generate a timestamp within a reasonable range (e.g., +/- 5 minutes)
+	timestamp := time.Now().Unix()
+	req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(timestamp, 10))
+
+	// Read the request body to generate the signature.
+	// The body needs to be re-set as a new `io.ReadCloser` for the actual handler after this.
+	bodyBytes, err := io.ReadAll(req.Body) // Read the original body
+	require.NoError(t, err)
+
+	// Reset the request body for the actual handler after reading for signature calculation.
+	req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	baseString := fmt.Sprintf("v0:%d:%s", timestamp, string(bodyBytes))
+
+	h := hmac.New(sha256.New, []byte(signingSecret))
+	h.Write([]byte(baseString))
+	signature := hex.EncodeToString(h.Sum(nil))
+
+	req.Header.Set("X-Slack-Signature", "v0="+signature)
+
+	return req
+}
+
 func TestHealthCheckHandler(t *testing.T) {
-	server, teardown := setupTestServer(t, playtomic.NewMockClient(), notifier.NewMock())
+	server, teardown := setupTestServer(t, playtomic.NewMockClient(), notifier.NewMock(), "")
 	defer teardown()
 
 	req, err := http.NewRequest("GET", "/health", nil)
@@ -67,7 +111,7 @@ func TestHealthCheckHandler(t *testing.T) {
 }
 
 func TestListMembersHandler(t *testing.T) {
-	server, teardown := setupTestServer(t, playtomic.NewMockClient(), notifier.NewMock())
+	server, teardown := setupTestServer(t, playtomic.NewMockClient(), notifier.NewMock(), "")
 	defer teardown()
 
 	// Add some players to the store
@@ -94,7 +138,7 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 	mockNotifier.FormatPlayerNotFoundResponseFunc = func(query string) (any, error) {
 		return slack.Message{}, nil
 	}
-	server, teardown := setupTestServer(t, playtomic.NewMockClient(), mockNotifier)
+	server, teardown := setupTestServer(t, playtomic.NewMockClient(), mockNotifier, testSlackSigningSecret)
 	defer teardown()
 
 	// Setup: Add players and their stats for the match
@@ -125,13 +169,10 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 		form := url.Values{}
 		form.Set("text", "Morten")
 
-		req, err := http.NewRequest("POST", "/command/player-stats", strings.NewReader(form.Encode()))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
 
 		rr := httptest.NewRecorder()
-		handler := server.PlayerStatsCommandHandler()
-		handler.ServeHTTP(rr, req)
+		server.Router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
 	})
@@ -140,27 +181,66 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 		form := url.Values{}
 		form.Set("text", "Unknown")
 
-		req, err := http.NewRequest("POST", "/command/player-stats", strings.NewReader(form.Encode()))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
 
 		rr := httptest.NewRecorder()
-		handler := server.PlayerStatsCommandHandler()
-		handler.ServeHTTP(rr, req)
+		server.Router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
 	})
 
 	t.Run("handles missing player name", func(t *testing.T) {
-		req, err := http.NewRequest("POST", "/command/player-stats", nil)
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req := createSlackCommandRequest(t, "/command/player-stats", url.Values{}, testSlackSigningSecret)
 
 		rr := httptest.NewRecorder()
-		handler := server.PlayerStatsCommandHandler()
-		handler.ServeHTTP(rr, req)
+		server.Router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
+
+	t.Run("rejects request with invalid signature", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("text", "Morten")
+
+		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
+
+		// Tamper with the signature to make it invalid
+		req.Header.Set("X-Slack-Signature", "v0=invalid-signature")
+
+		rr := httptest.NewRecorder()
+		server.Router.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("rejects request with missing signature", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("text", "Morten")
+
+		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
+
+		// Remove the signature header
+		req.Header.Del("X-Slack-Signature")
+
+		rr := httptest.NewRecorder()
+		server.Router.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("rejects request with outdated timestamp", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("text", "Morten")
+
+		req := createSlackCommandRequest(t, "/command/player-stats", form, testSlackSigningSecret)
+
+		// Set an outdated timestamp (e.g., 6 minutes ago)
+		req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(time.Now().Add(-6*time.Minute).Unix(), 10))
+
+		rr := httptest.NewRecorder()
+		server.Router.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 	})
 }
 
@@ -169,7 +249,7 @@ func TestLevelLeaderboardCommandHandler(t *testing.T) {
 	mockNotifier.FormatLevelLeaderboardResponseFunc = func(players []club.PlayerInfo) (any, error) {
 		return slack.Message{}, nil
 	}
-	server, teardown := setupTestServer(t, playtomic.NewMockClient(), mockNotifier)
+	server, teardown := setupTestServer(t, playtomic.NewMockClient(), mockNotifier, testSlackSigningSecret)
 	defer teardown()
 
 	// Setup: Add players with different levels
@@ -177,12 +257,10 @@ func TestLevelLeaderboardCommandHandler(t *testing.T) {
 	server.Store.AddPlayer("p2", "Player B", 3.5)
 	server.Store.AddPlayer("p3", "Player C", 2.5)
 
-	req, err := http.NewRequest("POST", "/command/level-leaderboard", nil)
-	require.NoError(t, err)
+	req := createSlackCommandRequest(t, "/command/level-leaderboard", url.Values{}, testSlackSigningSecret)
 
 	rr := httptest.NewRecorder()
-	handler := server.LevelLeaderboardCommandHandler()
-	handler.ServeHTTP(rr, req)
+	server.Router.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
 }
@@ -209,7 +287,7 @@ func TestFetchMatchesHandler(t *testing.T) {
 		}, nil
 	}
 
-	server, teardown := setupTestServer(t, mockClient, notifier.NewMock())
+	server, teardown := setupTestServer(t, mockClient, notifier.NewMock(), "")
 	defer teardown()
 	// Add a known player so that a match is fetched
 	server.Store.AddPlayer("p1", "Player One", 1.0)
@@ -236,7 +314,7 @@ func TestFetchMatchesHandler(t *testing.T) {
 
 func TestProcessMatchesHandler(t *testing.T) {
 	t.Run("sends booking notification for new match", func(t *testing.T) {
-		server, teardown := setupTestServer(t, playtomic.NewMockClient(), notifier.NewMock())
+		server, teardown := setupTestServer(t, playtomic.NewMockClient(), notifier.NewMock(), "")
 		defer teardown()
 
 		server.Store.AddPlayer("p1", "Player One", 1.0)
@@ -258,11 +336,11 @@ func TestProcessMatchesHandler(t *testing.T) {
 		matches, err := server.Store.GetAllMatches()
 		require.NoError(t, err)
 		require.Len(t, matches, 1)
-		assert.Equal(t, playtomic.StatusBookingNotified, matches[0].ProcessingStatus)
+		assert.Equal(t, playtomic.StatusAssigningBallBringer, matches[0].ProcessingStatus)
 	})
 
 	t.Run("sends result notification for new but already played match", func(t *testing.T) {
-		server, teardown := setupTestServer(t, playtomic.NewMockClient(), notifier.NewMock())
+		server, teardown := setupTestServer(t, playtomic.NewMockClient(), notifier.NewMock(), "")
 		defer teardown()
 
 		// Add players to the store first to satisfy foreign key constraints.
@@ -294,6 +372,6 @@ func TestProcessMatchesHandler(t *testing.T) {
 		matches, err := server.Store.GetAllMatches()
 		require.NoError(t, err)
 		require.Len(t, matches, 1)
-		assert.Equal(t, playtomic.StatusCompleted, matches[0].ProcessingStatus)
+		assert.Equal(t, playtomic.StatusResultNotified, matches[0].ProcessingStatus)
 	})
 }

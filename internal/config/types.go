@@ -2,14 +2,19 @@ package config
 
 // Config holds all configuration for the application.
 type Config struct {
-	DBName         string
-	Port           string
-	SlackBotToken  string
-	SlackChannelID string
-	TenantID       string
-	Turso          TursoConfig
+	DBName        string
+	MigrationsDir string
+	Port          string
+	Slack         SlackConfig
+	TenantID      string
+	Turso         TursoConfig
 	//Inngest        InngestConfig
 	ProjectID string
+}
+type SlackConfig struct {
+	Token         string
+	ChannelID     string
+	SigningSecret string
 }
 type TursoConfig struct {
 	PrimaryURL string

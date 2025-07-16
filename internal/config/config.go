@@ -24,11 +24,15 @@ func Load() Config {
 	}
 
 	cfg := Config{
-		DBName:         getEnv("DB_NAME"),
-		SlackBotToken:  getEnv("SLACK_BOT_TOKEN"),
-		SlackChannelID: getEnv("SLACK_CHANNEL_ID"),
-		TenantID:       getEnv("TENANT_ID"),
-		Port:           getEnv("PORT"),
+		DBName:        getEnv("DB_NAME"),
+		MigrationsDir: "./migrations",
+		Slack: SlackConfig{
+			Token:         getEnv("SLACK_BOT_TOKEN"),
+			ChannelID:     getEnv("SLACK_CHANNEL_ID"),
+			SigningSecret: getEnv("SLACK_SIGNING_SECRET"),
+		},
+		TenantID: getEnv("TENANT_ID"),
+		Port:     getEnv("PORT"),
 		Turso: TursoConfig{
 			PrimaryURL: getEnv("TURSO_PRIMARY_URL"),
 			AuthToken:  getEnv("TURSO_AUTH_TOKEN"),
