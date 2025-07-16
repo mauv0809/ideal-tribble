@@ -4,12 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/pressly/goose/v3" // NEW: Import goose
-	"github.com/tursodatabase/go-libsql"
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 // InitDB initializes the database and ensures the schema is up to date.
@@ -31,48 +29,56 @@ func InitDB(dbName string, primaryUrl string, authToken string, migrationsDir st
 		return db, nil, nil
 	}
 	//Remote only database
-	// log.Info("Initializing Turso database", "url", primaryUrl)
-	// db, err := sql.Open("libsql", primaryUrl+"?authToken="+authToken)
-	// if err != nil {
-	// 	fmt.Fprintf(os.Stderr, "failed to open db %s: %s", primaryUrl, err)
-	// 	return nil, fmt.Errorf("failed to open db %s: %w", primaryUrl, err)
-	// }
-	// Embedded replica
-	log.Info("Initializing embeded replica Turso database", "url", primaryUrl)
-	dir, err := os.MkdirTemp("./tmp", "libsql-*")
+	log.Info("Initializing Turso database", "url", primaryUrl)
+	db, err := sql.Open("libsql", primaryUrl+"?authToken="+authToken)
 	if err != nil {
-		fmt.Println("Error creating temporary directory:", err)
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "failed to open db %s: %s", primaryUrl, err)
+		return nil, nil, fmt.Errorf("failed to open remote database: %w", err)
 	}
-
-	dbPath := filepath.Join(dir, dbName)
-
-	connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryUrl,
-		libsql.WithAuthToken(authToken),
-		libsql.WithSyncInterval(10*time.Second),
-	)
-	if err != nil {
-		defer connector.Close()
-		return nil, nil, fmt.Errorf("failed to create connector: %w", err)
-	}
-
-	db := sql.OpenDB(connector)
 	if err = createTables(db, migrationsDir); err != nil {
 		db.Close() // Close on error
-		if connector != nil {
-			connector.Close()
-		}
 		return nil, nil, fmt.Errorf("failed to create tables for local db: %w", err)
 	}
 	teardown := func() {
 		db.Close()
-		if connector != nil {
-			connector.Close()
-		}
-		os.RemoveAll(dir)
-
 	}
 	return db, teardown, nil
+	// Embedded replica
+	// log.Info("Initializing embeded replica Turso database", "url", primaryUrl)
+	// dir, err := os.MkdirTemp("./tmp", "libsql-*")
+	// if err != nil {
+	// 	fmt.Println("Error creating temporary directory:", err)
+	// 	os.Exit(1)
+	// }
+
+	// dbPath := filepath.Join(dir, dbName)
+
+	// connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryUrl,
+	// 	libsql.WithAuthToken(authToken),
+	// 	libsql.WithSyncInterval(10*time.Second),
+	// )
+	// if err != nil {
+	// 	defer connector.Close()
+	// 	return nil, nil, fmt.Errorf("failed to create connector: %w", err)
+	// }
+
+	// db := sql.OpenDB(connector)
+	// if err = createTables(db, migrationsDir); err != nil {
+	// 	db.Close() // Close on error
+	// 	if connector != nil {
+	// 		connector.Close()
+	// 	}
+	// 	return nil, nil, fmt.Errorf("failed to create tables for local db: %w", err)
+	// }
+	// teardown := func() {
+	// 	db.Close()
+	// 	if connector != nil {
+	// 		connector.Close()
+	// 	}
+	// 	os.RemoveAll(dir)
+
+	// }
+	// return db, teardown, nil
 
 }
 
