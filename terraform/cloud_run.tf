@@ -24,8 +24,8 @@ resource "google_cloud_run_v2_service" "main" {
         }
       }
       liveness_probe {
-        http_get {
-          path = "/health"
+        tcp_socket {
+          port = 8080
         }
       }
       resources {
