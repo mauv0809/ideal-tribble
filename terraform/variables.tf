@@ -73,3 +73,7 @@ variable "pubsub_topics" {
   }
   description = "Map of Pub/Sub topic names to Cloud Run URL paths"
 }
+variable "latest_traffic_percent" {
+  type    = number
+  default = 10  # Start with 10%
+}

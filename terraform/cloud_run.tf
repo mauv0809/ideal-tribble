@@ -23,11 +23,6 @@ resource "google_cloud_run_v2_service" "main" {
           port = 8080
         }
       }
-      liveness_probe {
-        tcp_socket {
-          port = 8080
-        }
-      }
       resources {
         limits = {
           cpu    = "1"
@@ -110,13 +105,14 @@ resource "google_cloud_run_v2_service" "main" {
   traffic {
   type     = "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"
   revision = var.stable_revision
-  percent  = 100
+  percent  = 100 - var.latest_traffic_percent
 }
 
 traffic {
   type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
-  percent = 0
+  percent = var.latest_traffic_percent
 }
+
   # Make the service private, only allowing authenticated invocations
   ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
