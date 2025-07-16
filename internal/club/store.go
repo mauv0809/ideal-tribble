@@ -540,7 +540,6 @@ func (s *store) IsKnownPlayer(playerID string) bool {
 		log.Error("Failed to check if player exists", "error", err, "playerID", playerID)
 		return false
 	}
-	log.Info("Checked if player exists", "playerID", playerID, "exists", exists)
 	return exists
 }
 

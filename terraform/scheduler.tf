@@ -11,7 +11,7 @@ resource "google_cloud_scheduler_job" "fetch_job" {
   schedule         = var.fetch_cron_schedule
   time_zone        = "Europe/Copenhagen"
   attempt_deadline = "320s"
-  paused           = true
+  paused           = false
 
   http_target {
     http_method = "POST"
