@@ -73,51 +73,51 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # deploy-with-terraform:
-  #   name: Deploy to Cloud Run via Terraform
-  #   needs: build-and-push
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: "read"
-  #     id-token: "write"
+  deploy-with-terraform:
+    name: Deploy to Cloud Run via Terraform
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
 
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  #     - name: Authenticate to Google Cloud
-  #       uses: "google-github-actions/auth@v2"
-  #       with:
-  #         workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
-  #         service_account: "${{ secrets.GCP_SERVICE_ACCOUNT }}"
+      - name: Authenticate to Google Cloud
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+          service_account: "${{ secrets.GCP_SERVICE_ACCOUNT }}"
 
-  #     - name: Setup Terraform
-  #       uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-  #     - name: Terraform Init
-  #       id: init
-  #       run: |
-  #         terraform -chdir=./terraform init \
-  #           -backend-config="bucket=${{ env.TERRAFORM_STATE_BUCKET }}"
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform -chdir=./terraform init \
+            -backend-config="bucket=${{ env.TERRAFORM_STATE_BUCKET }}"
 
-  #     - name: Fetch Current Stable Revision
-  #       id: get_revision
-  #       run: |
-  #         SERVICE_NAME="${{ env.IMAGE_NAME }}"
-  #         PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
-  #         REGION="${{ env.GCP_REGION }}"
+      - name: Fetch Current Stable Revision
+        id: get_revision
+        run: |
+          SERVICE_NAME="${{ env.IMAGE_NAME }}"
+          PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
+          REGION="${{ env.GCP_REGION }}"
 
-  #         STABLE_REVISION=$(gcloud run services describe "$SERVICE_NAME" \
-  #           --region="$REGION" \
-  #           --project="$PROJECT_ID" \
-  #           --format="value(status.traffic[0].revisionName)")
+          STABLE_REVISION=$(gcloud run services describe "$SERVICE_NAME" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --format="value(status.traffic[0].revisionName)")
 
-  #         echo "STABLE_REVISION=$STABLE_REVISION" >> "$GITHUB_ENV"
+          echo "STABLE_REVISION=$STABLE_REVISION" >> "$GITHUB_ENV"
 
-  #     - name: Terraform Apply
-  #       id: apply
-  #       run: |
-  #         terraform -chdir=./terraform apply -auto-approve \
-  #           -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" \
-  #           -var="image_name=${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
-  #           -var="stable_revision=${{ env.STABLE_REVISION }}"
+      - name: Terraform Apply
+        id: apply
+        run: |
+          terraform -chdir=./terraform apply -auto-approve \
+            -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="image_name=${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+            -var="stable_revision=${{ env.STABLE_REVISION }}"
