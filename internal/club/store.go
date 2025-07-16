@@ -568,13 +568,6 @@ func (s *store) Clear() {
 		return
 	}
 
-	_, err = tx.Exec("DELETE FROM metrics")
-	if err != nil {
-		log.Error("Failed to clear metrics table", "error", err)
-		tx.Rollback()
-		return
-	}
-
 	if err := tx.Commit(); err != nil {
 		log.Error("Failed to commit transaction for clearing store", "error", err)
 	}

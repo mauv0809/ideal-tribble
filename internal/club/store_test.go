@@ -171,8 +171,6 @@ func TestGetPlayerStatsByName(t *testing.T) {
 			INSERT INTO player_stats (player_id, matches_played, matches_won)
 			VALUES ('player1', 10, 8)`)
 		require.NoError(t, err)
-		_, err = db.Exec(`UPDATE player_stats SET win_percentage = (CAST(matches_won AS REAL) / matches_played) * 100 WHERE player_id = 'player1'`)
-		require.NoError(t, err)
 
 		stats, err := store.GetPlayerStatsByName("morten")
 		require.NoError(t, err)
@@ -203,11 +201,8 @@ func TestGetPlayerStatsByName(t *testing.T) {
 }
 
 func TestGetPlayersSortedByLevel(t *testing.T) {
-	store, db, teardown := setupTestDB(t)
+	store, _, teardown := setupTestDB(t)
 	defer teardown()
-
-	_, err := db.Exec(`INSERT INTO players (id, name) VALUES ('owner1', 'owner name')`)
-	require.NoError(t, err)
 
 	players := []club.PlayerInfo{
 		{ID: "p1", Name: "Player A", Level: 1.5},
