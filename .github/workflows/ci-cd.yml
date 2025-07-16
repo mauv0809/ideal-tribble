@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 env:
   # ------------------------------------------------------------------------------------
@@ -14,12 +17,11 @@ env:
   #   (e.g., projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider)
   # GCP_SERVICE_ACCOUNT: The email of the service account to use.
   #   (e.g., my-service-account@my-project.iam.gserviceaccount.com)
-  #
   # ------------------------------------------------------------------------------------
   # CUSTOMIZABLE ENVIRONMENT VARIABLES
   # ------------------------------------------------------------------------------------
-  GCP_REGION: "europe-west3" # e.g.,
-  ARTIFACT_REGISTRY_REPO: "ideal-tribble-repo" # Your Artifact Registry repository name
+  GCP_REGION: "europe-west3"
+  ARTIFACT_REGISTRY_REPO: "ideal-tribble-repo"
   IMAGE_NAME: "ideal-tribble"
   TERRAFORM_STATE_BUCKET: "ideal-tribble-terraform-state"
 
@@ -34,19 +36,19 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24" # Specify your Go version
+          go-version: "1.24"
 
       - name: Run Tests
         run: go test -v -race ./...
 
   build-and-push:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: Build and Push Docker Image
-    needs: test # This job depends on the 'test' job
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
       id-token: "write"
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -74,13 +76,13 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy-with-terraform:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: Deploy to Cloud Run via Terraform
     needs: build-and-push
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
       id-token: "write"
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
