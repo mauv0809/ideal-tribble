@@ -146,7 +146,14 @@ func (s *Notifier) formatBookingNotification(match *playtomic.PadelMatch) slack.
 	blocks = append(blocks, slack.NewHeaderBlock(headerText))
 
 	// Details - Use newlines for clear separation.
-	detailsText := fmt.Sprintf("Court: %s\nTime: %s", match.ResourceName, time.Unix(match.Start, 0).Local().Format("Monday 02 Jan, 15:04"))
+	loc, err := time.LoadLocation("Europe/Copenhagen")
+	var timeStr string
+	if err == nil {
+		timeStr = time.Unix(match.Start, 0).In(loc).Format("Monday 02 Jan, 15:04")
+	} else {
+		timeStr = time.Unix(match.Start, 0).Format("Monday 02 Jan, 15:04")
+	}
+	detailsText := fmt.Sprintf("Court: %s\nTime: %s", match.ResourceName, timeStr)
 	blocks = append(blocks, slack.NewSectionBlock(slack.NewTextBlockObject("plain_text", detailsText, true, false), nil, nil))
 
 	// Players
@@ -184,7 +191,14 @@ func (s *Notifier) formatResultNotification(match *playtomic.PadelMatch) slack.M
 	blocks = append(blocks, slack.NewHeaderBlock(headerText))
 
 	// Details
-	detailsText := fmt.Sprintf("%s at %s", match.ResourceName, time.Unix(match.Start, 0).Local().Format("Monday 02 Jan, 15:04"))
+	loc, err := time.LoadLocation("Europe/Copenhagen")
+	var timeStr string
+	if err == nil {
+		timeStr = time.Unix(match.Start, 0).In(loc).Format("Monday 02 Jan, 15:04")
+	} else {
+		timeStr = time.Unix(match.Start, 0).Format("Monday 02 Jan, 15:04")
+	}
+	detailsText := fmt.Sprintf("%s at %s", match.ResourceName, timeStr)
 	blocks = append(blocks, slack.NewSectionBlock(slack.NewTextBlockObject("plain_text", detailsText, false, false), nil, nil))
 
 	if match.MatchType == playtomic.MatchTypeCompetition {
