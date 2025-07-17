@@ -104,9 +104,10 @@ func TestSendBookingNotification_CallsSender(t *testing.T) {
 	assert.True(t, postMessageCalled, "PostMessageContext should have been called via SendBookingNotification")
 }
 func TestFormatBookingNotification(t *testing.T) {
+	loc, _ := time.LoadLocation("Europe/Copenhagen")
 	match := &playtomic.PadelMatch{
 		ResourceName: "Court 1",
-		Start:        time.Date(2025, 7, 9, 20, 0, 0, 0, time.Local).Unix(),
+		Start:        time.Date(2025, 7, 9, 18, 0, 0, 0, loc).Unix(),
 		Teams: []playtomic.Team{
 			{Players: []playtomic.Player{{Name: "Player A"}, {Name: "Player B"}}},
 		},
@@ -125,7 +126,7 @@ func TestFormatBookingNotification(t *testing.T) {
 	// 2. Details Section
 	details, ok := msg.Blocks.BlockSet[1].(*slackapi.SectionBlock)
 	require.True(t, ok, "Second block should be a SectionBlock")
-	expectedDetails := "Court: Court 1\nTime: Wednesday 09 Jul, 20:00"
+	expectedDetails := "Court: Court 1\nTime: Wednesday 09 Jul, 18:00"
 	assert.Equal(t, expectedDetails, details.Text.Text)
 
 	// 3. Players Section
@@ -145,9 +146,10 @@ func TestFormatBookingNotification(t *testing.T) {
 }
 
 func TestFormatResultNotification(t *testing.T) {
+	loc, _ := time.LoadLocation("Europe/Copenhagen")
 	match := &playtomic.PadelMatch{
 		ResourceName: "Court 1",
-		Start:        time.Date(2025, 7, 9, 20, 0, 0, 0, time.Local).Unix(),
+		Start:        time.Date(2025, 7, 9, 18, 0, 0, 0, loc).Unix(),
 		MatchType:    playtomic.MatchTypeCompetition,
 		Teams: []playtomic.Team{
 			{ID: "t1", TeamResult: "WON", Players: []playtomic.Player{{Name: "Player A"}, {Name: "Player B"}}},
@@ -171,7 +173,7 @@ func TestFormatResultNotification(t *testing.T) {
 
 	details, ok := msg.Blocks.BlockSet[1].(*slackapi.SectionBlock)
 	require.True(t, ok)
-	assert.Equal(t, "Court 1 at Wednesday 09 Jul, 20:00", details.Text.Text)
+	assert.Equal(t, "Court 1 at Wednesday 09 Jul, 18:00", details.Text.Text)
 
 	// Check results section
 	resultsSection, ok := msg.Blocks.BlockSet[2].(*slackapi.SectionBlock)
