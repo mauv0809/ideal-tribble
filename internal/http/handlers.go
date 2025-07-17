@@ -86,12 +86,14 @@ func (s *Server) FetchMatchesHandler() http.HandlerFunc {
 		var wg sync.WaitGroup
 
 		for _, match := range matches {
-			if match.OwnerID == nil || !s.Store.IsKnownPlayer(*match.OwnerID) {
-				continue
-			}
+
 			wg.Add(1)
 			go func(matchID string) {
 				defer wg.Done()
+				if match.OwnerID == nil || !s.Store.IsKnownPlayer(*match.OwnerID) {
+					log.Debug("Skipping non-club match", "matchID", matchID)
+					return
+				}
 				specificMatch, err := s.PlaytomicClient.GetSpecificMatch(matchID)
 				if err != nil {
 					log.Error("Error fetching specific match", "matchID", matchID, "error", err)
