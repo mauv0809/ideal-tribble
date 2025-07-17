@@ -237,7 +237,7 @@ func (m *MockStore) AssignBallBringerAtomically(matchID string, playerIDs []stri
 	return "", "", nil
 }
 
-func (m *MockStore) UpdateNotificationTimestamp(matchID string, notificationType string) error {
+func (m *MockStore) UpdateNotificationTimestamp(matchID string, notificationType string, messageId string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.UpdateNotificationTimestampFunc != nil {

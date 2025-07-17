@@ -9,9 +9,9 @@ import (
 // This decouples the rest of the application from the specific notification provider (e.g., Slack).
 type Notifier interface {
 	// For upcoming matches
-	SendBookingNotification(match *playtomic.PadelMatch, dryRun bool) error
+	SendBookingNotification(match *playtomic.PadelMatch, dryRun bool) (string, error)
 	// For completed matches
-	SendResultNotification(match *playtomic.PadelMatch, dryRun bool) error
+	SendResultNotification(match *playtomic.PadelMatch, dryRun bool) (string, error)
 	// For slash commands
 	SendLeaderboard(stats []club.PlayerStats, dryRun bool) error
 	SendLevelLeaderboard(players []club.PlayerInfo, dryRun bool) error

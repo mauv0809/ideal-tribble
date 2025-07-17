@@ -57,18 +57,18 @@ func (m *Mock) Reset() {
 	m.LastPlayerNotFoundResponse = nil
 }
 
-func (m *Mock) SendBookingNotification(match *playtomic.PadelMatch, dryRun bool) error {
+func (m *Mock) SendBookingNotification(match *playtomic.PadelMatch, dryRun bool) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.SendBookingNotificationCalls = append(m.SendBookingNotificationCalls, struct{ Match *playtomic.PadelMatch }{match})
-	return nil
+	return "", nil
 }
 
-func (m *Mock) SendResultNotification(match *playtomic.PadelMatch, dryRun bool) error {
+func (m *Mock) SendResultNotification(match *playtomic.PadelMatch, dryRun bool) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.SendResultNotificationCalls = append(m.SendResultNotificationCalls, struct{ Match *playtomic.PadelMatch }{match})
-	return nil
+	return "", nil
 }
 
 func (m *Mock) SendLeaderboard(stats []club.PlayerStats, dryRun bool) error {

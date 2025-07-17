@@ -288,6 +288,7 @@ Here's a look at our future development plans:
   - Based on player availability and skill levels, the system will automatically propose a set of matches for the week, including suggested player pairings.
   - For each proposed match, it will assign one player to be responsible for booking the court and another to be responsible for bringing balls, ensuring fairness.
   - These "proposed" matches will be stored in the database. When a real booking from Playtomic matches a proposed match (based on players, date, and booking owner), the system will automatically link them, tracking the match from proposal to completion.
+- **Match generation via slack slash command**
 - **Endpoint Authentication:** Secure the `/fetch` and `/process` endpoints to prevent unauthorized access, ensuring that only trusted sources like Google Cloud Scheduler or authorized users can trigger them.
 
   - **Strategy 1: OIDC for Service-to-Service (Recommended for Prod):**

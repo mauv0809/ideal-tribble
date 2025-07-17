@@ -192,14 +192,14 @@ func (p *Processor) NotifyResult(match *playtomic.PadelMatch, dryRun bool) error
 	}
 
 	log.Debug("Notifying result for match", "matchID", match.MatchID)
-	err := p.notifier.SendResultNotification(match, dryRun)
+	messageId, err := p.notifier.SendResultNotification(match, dryRun)
 	if err != nil {
 		log.Error("Failed to send result notification", "error", err, "matchID", match.MatchID)
 		return err
 	}
 
 	if !dryRun {
-		err = p.store.UpdateNotificationTimestamp(match.MatchID, "result")
+		err = p.store.UpdateNotificationTimestamp(match.MatchID, "result", messageId)
 		if err != nil {
 			log.Error("Failed to update result notification timestamp", "error", err, "matchID", match.MatchID)
 			return err
@@ -218,14 +218,14 @@ func (p *Processor) NotifyBooking(match *playtomic.PadelMatch, dryRun bool) erro
 	}
 
 	log.Debug("Notifying booking for match", "matchID", match.MatchID)
-	err := p.notifier.SendBookingNotification(match, dryRun)
+	messageId, err := p.notifier.SendBookingNotification(match, dryRun)
 	if err != nil {
 		log.Error("Failed to send booking notification", "error", err, "matchID", match.MatchID)
 		return err
 	}
 
 	if !dryRun {
-		err = p.store.UpdateNotificationTimestamp(match.MatchID, "booking")
+		err = p.store.UpdateNotificationTimestamp(match.MatchID, "booking", messageId)
 		if err != nil {
 			log.Error("Failed to update booking notification timestamp", "error", err, "matchID", match.MatchID)
 			return err

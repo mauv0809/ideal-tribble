@@ -80,16 +80,16 @@ func (s *Notifier) sendMessage(message slack.Message, dryRun bool) (string, stri
 }
 
 // Implement the Notifier interface
-func (s *Notifier) SendBookingNotification(match *playtomic.PadelMatch, dryRun bool) error {
+func (s *Notifier) SendBookingNotification(match *playtomic.PadelMatch, dryRun bool) (string, error) {
 	msg := s.formatBookingNotification(match)
-	_, _, err := s.sendMessage(msg, dryRun)
-	return err
+	_, timestamp, err := s.sendMessage(msg, dryRun)
+	return timestamp, err
 }
 
-func (s *Notifier) SendResultNotification(match *playtomic.PadelMatch, dryRun bool) error {
+func (s *Notifier) SendResultNotification(match *playtomic.PadelMatch, dryRun bool) (string, error) {
 	msg := s.formatResultNotification(match)
-	_, _, err := s.sendMessage(msg, dryRun)
-	return err
+	_, timestamp, err := s.sendMessage(msg, dryRun)
+	return timestamp, err
 }
 
 func (s *Notifier) SendLeaderboard(stats []club.PlayerStats, dryRun bool) error {

@@ -99,7 +99,7 @@ func TestSendBookingNotification_CallsSender(t *testing.T) {
 		Start:        time.Now().Unix(),
 	}
 
-	err := notifier.SendBookingNotification(match, false)
+	_, err := notifier.SendBookingNotification(match, false)
 	require.NoError(t, err)
 	assert.True(t, postMessageCalled, "PostMessageContext should have been called via SendBookingNotification")
 }

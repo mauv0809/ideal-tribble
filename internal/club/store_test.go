@@ -322,7 +322,7 @@ func TestUpdateNotificationTimestamp(t *testing.T) {
 	require.NoError(t, store.UpsertMatch(match))
 
 	// Test updating booking_notified_ts
-	err = store.UpdateNotificationTimestamp("test_match_id", "booking")
+	err = store.UpdateNotificationTimestamp("test_match_id", "booking", "1")
 	require.NoError(t, err)
 
 	var bookingTS sql.NullInt64
@@ -332,7 +332,7 @@ func TestUpdateNotificationTimestamp(t *testing.T) {
 	assert.NotZero(t, bookingTS.Int64) // Check that a timestamp was set
 
 	// Test updating result_notified_ts
-	err = store.UpdateNotificationTimestamp("test_match_id", "result")
+	err = store.UpdateNotificationTimestamp("test_match_id", "result", "1")
 	require.NoError(t, err)
 
 	var resultTS sql.NullInt64
@@ -342,6 +342,6 @@ func TestUpdateNotificationTimestamp(t *testing.T) {
 	assert.NotZero(t, resultTS.Int64) // Check that a timestamp was set
 
 	// Test updating a non-existent match (should return no error, but no rows affected)
-	err = store.UpdateNotificationTimestamp("non_existent_match", "booking")
+	err = store.UpdateNotificationTimestamp("non_existent_match", "booking", "1")
 	require.NoError(t, err)
 }

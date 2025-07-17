@@ -145,26 +145,28 @@ func (s *store) UpdateProcessingStatus(matchID string, status playtomic.Processi
 }
 
 // UpdateNotificationTimestamp updates the timestamp for a specific notification type for a match.
-func (s *store) UpdateNotificationTimestamp(matchID string, notificationType string) error {
+func (s *store) UpdateNotificationTimestamp(matchID string, notificationType string, messageId string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var columnName string
+	var tsColumn, msgIDColumn string
 	switch notificationType {
 	case "booking":
-		columnName = "booking_notified_ts"
+		tsColumn = "booking_notified_ts"
+		msgIDColumn = "booking_message_id"
 	case "result":
-		columnName = "result_notified_ts"
+		tsColumn = "result_notified_ts"
+		msgIDColumn = "result_message_id"
 	default:
 		return fmt.Errorf("invalid notification type: %s", notificationType)
 	}
 
-	query := fmt.Sprintf("UPDATE matches SET %s = ? WHERE id = ?", columnName)
-	_, err := s.db.Exec(query, time.Now().Unix(), matchID)
+	query := fmt.Sprintf("UPDATE matches SET %s = ?, %s = ? WHERE id = ?", tsColumn, msgIDColumn)
+	_, err := s.db.Exec(query, time.Now().Unix(), messageId, matchID)
 	if err != nil {
-		return fmt.Errorf("failed to update %s timestamp for match %s: %w", notificationType, matchID, err)
+		return fmt.Errorf("failed to update %s timestamp and message id for match %s: %w", notificationType, matchID, err)
 	}
-	log.Debug("Successfully updated notification timestamp", "matchID", matchID, "type", notificationType)
+	log.Debug("Successfully updated notification timestamp and message id", "matchID", matchID, "type", notificationType, "messageId", messageId)
 	return nil
 }
 
