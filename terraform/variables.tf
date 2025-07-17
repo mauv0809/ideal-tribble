@@ -30,7 +30,7 @@ variable "fetch_cron_schedule" {
 variable "process_cron_schedule" {
   description = "The cron schedule for the process job."
   type        = string
-  default     = "0 * * * *" # Every 5 minutes
+  default     = "5 * * * *" # Every 5 minutes
 }
 
 variable "secret_names" {
