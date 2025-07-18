@@ -52,35 +52,22 @@ func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg conf
 
 		log.Info("Found matches from API", "count", len(matches))
 
-		var clubMatchesToUpsert []*playtomic.PadelMatch
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-
-		for _, match := range matches {
-			wg.Add(1)
-			go func(matchID string) {
-				defer wg.Done()
-				if match.OwnerID == nil || !store.IsKnownPlayer(*match.OwnerID) {
-					log.Debug("Skipping non-club match", "matchID", matchID)
-					return
-				}
-				specificMatch, err := playtomicClient.GetSpecificMatch(matchID)
-				if err != nil {
-					log.Error("Error fetching specific match", "matchID", matchID, "error", err)
-					return
-				}
-
-				if !isClubMatch(specificMatch, store) {
-					log.Debug("Skipping non-club match", "matchID", matchID)
-					return
-				}
-
-				mu.Lock()
-				clubMatchesToUpsert = append(clubMatchesToUpsert, &specificMatch)
-				mu.Unlock()
-			}(match.MatchID)
+		// Pre-fetch all known player IDs to avoid querying the DB in a loop.
+		// This is a major performance optimization.
+		log.Info("Fetching all players for filtering")
+		allPlayers, err := store.GetAllPlayers()
+		if err != nil {
+			log.Error("Failed to get all players for filtering", "error", err)
+			http.Error(w, "Failed to get players", http.StatusInternalServerError)
+			return
 		}
-		wg.Wait()
+		knownPlayerIDs := make(map[string]struct{}, len(allPlayers))
+		for _, p := range allPlayers {
+			knownPlayerIDs[p.ID] = struct{}{}
+		}
+		log.Info("Fetched all players for filtering", "count", len(knownPlayerIDs))
+
+		clubMatchesToUpsert := fetchAndFilterClubMatches(matches, knownPlayerIDs, playtomicClient)
 
 		if len(clubMatchesToUpsert) > 0 {
 			if !isDryRun {
@@ -99,6 +86,54 @@ func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg conf
 		fmt.Fprintln(w, "Match fetch completed.")
 		log.Info("Match fetch finished.", "total_api_matches", len(matches), "club_matches_found", len(clubMatchesToUpsert))
 	}
+}
+
+// fetchAndFilterClubMatches takes a list of match summaries and concurrently fetches
+// full details, returning only the ones that are confirmed to be club matches.
+func fetchAndFilterClubMatches(summaries []playtomic.MatchSummary, knownPlayerIDs map[string]struct{}, playtomicClient playtomic.PlaytomicClient) []*playtomic.PadelMatch {
+	var clubMatchesToUpsert []*playtomic.PadelMatch
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// A semaphore to limit concurrency to a reasonable number (e.g., 50).
+	// This prevents overwhelming the local system or the remote API with too many parallel requests.
+	concurrencyLimit := 50
+	sem := make(chan struct{}, concurrencyLimit)
+
+	for _, summary := range summaries {
+		wg.Add(1)
+		// Pass the match summary by value to the goroutine to avoid capturing the loop variable.
+		go func(m playtomic.MatchSummary) {
+			defer wg.Done()
+			sem <- struct{}{}        // Acquire a token from the semaphore
+			defer func() { <-sem }() // Release the token when the goroutine finishes
+
+			// Pre-filter: skip matches where the owner is not a known player.
+			if m.OwnerID == nil {
+				return
+			}
+			if _, ok := knownPlayerIDs[*m.OwnerID]; !ok {
+				return
+			}
+
+			// Fetch full match details.
+			specificMatch, err := playtomicClient.GetSpecificMatch(m.MatchID)
+			if err != nil {
+				log.Error("Error fetching specific match", "matchID", m.MatchID, "error", err)
+				return
+			}
+
+			// Final filter: check if all participants are known club members.
+			if isClubMatch(specificMatch, knownPlayerIDs) {
+				mu.Lock()
+				clubMatchesToUpsert = append(clubMatchesToUpsert, &specificMatch)
+				mu.Unlock()
+			}
+		}(summary)
+	}
+	wg.Wait()
+
+	return clubMatchesToUpsert
 }
 
 func ProcessMatchesHandler(processor *processor.Processor) http.HandlerFunc {

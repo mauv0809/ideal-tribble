@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
+	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 )
 
 func ListMembersHandler(store club.ClubStore) http.HandlerFunc {
@@ -45,7 +46,7 @@ func ListMatchesHandler(store club.ClubStore) http.HandlerFunc {
 
 func LeaderboardHandler(store club.ClubStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		stats, err := store.GetPlayerStats()
+		stats, err := store.GetPlayerStats(playtomic.MatchTypeAll)
 		if err != nil {
 			http.Error(w, "Failed to get player stats", http.StatusInternalServerError)
 			log.Error("Failed to get player stats from store", "error", err)

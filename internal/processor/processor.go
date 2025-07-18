@@ -161,10 +161,34 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 			} else {
 				log.Info("[Dry Run] Would have updated player stats", "match", match)
 			}
+			p.updateStatus(match, playtomic.StatusUpdatingPlayerStats, dryRun)
 			return // Exit processMatch for now, will be re-processed on PlayerStatsUpdated event.
 
+		case playtomic.StatusUpdatingPlayerStats:
+			// Waiting for player stats update to complete asynchronously
+			log.Debug("Match is in StatusUpdatingPlayerStats. Waiting for update to complete.", "matchID", match.MatchID)
+			return // Exit processMatch for now, will be re-processed on PlayerStatsUpdated event.
+
+		case playtomic.StatusPlayerStatsUpdated:
+			log.Info("Player stats updated. Updating weekly stats.", "matchID", match.MatchID)
+			if !dryRun {
+				err := p.pubsub.SendMessage(pubsub.EventUpdateWeeklyStats, match)
+				if err != nil {
+					return
+				}
+			} else {
+				log.Info("[Dry Run] Would have updated weekly stats", "match", match)
+			}
+			p.updateStatus(match, playtomic.StatusUpdatingWeeklyStats, dryRun)
+			return // Exit processMatch for now, will be re-processed on WeeklyStatsUpdated event.
+
+		case playtomic.StatusUpdatingWeeklyStats:
+			// Waiting for weekly stats update to complete asynchronously
+			log.Debug("Match is in StatusUpdatingWeeklyStats. Waiting for update to complete.", "matchID", match.MatchID)
+			return // Exit processMatch for now, will be re-processed on WeeklyStatsUpdated event.
+
 		case playtomic.StatusStatsUpdated:
-			log.Info("Player stats updated. Marking match as complete.", "matchID", match.MatchID)
+			log.Info("All stats updated. Marking match as complete.", "matchID", match.MatchID)
 			p.updateStatus(match, playtomic.StatusCompleted, dryRun)
 
 		case playtomic.StatusCompleted:
@@ -239,6 +263,12 @@ func (p *Processor) NotifyBooking(match *playtomic.PadelMatch, dryRun bool) erro
 func (p *Processor) UpdatePlayerStats(match *playtomic.PadelMatch, dryRun bool) {
 	log.Debug("Updating player stats for match", "matchID", match.MatchID)
 	p.store.UpdatePlayerStats(match)
+	p.updateStatus(match, playtomic.StatusPlayerStatsUpdated, dryRun)
+}
+
+func (p *Processor) UpdateWeeklyStats(match *playtomic.PadelMatch, dryRun bool) {
+	log.Debug("Updating weekly stats for match", "matchID", match.MatchID)
+	p.store.UpdateWeeklyStats(match)
 	p.updateStatus(match, playtomic.StatusStatsUpdated, dryRun)
 }
 func (p *Processor) AssignBallBringer(match *playtomic.PadelMatch, dryRun bool) {

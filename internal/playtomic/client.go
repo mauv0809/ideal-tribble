@@ -35,6 +35,30 @@ func NewClient() PlaytomicClient {
 // Ensure APIClient implements the PlaytomicClient interface.
 var _ PlaytomicClient = (*APIClient)(nil)
 
+// determineMatchType analyzes team composition to determine if it's singles or doubles.
+func determineMatchType(teams []Team) MatchType {
+	// If we don't have exactly 2 teams, we can't determine the match type yet.
+	if len(teams) != 2 {
+		return "" // Return empty string for undetermined
+	}
+
+	// Check team sizes.
+	team1Size := len(teams[0].Players)
+	team2Size := len(teams[1].Players)
+
+	// Only determine type if both teams have players.
+	if team1Size == 0 || team2Size == 0 {
+		return "" // Undetermined
+	}
+
+	if team1Size == 1 && team2Size == 1 {
+		return MatchTypeSingles
+	} else if team1Size == 2 && team2Size == 2 {
+		return MatchTypeDoubles
+	}
+	return "" // Undetermined for other configurations (e.g., 1v2)
+}
+
 func (c *APIClient) GetMatches(params *SearchMatchesParams) ([]MatchSummary, error) {
 	const pageSize = 300
 	var (
@@ -194,6 +218,8 @@ func (c *APIClient) GetSpecificMatch(matchID string) (PadelMatch, error) {
 		gameStatus = GameStatusWaitingFor
 	case string(GameStatusExpired):
 		gameStatus = GameStatusExpired
+	case string(GameStatusInProgress):
+		gameStatus = GameStatusInProgress
 	default:
 		gameStatus = GameStatusUnknown
 		log.Warn("Unknown game status received from Playtomic API", "status", matchResponse.GameStatus, "matchID", matchID)
@@ -220,14 +246,14 @@ func (c *APIClient) GetSpecificMatch(matchID string) (PadelMatch, error) {
 		log.Warn("Unknown results status received from Playtomic API", "status", matchResponse.ResultsStatus, "matchID", matchID)
 	}
 
-	var matchType MatchType
-	switch matchResponse.MatchType {
-	case string(MatchTypeCompetition):
-		matchType = MatchTypeCompetition
-	case string(MatchTypePractice):
-		matchType = MatchTypePractice
+	var competitionType CompetitionType
+	switch matchResponse.CompetitionType {
+	case string(Competition):
+		competitionType = Competition
+	case string(Practice):
+		competitionType = Practice
 	default:
-		log.Warn("Unknown match type received from Playtomic API", "type", matchResponse.MatchType, "matchID", matchID)
+		log.Warn("Unknown match type received from Playtomic API", "type", matchResponse.CompetitionType, "matchID", matchID)
 	}
 	padelMatch := PadelMatch{
 		MatchID:       matchID,
@@ -247,7 +273,8 @@ func (c *APIClient) GetSpecificMatch(matchID string) (PadelMatch, error) {
 			ID:   matchResponse.Tenant.ID,
 			Name: matchResponse.Tenant.Name,
 		},
-		MatchType: matchType,
+		CompetitionType: competitionType,
+		MatchType:       determineMatchType(teams),
 	}
 
 	if matchResponse.MerchantAccessCode != nil {

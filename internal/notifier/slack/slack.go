@@ -202,7 +202,7 @@ func (s *Notifier) formatResultNotification(match *playtomic.PadelMatch) slack.M
 	detailsText := fmt.Sprintf("%s at %s", match.ResourceName, timeStr)
 	blocks = append(blocks, slack.NewSectionBlock(slack.NewTextBlockObject("plain_text", detailsText, false, false), nil, nil))
 
-	if match.MatchType == playtomic.MatchTypeCompetition {
+	if match.CompetitionType == playtomic.Competition {
 		// Results
 		if len(match.Results) > 0 {
 			teamNames := make(map[string]string)
@@ -527,8 +527,8 @@ func (s *Notifier) formatMatchAvailabilityRequest(request *matchmaking.MatchRequ
 	// Footer block
 	footerBlock := slack.NewContextBlock(
 		"",
-		slack.NewTextBlockObject("plain_text", fmt.Sprintf("Request ID: %s • Created: %s", 
-			request.ID, 
+		slack.NewTextBlockObject("plain_text", fmt.Sprintf("Request ID: %s • Created: %s",
+			request.ID,
 			request.CreatedAt.Format("Jan 2, 2006 at 3:04 PM"),
 		), true, false),
 	)
@@ -552,9 +552,9 @@ func (s *Notifier) formatMatchProposal(request *matchmaking.MatchRequest, propos
 	)
 
 	// Date and time
-	dateText := fmt.Sprintf("📅 Date: %s\n⏰ Time: %s - %s", 
-		proposal.Date, 
-		proposal.StartTime, 
+	dateText := fmt.Sprintf("📅 Date: %s\n⏰ Time: %s - %s",
+		proposal.Date,
+		proposal.StartTime,
 		proposal.EndTime,
 	)
 
@@ -574,7 +574,7 @@ func (s *Notifier) formatMatchProposal(request *matchmaking.MatchRequest, propos
 		team2Names[i] = player.Name
 	}
 
-	teamsText := fmt.Sprintf("🏆 Team 1: %s\n🏆 Team 2: %s", 
+	teamsText := fmt.Sprintf("🏆 Team 1: %s\n🏆 Team 2: %s",
 		strings.Join(team1Names, ", "),
 		strings.Join(team2Names, ", "),
 	)
@@ -585,7 +585,7 @@ func (s *Notifier) formatMatchProposal(request *matchmaking.MatchRequest, propos
 	)
 
 	// Booking responsibility
-	bookingText := fmt.Sprintf("📋 Booking Responsibility: %s\nPlease book this match on Playtomic", 
+	bookingText := fmt.Sprintf("📋 Booking Responsibility: %s\nPlease book this match on Playtomic",
 		proposal.BookingResponsibleName,
 	)
 
@@ -597,8 +597,8 @@ func (s *Notifier) formatMatchProposal(request *matchmaking.MatchRequest, propos
 	// Footer
 	footerBlock := slack.NewContextBlock(
 		"",
-		slack.NewTextBlockObject("plain_text", fmt.Sprintf("Request ID: %s • Proposed by: %s", 
-			request.ID, 
+		slack.NewTextBlockObject("plain_text", fmt.Sprintf("Request ID: %s • Proposed by: %s",
+			request.ID,
 			request.RequesterName,
 		), true, false),
 	)
@@ -626,9 +626,9 @@ func (s *Notifier) formatMatchConfirmation(request *matchmaking.MatchRequest) sl
 	// Match details
 	var detailsText string
 	if request.ProposedDate != nil && request.ProposedStartTime != nil && request.ProposedEndTime != nil {
-		detailsText = fmt.Sprintf("📅 Date: %s\n⏰ Time: %s - %s", 
-			*request.ProposedDate, 
-			*request.ProposedStartTime, 
+		detailsText = fmt.Sprintf("📅 Date: %s\n⏰ Time: %s - %s",
+			*request.ProposedDate,
+			*request.ProposedStartTime,
 			*request.ProposedEndTime,
 		)
 	} else {
@@ -654,7 +654,7 @@ func (s *Notifier) formatMatchConfirmation(request *matchmaking.MatchRequest) sl
 			team2Names[i] = player.Name
 		}
 
-		teamsText := fmt.Sprintf("🏆 Team 1: %s\n🏆 Team 2: %s", 
+		teamsText := fmt.Sprintf("🏆 Team 1: %s\n🏆 Team 2: %s",
 			strings.Join(team1Names, ", "),
 			strings.Join(team2Names, ", "),
 		)
@@ -688,13 +688,13 @@ func (s *Notifier) formatMatchConfirmation(request *matchmaking.MatchRequest) sl
 	// Footer
 	footerBlock := slack.NewContextBlock(
 		"",
-		slack.NewTextBlockObject("plain_text", fmt.Sprintf("Request ID: %s • Confirmed at: %s", 
-			request.ID, 
+		slack.NewTextBlockObject("plain_text", fmt.Sprintf("Request ID: %s • Confirmed at: %s",
+			request.ID,
 			time.Now().Format("Jan 2, 2006 at 3:04 PM"),
 		), true, false),
 	)
 
-	blocks = append(blocks, 
+	blocks = append(blocks,
 		bookingBlock,
 		successBlock,
 		slack.NewDividerBlock(),
@@ -739,7 +739,7 @@ func (s *Notifier) formatMatchRequestResponse(request *matchmaking.MatchRequest)
 	)
 
 	// Details block
-	detailsText := fmt.Sprintf("Request ID: %s\nCreated: %s", 
+	detailsText := fmt.Sprintf("Request ID: %s\nCreated: %s",
 		request.ID,
 		request.CreatedAt.Format("Jan 2, 2006 at 3:04 PM"),
 	)

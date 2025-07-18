@@ -15,6 +15,18 @@ type MatchSummary struct {
 	OwnerID *string
 }
 
+// MatchType represents the type of a padel match.
+type MatchType string
+
+const (
+	// MatchTypeAll represents all match types combined.
+	MatchTypeAll MatchType = "ALL"
+	// MatchTypeSingles represents a singles match.
+	MatchTypeSingles MatchType = "SINGLES"
+	// MatchTypeDoubles represents a doubles match.
+	MatchTypeDoubles MatchType = "DOUBLES"
+)
+
 // PadelMatch represents a single padel match with all its details.
 type PadelMatch struct {
 	MatchID           string
@@ -36,6 +48,7 @@ type PadelMatch struct {
 	BallBringerName   string
 	BookingNotifiedTs *int64 // Unix timestamp when booking notification was sent
 	ResultNotifiedTs  *int64 // Unix timestamp when result notification was sent
+	CompetitionType   CompetitionType
 	MatchType         MatchType
 	ProcessingStatus  ProcessingStatus
 }
@@ -50,16 +63,19 @@ const (
 	StatusBookingNotified      ProcessingStatus = "BOOKING_NOTIFIED"
 	StatusResultAvailable      ProcessingStatus = "RESULT_AVAILABLE"
 	StatusResultNotified       ProcessingStatus = "RESULT_NOTIFIED"
+	StatusUpdatingPlayerStats  ProcessingStatus = "UPDATING_PLAYER_STATS"
+	StatusPlayerStatsUpdated   ProcessingStatus = "PLAYER_STATS_UPDATED"
+	StatusUpdatingWeeklyStats  ProcessingStatus = "UPDATING_WEEKLY_STATS"
 	StatusStatsUpdated         ProcessingStatus = "STATS_UPDATED"
 	StatusCompleted            ProcessingStatus = "COMPLETED"
 )
 
-// MatchType defines the type of match.
-type MatchType string
+// CompetitionType defines the type of match.
+type CompetitionType string
 
 const (
-	MatchTypeCompetition MatchType = "COMPETITIVE"
-	MatchTypePractice    MatchType = "FRIENDLY"
+	Competition CompetitionType = "COMPETITIVE"
+	Practice    CompetitionType = "FRIENDLY"
 )
 
 // GameStatus defines the status of a game.
@@ -72,6 +88,7 @@ const (
 	GameStatusCanceled   GameStatus = "CANCELED"
 	GameStatusWaitingFor GameStatus = "WAITING_FOR"
 	GameStatusExpired    GameStatus = "EXPIRED"
+	GameStatusInProgress GameStatus = "IN_PROGRESS"
 )
 
 // ResultsStatus defines the status of the match results.
@@ -131,7 +148,7 @@ type playtomicMatchResponse struct {
 	MerchantAccessCode *playtomicMerchantAccessCode `json:"merchant_access_code"`
 	Price              string                       `json:"price"`
 	Tenant             playtomicTenant              `json:"tenant"`
-	MatchType          string                       `json:"competition_mode"`
+	CompetitionType    string                       `json:"competition_mode"`
 }
 
 // playtomicResult defines a set result.
