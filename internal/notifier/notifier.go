@@ -29,4 +29,7 @@ type Notifier interface {
 	SendMatchProposal(request any, proposal any, dryRun bool) error
 	SendMatchConfirmation(request any, dryRun bool) error
 	FormatMatchRequestResponse(request any) (any, error)
+	
+	// For direct messages
+	SendDirectMessage(userID string, text string) (string, string, error)
 }
