@@ -614,6 +614,90 @@ func (s *Server) MatchCommandHandler() http.HandlerFunc {
 	}
 }
 
+// SlackEventsHandler handles Slack Events API webhooks
+func (s *Server) SlackEventsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			log.Error("Failed to parse form", "error", err)
+			http.Error(w, "Error parsing form", http.StatusBadRequest)
+			return
+		}
+
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("Failed to read request body", "error", err)
+			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+			return
+		}
+
+		// Parse the event payload
+		var eventPayload struct {
+			Type      string `json:"type"`
+			Challenge string `json:"challenge,omitempty"`
+			Event     struct {
+				Type    string `json:"type"`
+				Channel string `json:"channel"`
+				User    string `json:"user"`
+			} `json:"event,omitempty"`
+		}
+
+		if err := json.Unmarshal(bodyBytes, &eventPayload); err != nil {
+			log.Error("Failed to unmarshal event payload", "error", err)
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		// Handle challenge verification (for initial webhook setup)
+		if eventPayload.Type == "url_verification" {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(eventPayload.Challenge))
+			return
+		}
+
+		// Handle actual events
+		if eventPayload.Type == "event_callback" {
+			// Filter for our specific channel only
+			if eventPayload.Event.Channel != s.Cfg.Slack.ChannelID {
+				log.Debug("Ignoring event from different channel", "channel", eventPayload.Event.Channel)
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("OK"))
+				return
+			}
+
+			// Handle member_joined_channel events
+			if eventPayload.Event.Type == "member_joined_channel" {
+				log.Info("New member joined channel", "user", eventPayload.Event.User, "channel", eventPayload.Event.Channel)
+				
+				if err := s.handleNewMember(eventPayload.Event.User); err != nil {
+					log.Error("Failed to handle new member", "error", err, "user", eventPayload.Event.User)
+					// Don't return error to Slack to avoid retries
+				}
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	}
+}
+
+// handleNewMember sends welcome message to new member asking for Playtomic profile
+func (s *Server) handleNewMember(slackUserID string) error {
+	log.Info("Sending welcome message to new member", "user", slackUserID)
+	
+	// Create welcome message asking for Playtomic profile URL
+	welcomeText := "Welcome to the Padel club! 🎾\n\nTo get started with match notifications and our leaderboard, please share your Playtomic profile URL.\n\nYou can find it by:\n1. Opening the Playtomic app\n2. Going to your profile\n3. Tapping the share button\n4. Copying the link (it looks like: https://app.playtomic.io/profile/user/XXXXXXX)\n\nJust paste the URL here and I'll link your Slack account to your Playtomic profile!"
+	
+	// Send DM to the new member
+	_, _, err := s.Notifier.SendDirectMessage(slackUserID, welcomeText)
+	if err != nil {
+		return err
+	}
+	
+	log.Info("Welcome message sent successfully", "user", slackUserID)
+	return nil
+}
+
 /*func (s *Server) SendInngestEventHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{"matchId": "1234-556435", "test": "test"}

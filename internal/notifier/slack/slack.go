@@ -440,6 +440,30 @@ func (s *Notifier) FormatMatchRequestResponse(request any) (any, error) {
 	return s.formatMatchRequestResponse(matchRequest), nil
 }
 
+// SendDirectMessage sends a direct message to a user
+func (s *Notifier) SendDirectMessage(userID string, text string) (string, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Create a simple text message
+	channelID, timestamp, err := s.api.PostMessageContext(
+		ctx,
+		userID, // In Slack, you can send DMs by using the user ID as the channel
+		slack.MsgOptionText(text, false),
+		slack.MsgOptionAsUser(true),
+	)
+
+	if err != nil {
+		s.metrics.IncSlackNotifFailed()
+		log.Error("Failed to send Slack DM", "error", err, "user", userID)
+		return "", "", fmt.Errorf("failed to send DM: %w", err)
+	}
+
+	s.metrics.IncSlackNotifSent()
+	log.Info("Successfully sent Slack DM", "user", userID, "timestamp", timestamp)
+	return channelID, timestamp, nil
+}
+
 // sendMessageToThread sends a message to a thread
 func (s *Notifier) sendMessageToThread(message slack.Message, channelID string, threadTS *string, dryRun bool) (string, string, error) {
 	if dryRun {
