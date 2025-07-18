@@ -57,6 +57,7 @@ func (s *Server) routes() {
 	// Pub/Sub endpoints
 	s.Router.Handle("/assign-ball-boy", Chain(handlers.BallBoyHandler(s.Processor, s.pubsub), paramsMiddleware))
 	s.Router.Handle("/update-player-stats", Chain(handlers.UpdatePlayerStatsHandler(s.Processor, s.pubsub), paramsMiddleware))
+	s.Router.Handle("/update-weekly-stats", Chain(handlers.UpdateWeeklyStatsHandler(s.Processor, s.pubsub), paramsMiddleware))
 	s.Router.Handle("/notify-booking", Chain(handlers.NotifyBookingHandler(s.Processor, s.pubsub), paramsMiddleware))
 	s.Router.Handle("/notify-result", Chain(handlers.NotifyResultHandler(s.Processor, s.pubsub), paramsMiddleware))
 
