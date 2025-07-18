@@ -13,6 +13,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/config"
 	"github.com/mauv0809/ideal-tribble/internal/database"
 	server "github.com/mauv0809/ideal-tribble/internal/http"
+	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier/slack"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
@@ -55,6 +56,7 @@ func main() {
 	notifier := slack.NewNotifier(cfg.Slack.Token, cfg.Slack.ChannelID, metricsSvc)
 	pubsub := pubsub.New(cfg.ProjectID)
 	processor := processor.New(clubStore, notifier, metricsSvc, pubsub)
+	matchmakingService := matchmaking.NewStore(db)
 
 	s := server.NewServer(
 		clubStore,
@@ -64,6 +66,7 @@ func main() {
 		playtomicClient,
 		notifier,
 		processor,
+		matchmakingService,
 		pubsub,
 		//inngestClient,
 	)
