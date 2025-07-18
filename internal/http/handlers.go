@@ -502,24 +502,59 @@ func (s *Server) MatchCommandHandler() http.HandlerFunc {
 
 		log.Info("Received match command", "user", userName, "channel", channelID)
 
-		// Find player by name to get their Playtomic ID
-		players, err := s.Store.GetAllPlayers()
+		// Use the new mapping system to find/map the player
+		mapper := club.NewPlayerMapper(s.Store)
+		foundPlayer, suggestions, err := mapper.FindOrMapPlayer(r.FormValue("user_id"), userName, userName)
 		if err != nil {
-			log.Error("Failed to get players", "error", err)
+			log.Error("Failed to find/map player", "error", err)
 			http.Error(w, "Failed to process match request", http.StatusInternalServerError)
 			return
 		}
 
-		var foundPlayer *club.PlayerInfo
-		for _, player := range players {
-			if player.Name == userName {
-				foundPlayer = &player
-				break
+		// If no player found and we have suggestions, send mapping confirmation
+		if foundPlayer == nil && len(suggestions) > 0 {
+			// For now, we'll just take the best suggestion if confidence is reasonable
+			if suggestions[0].Confidence > 0.5 {
+				// Auto-accept medium confidence matches
+				err := s.Store.UpdatePlayerSlackMapping(
+					suggestions[0].Player.ID,
+					r.FormValue("user_id"),
+					userName,
+					userName,
+					"AUTO_MATCHED",
+					suggestions[0].Confidence,
+				)
+				if err != nil {
+					log.Error("Failed to update player mapping", "error", err)
+					http.Error(w, "Failed to process match request", http.StatusInternalServerError)
+					return
+				}
+				foundPlayer = &suggestions[0].Player
+				log.Info("Auto-mapped player with medium confidence", "player", foundPlayer.Name, "confidence", suggestions[0].Confidence)
+			} else {
+				// Low confidence - ask user to confirm
+				// For now, just return an error message
+				msg, err := s.Notifier.FormatPlayerNotFoundResponse(userName)
+				if err != nil {
+					log.Error("Failed to format player not found response", "error", err)
+					http.Error(w, "Failed to process match request", http.StatusInternalServerError)
+					return
+				}
+
+				slackMsg, ok := msg.(slack.Message)
+				if !ok {
+					log.Error("Failed to cast message to slack.Message")
+					http.Error(w, "Invalid message format", http.StatusInternalServerError)
+					return
+				}
+
+				respondWithSlackMsg(w, slackMsg)
+				return
 			}
 		}
 
 		if foundPlayer == nil {
-			// User not found in club members
+			// Still no player found - this shouldn't happen if everyone in channel is a member
 			msg, err := s.Notifier.FormatPlayerNotFoundResponse(userName)
 			if err != nil {
 				log.Error("Failed to format player not found response", "error", err)
