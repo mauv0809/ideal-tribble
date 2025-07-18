@@ -169,3 +169,40 @@ func NotifyResultHandler(processor *processor.Processor, pubsubClient pubsub.Pub
 		w.Write([]byte("OK"))
 	}
 }
+
+func UpdateWeeklyStatsHandler(processor *processor.Processor, pubsubClient pubsub.PubSubClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("Failed to read request body", "error", err)
+			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+			return
+		}
+		log.Debug("Received update weekly stats message", "body", string(bodyBytes))
+
+		var pubsubMsg struct {
+			Subscription string `json:"subscription"`
+			Message      struct {
+				Data string `json:"data"`
+			} `json:"message"`
+		}
+
+		if err := json.Unmarshal(bodyBytes, &pubsubMsg); err != nil {
+			log.Error("Failed to unmarshal wrapper JSON", "error", err)
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		rawData, err := base64.StdEncoding.DecodeString(pubsubMsg.Message.Data)
+		if err != nil {
+			log.Error("Failed to decode base64 data", "error", err)
+			http.Error(w, "Invalid base64 data", http.StatusBadRequest)
+			return
+		}
+		isDryRun := IsDryRunFromContext(r)
+		match := playtomic.PadelMatch{}
+		pubsubClient.ProcessMessage(rawData, &match)
+		processor.UpdateWeeklyStats(&match, isDryRun)
+		w.Write([]byte("OK"))
+	}
+}

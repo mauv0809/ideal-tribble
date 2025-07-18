@@ -66,10 +66,11 @@ variable "stable_revision" {
 variable "pubsub_topics" {
   type = map(string)
   default = {
-    assign_ball_boy     = "/assign-ball-boy"
-    update_player_stats = "/update-player-stats"
-    notify_booking      = "/notify-booking"
-    notify_result       = "/notify-result"
+    assign_ball_boy      = "/assign-ball-boy"
+    update_player_stats  = "/update-player-stats"
+    update_weekly_stats  = "/update-weekly-stats"
+    notify_booking       = "/notify-booking"
+    notify_result        = "/notify-result"
   }
   description = "Map of Pub/Sub topic names to Cloud Run URL paths"
 }
