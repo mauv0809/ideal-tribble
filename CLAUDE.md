@@ -217,3 +217,8 @@ Uses charmbracelet/log for structured logging throughout the application.
 - GCP IAM with least privilege principles
 - Workload Identity Federation for GitHub Actions
 - Secrets stored in Google Secret Manager
+
+## Git Operations
+
+### Commit Guidelines
+- Remember that we need to use --no-gpg-sign when doing git commit
