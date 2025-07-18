@@ -261,6 +261,14 @@ func (s *store) UpdatePlayerStats(match *playtomic.PadelMatch) {
 }
 
 func (s *store) updatePlayerStatsLocked(match *playtomic.PadelMatch) {
+	// Determine match type based on team composition
+	matchTypePtr := determineMatchType(match.Teams)
+	if matchTypePtr == nil {
+		log.Debug("Skipping stats update for match with undetermined type", "matchID", match.MatchID)
+		return
+	}
+	matchType := *matchTypePtr
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		log.Error("Failed to begin transaction for stats update", "error", err, "matchID", match.MatchID)
@@ -335,9 +343,20 @@ func (s *store) updatePlayerStatsLocked(match *playtomic.PadelMatch) {
 		}
 	}
 
+	// Choose the correct table based on match type
+	var tableName string
+	if matchType == "SINGLES" {
+		tableName = "player_stats_singles"
+	} else if matchType == "DOUBLES" {
+		tableName = "player_stats_doubles"
+	} else {
+		log.Error("Unknown match type, skipping stats update", "matchType", matchType, "matchID", match.MatchID)
+		return
+	}
+
 	for playerID, stats := range playerStats {
-		stmt, err := tx.Prepare(`
-			INSERT INTO player_stats (player_id, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost)
+		stmt, err := tx.Prepare(fmt.Sprintf(`
+			INSERT INTO %s (player_id, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(player_id) DO UPDATE SET
 				matches_played = matches_played + excluded.matches_played,
@@ -347,18 +366,18 @@ func (s *store) updatePlayerStatsLocked(match *playtomic.PadelMatch) {
 				sets_lost = sets_lost + excluded.sets_lost,
 				games_won = games_won + excluded.games_won,
 				games_lost = games_lost + excluded.games_lost;
-		`)
+		`, tableName))
 		if err != nil {
-			log.Error("Failed to prepare player_stats statement", "error", err, "playerID", playerID)
+			log.Error("Failed to prepare player_stats statement", "error", err, "playerID", playerID, "table", tableName)
 			continue
 		}
 		defer stmt.Close()
 
 		_, err = stmt.Exec(playerID, stats["matches_played"], stats["matches_won"], stats["matches_lost"], stats["sets_won"], stats["sets_lost"], stats["games_won"], stats["games_lost"])
 		if err != nil {
-			log.Error("Failed to execute player_stats statement", "error", err, "playerID", playerID)
+			log.Error("Failed to execute player_stats statement", "error", err, "playerID", playerID, "table", tableName)
 		} else {
-			log.Info("Updated player stats", "playerID", playerID)
+			log.Info("Updated player stats", "playerID", playerID, "matchType", matchType, "table", tableName)
 		}
 	}
 
