@@ -314,6 +314,47 @@ Here's a look at our future development plans:
 - **Weekly Stats Notification:**
   - Send a Slack notification every Sunday with the statistics (wins/losses, sets/games won) from matches played in the last 7 days. This will involve querying the `matches` table and processing the data to generate a summary of recent player performance, without storing this weekly data persistently.
 
+- **Doubles vs Singles Separation:**
+  - **Problem:** Singles matches are currently tainting doubles statistics, and players who play singles are less likely to bring balls to doubles matches due to inflated ball-bringing counts.
+  - **Solution Ideas:**
+    - Separate match types in database schema (add `match_type` field: "doubles" or "singles")
+    - Maintain separate statistics tables/views for doubles vs singles
+    - Separate ball-bringing counts per match type
+    - Update matchmaking service to handle match type preferences
+    - Modify Slack commands to specify match type: `/match doubles` or `/match singles`
+    - Add separate leaderboards: `/leaderboard doubles` and `/leaderboard singles`
+
+- **Contextual Ball Boy Assignment:**
+  - **Problem:** Current ball-bringing assignment uses simple global counts, meaning players who play frequently with new/infrequent players never get assigned ball-bringing duties, creating unfairness.
+  - **Solution Ideas:**
+    - **Approach 1: Relative Counts Within Groups**
+      - Track ball-bringing counts relative to specific player groups/combinations
+      - For each match, calculate who has brought balls least often among the 4 players
+      - Maintain a matrix of player-to-player ball-bringing relationships
+    - **Approach 2: Decay-Based System**
+      - Implement time-based decay on ball-bringing counts
+      - Recent ball-bringing duties weigh more heavily than older ones
+      - This naturally rebalances when player groups change
+    - **Approach 3: Match-Context Scoring**
+      - Calculate a "fairness score" for each player based on:
+        - Total balls brought vs total matches played
+        - Balls brought vs matches played with current group
+        - Time since last ball-bringing duty
+      - Assign to player with lowest fairness score
+    - **Approach 4: Rolling Window System**
+      - Only consider ball-bringing within the last N matches for each player
+      - This prevents historical bias from affecting current assignments
+
+- **Enhanced Player Statistics System:**
+  - **Problem:** Current statistics system doesn't differentiate between match types and may not provide meaningful insights for different play styles.
+  - **Solution Ideas:**
+    - Separate statistics tracking for doubles vs singles
+    - Add match type context to all statistical calculations
+    - Implement skill-based matching considerations for doubles team balancing
+    - Track partner-specific statistics for doubles (who plays well together)
+    - Add match type preferences to player profiles
+    - Consider implementing ELO-style ratings separate for doubles/singles
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
