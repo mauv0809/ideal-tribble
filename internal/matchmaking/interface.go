@@ -31,6 +31,15 @@ type MatchmakingService interface {
 	
 	// GetActiveMatchRequests gets all active match requests
 	GetActiveMatchRequests() ([]MatchRequest, error)
+	
+	// IsActiveMatchRequestMessage checks if a message timestamp belongs to an active match request
+	IsActiveMatchRequestMessage(messageTimestamp string) (string, bool, error)
+	
+	// AddPlayerAvailability adds a day to a player's availability
+	AddPlayerAvailability(requestID, playerID, playerName, day string) error
+	
+	// RemovePlayerAvailability removes a day from a player's availability  
+	RemovePlayerAvailability(requestID, playerID, day string) error
 }
 
 // Notifier defines the notification operations required by matchmaking.

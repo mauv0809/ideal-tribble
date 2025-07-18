@@ -419,3 +419,92 @@ func (s *store) GetActiveMatchRequests() ([]MatchRequest, error) {
 
 	return requests, nil
 }
+
+// IsActiveMatchRequestMessage checks if a message timestamp belongs to an active match request
+func (s *store) IsActiveMatchRequestMessage(messageTimestamp string) (string, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `
+		SELECT id 
+		FROM match_requests 
+		WHERE availability_message_ts = ? AND status = ?
+	`
+	
+	var requestID string
+	err := s.db.QueryRow(query, messageTimestamp, string(StatusCollectingAvailability)).Scan(&requestID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", false, nil // Not an active match request message
+		}
+		return "", false, fmt.Errorf("failed to check match request message: %w", err)
+	}
+
+	return requestID, true, nil
+}
+
+// AddPlayerAvailability adds a day to a player's availability
+func (s *store) AddPlayerAvailability(requestID, playerID, playerName, day string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if this availability already exists
+	var existingID string
+	checkQuery := `
+		SELECT id FROM player_availability 
+		WHERE match_request_id = ? AND player_id = ? AND available_date = ?
+	`
+	err := s.db.QueryRow(checkQuery, requestID, playerID, day).Scan(&existingID)
+	if err == nil {
+		log.Debug("Player availability already exists", "requestID", requestID, "playerID", playerID, "day", day)
+		return nil // Already exists, no need to add again
+	} else if err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check existing availability: %w", err)
+	}
+
+	// Insert new availability
+	insertQuery := `
+		INSERT INTO player_availability (id, match_request_id, player_id, player_name, available_date, responded_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`
+	
+	availabilityID := uuid.New().String()
+	now := time.Now().Unix()
+	
+	_, err = s.db.Exec(insertQuery, availabilityID, requestID, playerID, playerName, day, now)
+	if err != nil {
+		return fmt.Errorf("failed to insert player availability: %w", err)
+	}
+
+	log.Info("Added player availability", "requestID", requestID, "playerID", playerID, "playerName", playerName, "day", day)
+	return nil
+}
+
+// RemovePlayerAvailability removes a day from a player's availability
+func (s *store) RemovePlayerAvailability(requestID, playerID, day string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `
+		DELETE FROM player_availability 
+		WHERE match_request_id = ? AND player_id = ? AND available_date = ?
+	`
+	
+	result, err := s.db.Exec(query, requestID, playerID, day)
+	if err != nil {
+		return fmt.Errorf("failed to remove player availability: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		log.Debug("No availability found to remove", "requestID", requestID, "playerID", playerID, "day", day)
+	} else {
+		log.Info("Removed player availability", "requestID", requestID, "playerID", playerID, "day", day)
+	}
+
+	return nil
+}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/config"
+	"github.com/mauv0809/ideal-tribble/internal/http/handlers"
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
@@ -36,22 +37,38 @@ func (s *Server) routes() {
 	// All handlers are wrapped with middleware using the Chain helper.
 	// This makes it easy to add more middlewares in the future, like an authentication middleware.
 	// e.g. Chain(s.MyHandler(), paramsMiddleware, authMiddleware)
+
+	// Metrics (no middleware needed)
 	s.Router.Handle("/metrics", s.MetricsHandler)
-	s.Router.Handle("/health", Chain(s.HealthCheckHandler(), paramsMiddleware))
-	s.Router.Handle("/clear", Chain(s.ClearStoreHandler(), paramsMiddleware))
-	s.Router.Handle("/members", Chain(s.ListMembersHandler(), paramsMiddleware))
-	s.Router.Handle("/matches", Chain(s.ListMatchesHandler(), paramsMiddleware))
-	s.Router.Handle("/fetch", Chain(s.FetchMatchesHandler(), paramsMiddleware))
-	s.Router.Handle("/process", Chain(s.ProcessMatchesHandler(), paramsMiddleware))
-	s.Router.Handle("/assign-ball-boy", Chain(s.BallBoyHandler(), paramsMiddleware))
-	s.Router.Handle("/update-player-stats", Chain(s.UpdatePlayerStatsHandler(), paramsMiddleware))
-	s.Router.Handle("/notify-booking", Chain(s.NotifyBookingHandler(), paramsMiddleware))
-	s.Router.Handle("/notify-result", Chain(s.NotifyResultHandler(), paramsMiddleware))
-	s.Router.Handle("/slack/command/leaderboard", Chain(s.LeaderboardCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
-	s.Router.Handle("/slack/command/player-stats", Chain(s.PlayerStatsCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
-	s.Router.Handle("/slack/command/level-leaderboard", Chain(s.LevelLeaderboardCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
-	s.Router.Handle("/slack/command/match", Chain(s.MatchCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
-	s.Router.Handle("/slack/events", Chain(s.SlackEventsHandler(), s.VerifySlackSignature, paramsMiddleware))
+
+	// Health and operational endpoints
+	s.Router.Handle("/health", Chain(handlers.HealthCheckHandler(s.Store), paramsMiddleware))
+	s.Router.Handle("/clear", Chain(handlers.ClearStoreHandler(s.Store), paramsMiddleware))
+
+	// REST API endpoints
+	s.Router.Handle("/members", Chain(handlers.ListMembersHandler(s.Store), paramsMiddleware))
+	s.Router.Handle("/matches", Chain(handlers.ListMatchesHandler(s.Store), paramsMiddleware))
+	s.Router.Handle("/leaderboard", Chain(handlers.LeaderboardHandler(s.Store), paramsMiddleware))
+
+	// Scheduled endpoints (Cloud Scheduler)
+	s.Router.Handle("/fetch", Chain(handlers.FetchMatchesHandler(s.Store, s.Metrics, s.Cfg, s.PlaytomicClient), paramsMiddleware))
+	s.Router.Handle("/process", Chain(handlers.ProcessMatchesHandler(s.Processor), paramsMiddleware))
+
+	// Pub/Sub endpoints
+	s.Router.Handle("/assign-ball-boy", Chain(handlers.BallBoyHandler(s.Processor, s.pubsub), paramsMiddleware))
+	s.Router.Handle("/update-player-stats", Chain(handlers.UpdatePlayerStatsHandler(s.Processor, s.pubsub), paramsMiddleware))
+	s.Router.Handle("/notify-booking", Chain(handlers.NotifyBookingHandler(s.Processor, s.pubsub), paramsMiddleware))
+	s.Router.Handle("/notify-result", Chain(handlers.NotifyResultHandler(s.Processor, s.pubsub), paramsMiddleware))
+
+	// Slack command endpoints
+	s.Router.Handle("/slack/command/leaderboard", Chain(handlers.LeaderboardCommandHandler(s.Store, s.Notifier), s.VerifySlackSignature, paramsMiddleware))
+	s.Router.Handle("/slack/command/player-stats", Chain(handlers.PlayerStatsCommandHandler(s.Store, s.Notifier), s.VerifySlackSignature, paramsMiddleware))
+	s.Router.Handle("/slack/command/level-leaderboard", Chain(handlers.LevelLeaderboardCommandHandler(s.Store, s.Notifier), s.VerifySlackSignature, paramsMiddleware))
+	s.Router.Handle("/slack/command/match", Chain(handlers.MatchCommandHandler(s.Store, s.Notifier, s.MatchmakingService), s.VerifySlackSignature, paramsMiddleware))
+
+	// Slack events endpoint
+	s.Router.Handle("/slack/events", Chain(handlers.SlackEventsHandler(s.Store, s.Notifier, s.MatchmakingService, s.Cfg), s.VerifySlackSignature, paramsMiddleware))
+
 	//s.Router.Handle("/inngest/send", s.SendInngestEventHandler())
 	//s.Router.Handle("/api/inngest", s.InngestClient.Serve())
 }
