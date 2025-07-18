@@ -5,6 +5,7 @@ import (
 
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/config"
+	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
@@ -12,17 +13,18 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 )
 
-func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler http.Handler, cfg config.Config, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier, processor *processor.Processor, pubsub pubsub.PubSubClient /*inngestClient inngest.InngestClient*/) *Server {
+func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler http.Handler, cfg config.Config, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier, processor *processor.Processor, matchmakingService matchmaking.MatchmakingService, pubsub pubsub.PubSubClient /*inngestClient inngest.InngestClient*/) *Server {
 	server := &Server{
-		Store:           store,
-		Metrics:         metricsSvc,
-		MetricsHandler:  metricsHandler,
-		Cfg:             cfg,
-		PlaytomicClient: playtomicClient,
-		Notifier:        notifier,
-		Processor:       processor,
-		Router:          http.NewServeMux(),
-		pubsub:          pubsub,
+		Store:              store,
+		Metrics:            metricsSvc,
+		MetricsHandler:     metricsHandler,
+		Cfg:                cfg,
+		PlaytomicClient:    playtomicClient,
+		Notifier:           notifier,
+		Processor:          processor,
+		MatchmakingService: matchmakingService,
+		Router:             http.NewServeMux(),
+		pubsub:             pubsub,
 		//InngestClient:   inngestClient,
 	}
 
@@ -48,6 +50,7 @@ func (s *Server) routes() {
 	s.Router.Handle("/slack/command/leaderboard", Chain(s.LeaderboardCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
 	s.Router.Handle("/slack/command/player-stats", Chain(s.PlayerStatsCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
 	s.Router.Handle("/slack/command/level-leaderboard", Chain(s.LevelLeaderboardCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
+	s.Router.Handle("/slack/command/match", Chain(s.MatchCommandHandler(), s.VerifySlackSignature, paramsMiddleware))
 	//s.Router.Handle("/inngest/send", s.SendInngestEventHandler())
 	//s.Router.Handle("/api/inngest", s.InngestClient.Serve())
 }

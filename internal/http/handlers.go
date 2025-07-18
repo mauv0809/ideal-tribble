@@ -483,6 +483,102 @@ func (s *Server) LevelLeaderboardCommandHandler() http.HandlerFunc {
 	}
 }
 
+// MatchCommandHandler returns a handler for the /match Slack command.
+func (s *Server) MatchCommandHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Error parsing form", http.StatusBadRequest)
+			return
+		}
+
+		// Get user info from Slack form data
+		userName := r.FormValue("user_name")
+		channelID := r.FormValue("channel_id")
+
+		if userName == "" || channelID == "" {
+			http.Error(w, "Missing required Slack form data", http.StatusBadRequest)
+			return
+		}
+
+		log.Info("Received match command", "user", userName, "channel", channelID)
+
+		// Find player by name to get their Playtomic ID
+		players, err := s.Store.GetAllPlayers()
+		if err != nil {
+			log.Error("Failed to get players", "error", err)
+			http.Error(w, "Failed to process match request", http.StatusInternalServerError)
+			return
+		}
+
+		var foundPlayer *club.PlayerInfo
+		for _, player := range players {
+			if player.Name == userName {
+				foundPlayer = &player
+				break
+			}
+		}
+
+		if foundPlayer == nil {
+			// User not found in club members
+			msg, err := s.Notifier.FormatPlayerNotFoundResponse(userName)
+			if err != nil {
+				log.Error("Failed to format player not found response", "error", err)
+				http.Error(w, "Failed to process match request", http.StatusInternalServerError)
+				return
+			}
+
+			slackMsg, ok := msg.(slack.Message)
+			if !ok {
+				log.Error("Failed to cast message to slack.Message")
+				http.Error(w, "Invalid message format", http.StatusInternalServerError)
+				return
+			}
+
+			respondWithSlackMsg(w, slackMsg)
+			return
+		}
+
+		// Create match request using Playtomic player ID
+		matchmakingService := s.MatchmakingService
+		request, err := matchmakingService.CreateMatchRequest(foundPlayer.ID, foundPlayer.Name, channelID)
+		if err != nil {
+			log.Error("Failed to create match request", "error", err)
+			http.Error(w, "Failed to create match request", http.StatusInternalServerError)
+			return
+		}
+
+		// Send availability request message
+		_, timestamp, err := s.Notifier.SendMatchAvailabilityRequest(request, false)
+		if err != nil {
+			log.Error("Failed to send availability request", "error", err)
+			http.Error(w, "Failed to send availability request", http.StatusInternalServerError)
+			return
+		}
+
+		// Update match request with thread information
+		request.ThreadTS = &timestamp
+		request.AvailabilityMessageTS = &timestamp
+		// Note: In a real implementation, you'd want to update these in the database
+
+		// Format response for the user
+		msg, err := s.Notifier.FormatMatchRequestResponse(request)
+		if err != nil {
+			log.Error("Failed to format match request response", "error", err)
+			http.Error(w, "Failed to format response", http.StatusInternalServerError)
+			return
+		}
+
+		slackMsg, ok := msg.(slack.Message)
+		if !ok {
+			log.Error("Failed to cast message to slack.Message")
+			http.Error(w, "Invalid message format", http.StatusInternalServerError)
+			return
+		}
+
+		respondWithSlackMsg(w, slackMsg)
+	}
+}
+
 /*func (s *Server) SendInngestEventHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{"matchId": "1234-556435", "test": "test"}
