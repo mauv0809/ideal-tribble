@@ -40,11 +40,14 @@ func (s *store) UpsertMatch(match *playtomic.PadelMatch) error {
 		return err
 	}
 
+	// Determine match type based on team size
+	matchTypeEnum := determineMatchType(match.Teams)
+
 	// This statement is the heart of the "dumb upsert".
 	// ON CONFLICT, it updates all fields EXCEPT processing_status.
 	stmt, err := tx.Prepare(`
-		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, processing_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, processing_status, match_type_enum)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			owner_id = excluded.owner_id,
 			owner_name = excluded.owner_name,
@@ -61,7 +64,8 @@ func (s *store) UpsertMatch(match *playtomic.PadelMatch) error {
 			tenant_name = excluded.tenant_name,
 			match_type = excluded.match_type,
 			teams_blob = excluded.teams_blob,
-			results_blob = excluded.results_blob;
+			results_blob = excluded.results_blob,
+			match_type_enum = excluded.match_type_enum;
 	`)
 	if err != nil {
 		tx.Rollback()
@@ -69,7 +73,7 @@ func (s *store) UpsertMatch(match *playtomic.PadelMatch) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew)
+	_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew, matchTypeEnum)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -91,8 +95,8 @@ func (s *store) UpsertMatches(matches []*playtomic.PadelMatch) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, processing_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, processing_status, match_type_enum)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			owner_id = excluded.owner_id,
 			owner_name = excluded.owner_name,
@@ -109,7 +113,8 @@ func (s *store) UpsertMatches(matches []*playtomic.PadelMatch) error {
 			tenant_name = excluded.tenant_name,
 			match_type = excluded.match_type,
 			teams_blob = excluded.teams_blob,
-			results_blob = excluded.results_blob;
+			results_blob = excluded.results_blob,
+			match_type_enum = excluded.match_type_enum;
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
@@ -126,7 +131,10 @@ func (s *store) UpsertMatches(matches []*playtomic.PadelMatch) error {
 			return fmt.Errorf("failed to marshal results for match %s: %w", match.MatchID, err)
 		}
 
-		_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew)
+		// Determine match type based on team size
+		matchTypeEnum := determineMatchType(match.Teams)
+
+		_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew, matchTypeEnum)
 		if err != nil {
 			return fmt.Errorf("failed to execute statement for match %s: %w", match.MatchID, err)
 		}
@@ -805,6 +813,35 @@ func ToAnySlice[T any](s []T) []any {
 		a[i] = v
 	}
 	return a
+}
+
+// determineMatchType analyzes team composition to determine if it's singles or doubles
+func determineMatchType(teams []playtomic.Team) *string {
+	// If we don't have exactly 2 teams, we can't determine the match type yet
+	if len(teams) != 2 {
+		return nil // NULL in database = undetermined
+	}
+	
+	// Check team sizes
+	team1Size := len(teams[0].Players)
+	team2Size := len(teams[1].Players)
+	
+	// Only determine type if both teams have players
+	if team1Size == 0 || team2Size == 0 {
+		return nil // NULL in database = undetermined
+	}
+	
+	if team1Size == 1 && team2Size == 1 {
+		result := "SINGLES"
+		return &result
+	} else if team1Size == 2 && team2Size == 2 {
+		result := "DOUBLES"
+		return &result
+	}
+	
+	// For any other configuration, we can't determine the type yet
+	// This handles cases like 1v2, 3v1, etc. which will likely resolve to doubles
+	return nil
 }
 
 // Slack mapping methods implementation
