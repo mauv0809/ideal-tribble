@@ -46,17 +46,29 @@ func TestUpsertMatch(t *testing.T) {
 	store, db, teardown := setupTestDB(t)
 	defer teardown()
 
-	_, err := db.Exec(`INSERT INTO players (id, name) VALUES ('owner1', 'owner name')`)
-	require.NoError(t, err)
+	store.AddPlayer("owner1", "owner name", 1.0)
 
-	match := &playtomic.PadelMatch{MatchID: "match1", OwnerID: "owner1"}
-	err = store.UpsertMatch(match)
+	match := &playtomic.PadelMatch{
+		MatchID: "match1",
+		OwnerID: "owner1",
+		Teams: []playtomic.Team{
+			{Players: []playtomic.Player{{UserID: "p1"}, {UserID: "p2"}}},
+			{Players: []playtomic.Player{{UserID: "p3"}, {UserID: "p4"}}},
+		},
+		MatchType: playtomic.MatchTypeDoubles,
+	}
+	err := store.UpsertMatch(match)
 	require.NoError(t, err)
 
 	matches, err := store.GetMatchesForProcessing()
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
 	assert.Equal(t, "match1", matches[0].MatchID)
+
+	var matchTypeEnum sql.NullString
+	err = db.QueryRow("SELECT match_type_enum FROM matches WHERE id = 'match1'").Scan(&matchTypeEnum)
+	require.NoError(t, err)
+	assert.Equal(t, "DOUBLES", matchTypeEnum.String)
 	assert.Equal(t, playtomic.StatusNew, matches[0].ProcessingStatus)
 
 	match.ResourceName = "Court 1"
@@ -74,13 +86,11 @@ func TestGetPlayers(t *testing.T) {
 	store, db, teardown := setupTestDB(t)
 	defer teardown()
 
-	_, err := db.Exec(`INSERT INTO players (id, name, level, ball_bringer_count) VALUES 
-		('p1', 'Player One', 1.0, 1),
-		('p2', 'Player Two', 2.0, 2),
-		('p3', 'Player Three', 3.0, 3)`)
-	require.NoError(t, err)
-
 	t.Run("gets multiple players", func(t *testing.T) {
+		_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count_singles, ball_bringer_count_doubles) VALUES
+		('p1', 'Player One', 1, 5),
+		('p3', 'Player Three', 3, 7)`)
+		require.NoError(t, err)
 		players, err := store.GetPlayers([]string{"p1", "p3"})
 		require.NoError(t, err)
 		require.Len(t, players, 2)
@@ -90,13 +100,14 @@ func TestGetPlayers(t *testing.T) {
 		for _, p := range players {
 			playerMap[p.ID] = p
 		}
-
 		assert.Contains(t, playerMap, "p1")
 		assert.Contains(t, playerMap, "p3")
 		assert.Equal(t, "Player One", playerMap["p1"].Name)
-		assert.Equal(t, 1, playerMap["p1"].BallBringerCount)
+		assert.Equal(t, 1, playerMap["p1"].BallBringerCountSingles)
+		assert.Equal(t, 5, playerMap["p1"].BallBringerCountDoubles)
 		assert.Equal(t, "Player Three", playerMap["p3"].Name)
-		assert.Equal(t, 3, playerMap["p3"].BallBringerCount)
+		assert.Equal(t, 3, playerMap["p3"].BallBringerCountSingles)
+		assert.Equal(t, 7, playerMap["p3"].BallBringerCountDoubles)
 	})
 
 	t.Run("returns empty slice for no matches", func(t *testing.T) {
@@ -112,43 +123,14 @@ func TestGetPlayers(t *testing.T) {
 	})
 }
 
-func TestSetBallBringer(t *testing.T) {
-	store, db, teardown := setupTestDB(t)
-	defer teardown()
-
-	// Setup initial data
-	_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count) VALUES ('p1', 'Player One', 5)`)
-	require.NoError(t, err)
-	_, err = db.Exec(`INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, tenant_id, tenant_name, match_type) VALUES ('m1', 'p1', 'Player One', 0, 0, 0, 'status', 'game_status', 'results_status', 'resource', 'tenant', 'tenant_name', 'type')`)
-	require.NoError(t, err)
-
-	// Set the ball bringer
-	err = store.SetBallBringer("m1", "p1", "Player One")
-	require.NoError(t, err)
-
-	// Verify match is updated
-	var ballBringerID, ballBringerName string
-	err = db.QueryRow("SELECT ball_bringer_id, ball_bringer_name FROM matches WHERE id = 'm1'").Scan(&ballBringerID, &ballBringerName)
-	require.NoError(t, err)
-	assert.Equal(t, "p1", ballBringerID)
-	assert.Equal(t, "Player One", ballBringerName)
-
-	// Verify player's count is incremented
-	var count int
-	err = db.QueryRow("SELECT ball_bringer_count FROM players WHERE id = 'p1'").Scan(&count)
-	require.NoError(t, err)
-	assert.Equal(t, 6, count)
-}
-
 func TestUpdateProcessingStatus(t *testing.T) {
-	store, db, teardown := setupTestDB(t)
+	store, _, teardown := setupTestDB(t)
 	defer teardown()
 
-	_, err := db.Exec(`INSERT INTO players (id, name) VALUES ('owner1', 'owner name')`)
-	require.NoError(t, err)
+	store.AddPlayer("owner1", "owner name", 1.0)
 
-	match := &playtomic.PadelMatch{MatchID: "match1", OwnerID: "owner1"}
-	err = store.UpsertMatch(match)
+	match := &playtomic.PadelMatch{MatchID: "match1", OwnerID: "owner1", MatchType: playtomic.MatchTypeDoubles}
+	err := store.UpsertMatch(match)
 	require.NoError(t, err)
 
 	err = store.UpdateProcessingStatus("match1", playtomic.StatusBookingNotified)
@@ -161,32 +143,41 @@ func TestUpdateProcessingStatus(t *testing.T) {
 }
 
 func TestGetPlayerStatsByName(t *testing.T) {
-	store, db, teardown := setupTestDB(t)
+	store, _, teardown := setupTestDB(t)
 	defer teardown()
 
 	t.Run("finds player with stats", func(t *testing.T) {
-		_, err := db.Exec(`INSERT INTO players (id, name) VALUES ('player1', 'Morten Voss')`)
-		require.NoError(t, err)
-		_, err = db.Exec(`
-			INSERT INTO player_stats (player_id, matches_played, matches_won)
-			VALUES ('player1', 10, 8)`)
-		require.NoError(t, err)
+		store.AddPlayer("player1", "Morten Voss", 1.0)
+		match := &playtomic.PadelMatch{
+			MatchID: "match1",
+			OwnerID: "p1",
+			Teams: []playtomic.Team{
+				{ID: "t1", TeamResult: "WON", Players: []playtomic.Player{{UserID: "player1", Name: "Morten Voss"}, {UserID: "p2", Name: "Player Two"}}},
+				{ID: "t2", TeamResult: "LOST", Players: []playtomic.Player{{UserID: "p3", Name: "Player Three"}, {UserID: "p4", Name: "Player Four"}}},
+			},
+			MatchType: playtomic.MatchTypeDoubles,
+			Results: []playtomic.SetResult{
+				{Name: "Set-1", Scores: map[string]int{"t1": 6, "t2": 4}},
+				{Name: "Set-2", Scores: map[string]int{"t1": 7, "t2": 5}},
+			},
+		}
+		store.UpsertMatch(match)
+		store.UpdatePlayerStats(match)
 
-		stats, err := store.GetPlayerStatsByName("morten")
+		stats, err := store.GetPlayerStatsByName("morten", playtomic.MatchTypeAll)
 		require.NoError(t, err)
 		require.NotNil(t, stats)
 
 		assert.Equal(t, "Morten Voss", stats.PlayerName)
-		assert.Equal(t, 10, stats.MatchesPlayed)
-		assert.Equal(t, 8, stats.MatchesWon)
-		assert.InDelta(t, 80.0, stats.WinPercentage, 0.01)
+		assert.Equal(t, 1, stats.MatchesPlayed)
+		assert.Equal(t, 1, stats.MatchesWon)
+		assert.InDelta(t, 100.0, stats.WinPercentage, 0.01)
 	})
 
 	t.Run("returns zero stats for player with no stats entry", func(t *testing.T) {
-		_, err := db.Exec(`INSERT INTO players (id, name) VALUES ('player2', 'New Player')`)
-		require.NoError(t, err)
+		store.AddPlayer("player2", "New Player", 1.0)
 
-		stats, err := store.GetPlayerStatsByName("New Player")
+		stats, err := store.GetPlayerStatsByName("New Player", playtomic.MatchTypeAll)
 		require.NoError(t, err)
 		require.NotNil(t, stats)
 		assert.Equal(t, "New Player", stats.PlayerName)
@@ -194,7 +185,7 @@ func TestGetPlayerStatsByName(t *testing.T) {
 	})
 
 	t.Run("returns error when player not found", func(t *testing.T) {
-		stats, err := store.GetPlayerStatsByName("nonexistent")
+		stats, err := store.GetPlayerStatsByName("nonexistent", playtomic.MatchTypeAll)
 		assert.Error(t, err)
 		assert.Nil(t, stats)
 	})
@@ -229,7 +220,7 @@ func TestClear(t *testing.T) {
 
 	// Add some data
 	store.AddPlayer("player1", "Player One", 1.0)
-	match := &playtomic.PadelMatch{MatchID: "m1", OwnerID: "player1"}
+	match := &playtomic.PadelMatch{MatchID: "m1", OwnerID: "player1", MatchType: playtomic.MatchTypeDoubles}
 	err := store.UpsertMatch(match)
 	require.NoError(t, err)
 
@@ -263,6 +254,7 @@ func TestUpdatePlayerStats(t *testing.T) {
 				{ID: "t1", TeamResult: "WON", Players: []playtomic.Player{{UserID: "p1", Name: "Morten Voss"}, {UserID: "p2", Name: "Player Two"}}},
 				{ID: "t2", TeamResult: "LOST", Players: []playtomic.Player{{UserID: "p3", Name: "Player Three"}, {UserID: "p4", Name: "Player Four"}}},
 			},
+			MatchType: playtomic.MatchTypeDoubles,
 			Results: []playtomic.SetResult{
 				{Name: "Set-1", Scores: map[string]int{"t1": 6, "t2": 4}},
 				{Name: "Set-2", Scores: map[string]int{"t1": 7, "t2": 5}},
@@ -271,7 +263,7 @@ func TestUpdatePlayerStats(t *testing.T) {
 
 		store.UpdatePlayerStats(match)
 
-		stats, err := store.GetPlayerStatsByName("Morten Voss")
+		stats, err := store.GetPlayerStatsByName("Morten Voss", playtomic.MatchTypeDoubles)
 		require.NoError(t, err)
 		assert.Equal(t, 1, stats.MatchesPlayed)
 		assert.Equal(t, 1, stats.MatchesWon)
@@ -282,7 +274,7 @@ func TestUpdatePlayerStats(t *testing.T) {
 		assert.Equal(t, 9, stats.GamesLost)
 		assert.InDelta(t, 100.0, stats.WinPercentage, 0.01)
 
-		stats, err = store.GetPlayerStatsByName("Player Three")
+		stats, err = store.GetPlayerStatsByName("Player Three", playtomic.MatchTypeDoubles)
 		require.NoError(t, err)
 		assert.Equal(t, 1, stats.MatchesPlayed)
 		assert.Equal(t, 0, stats.MatchesWon)
@@ -317,7 +309,7 @@ func TestUpdateNotificationTimestamp(t *testing.T) {
 		ResourceName:     "Court 1",
 		Tenant:           playtomic.Tenant{ID: "tenant1", Name: "Tenant Name"},
 		ProcessingStatus: "NEW",
-		MatchType:        "PADEL_MATCH",
+		MatchType:        playtomic.MatchTypeDoubles,
 	}
 	require.NoError(t, store.UpsertMatch(match))
 
@@ -344,4 +336,87 @@ func TestUpdateNotificationTimestamp(t *testing.T) {
 	// Test updating a non-existent match (should return no error, but no rows affected)
 	err = store.UpdateNotificationTimestamp("non_existent_match", "booking")
 	require.NoError(t, err)
+}
+
+func TestAssignBallBringerAtomically(t *testing.T) {
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Setup players with different initial counts
+	_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count_singles, ball_bringer_count_doubles) VALUES
+		('p1', 'Player A', 2, 5),
+		('p2', 'Player B', 1, 6),
+		('p3', 'Player C', 3, 5),
+		('p4', 'Player D', 4, 7)`)
+	require.NoError(t, err)
+
+	t.Run("assigns correctly for a DOUBLES match", func(t *testing.T) {
+		// P1 and P3 have the lowest doubles count (5). P1 should be chosen due to alphabetical tie-break.
+		match := &playtomic.PadelMatch{
+			MatchID:          "test_match_id_doubles",
+			OwnerID:          "p1",
+			OwnerName:        "Player A",
+			Start:            1678886400, // Example Unix timestamp
+			End:              1678890000,
+			CreatedAt:        1678880000,
+			Status:           "STATUS_OPEN",
+			GameStatus:       "GAME_STATUS_UNKNOWN",
+			ResultsStatus:    "RESULTS_STATUS_WAITING",
+			ResourceName:     "Court 1",
+			Tenant:           playtomic.Tenant{ID: "tenant1", Name: "Tenant Name"},
+			ProcessingStatus: "NEW",
+			MatchType:        playtomic.MatchTypeDoubles,
+			CompetitionType:  playtomic.Competition,
+			Teams: []playtomic.Team{
+				{ID: "t1", Players: []playtomic.Player{{UserID: "p1", Name: "Player A"}, {UserID: "p2", Name: "Player B"}}},
+				{ID: "t2", Players: []playtomic.Player{{UserID: "p3", Name: "Player C"}, {UserID: "p4", Name: "Player D"}}},
+			},
+		}
+		require.NoError(t, store.UpsertMatch(match))
+
+		id, name, err := store.AssignBallBringerAtomically(match.MatchID, []string{"p1", "p2", "p3", "p4"})
+		require.NoError(t, err)
+		assert.Equal(t, "p1", id)
+		assert.Equal(t, "Player A", name)
+
+		var count int
+		err = db.QueryRow("SELECT ball_bringer_count_doubles FROM players WHERE id = 'p1'").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 6, count, "Doubles count for p1 should be incremented")
+	})
+
+	t.Run("assigns correctly for a SINGLES match", func(t *testing.T) {
+		// P2 has the lowest singles count (1).
+		match := &playtomic.PadelMatch{
+			MatchID:          "test_match_id_singles",
+			OwnerID:          "p1",
+			OwnerName:        "Player A",
+			Start:            1678886400, // Example Unix timestamp
+			End:              1678890000,
+			CreatedAt:        1678880000,
+			Status:           "STATUS_OPEN",
+			GameStatus:       "GAME_STATUS_UNKNOWN",
+			ResultsStatus:    "RESULTS_STATUS_WAITING",
+			ResourceName:     "Court 1",
+			Tenant:           playtomic.Tenant{ID: "tenant1", Name: "Tenant Name"},
+			ProcessingStatus: "NEW",
+			MatchType:        playtomic.MatchTypeSingles,
+			CompetitionType:  playtomic.Competition,
+			Teams: []playtomic.Team{
+				{ID: "t1", Players: []playtomic.Player{{UserID: "p1", Name: "Player A"}}},
+				{ID: "t2", Players: []playtomic.Player{{UserID: "p2", Name: "Player B"}}},
+			},
+		}
+		require.NoError(t, store.UpsertMatch(match))
+
+		id, name, err := store.AssignBallBringerAtomically(match.MatchID, []string{"p1", "p2"})
+		require.NoError(t, err)
+		assert.Equal(t, "p2", id)
+		assert.Equal(t, "Player B", name)
+
+		var count int
+		err = db.QueryRow("SELECT ball_bringer_count_singles FROM players WHERE id = 'p2'").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 2, count, "Singles count for p2 should be incremented")
+	})
 }

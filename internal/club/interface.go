@@ -8,8 +8,9 @@ type ClubStore interface {
 	UpsertMatches(matches []*playtomic.PadelMatch) error
 	UpdateProcessingStatus(matchID string, status playtomic.ProcessingStatus) error
 	GetMatchesForProcessing() ([]*playtomic.PadelMatch, error)
-	GetPlayerStats() ([]PlayerStats, error)
+	GetPlayerStats(matchType playtomic.MatchType) ([]PlayerStats, error)
 	UpdatePlayerStats(match *playtomic.PadelMatch)
+	UpdateWeeklyStats(match *playtomic.PadelMatch)
 	AddPlayer(playerID, name string, level float64)
 	UpsertPlayers(players []PlayerInfo) error
 	IsKnownPlayer(playerID string) bool
@@ -18,9 +19,8 @@ type ClubStore interface {
 	GetAllPlayers() ([]PlayerInfo, error)
 	GetPlayersSortedByLevel() ([]PlayerInfo, error)
 	GetAllMatches() ([]*playtomic.PadelMatch, error)
-	GetPlayerStatsByName(playerName string) (*PlayerStats, error)
+	GetPlayerStatsByName(playerName string, matchType playtomic.MatchType) (*PlayerStats, error)
 	GetPlayers(playerIDs []string) ([]PlayerInfo, error)
-	SetBallBringer(matchID, playerID, playerName string) error // Deprecated: Use AssignBallBringerAtomically instead
 	AssignBallBringerAtomically(matchID string, playerIDs []string) (string, string, error)
 	UpdateNotificationTimestamp(matchID string, notificationType string) error
 

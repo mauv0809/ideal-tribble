@@ -75,6 +75,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 			GameStatus:       playtomic.GameStatusPlayed,
 			ResultsStatus:    playtomic.ResultsStatusConfirmed,
 			End:              time.Now().Unix(), // Set end time to now to trigger result notification
+			MatchType:        playtomic.MatchTypeDoubles,
 		}
 		store.GetMatchesForProcessingFunc = func() ([]*playtomic.PadelMatch, error) {
 			// Ensure the returned match has the End time set for the test
@@ -113,8 +114,9 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		require.True(t, ok2, "Data sent to pubsub should be a PadelMatch")
 		assert.Equal(t, "m1", sentMatch2.MatchID)
 
-		require.Len(t, store.UpdateProcessingStatusCalls, 0, "Status should NOT be updated by ProcessMatches in the second cycle; handler does it")
-		// The status update to StatusStatsUpdated happens within the UpdatePlayerStats handler.
+		// The processor should update the status to 'UPDATING_PLAYER_STATS' to prevent re-processing.
+		require.Len(t, store.UpdateProcessingStatusCalls, 1, "Status should be updated to 'UPDATING_PLAYER_STATS'")
+		assert.Equal(t, playtomic.StatusUpdatingPlayerStats, store.UpdateProcessingStatusCalls[0].Status)
 	})
 
 	t.Run("match with booking notified transitions to result notified after being played", func(t *testing.T) {
@@ -131,6 +133,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 			GameStatus:       playtomic.GameStatusPlayed,
 			ResultsStatus:    playtomic.ResultsStatusConfirmed,
 			End:              time.Now().Unix(), // Set end time to now to trigger result notification
+			MatchType:        playtomic.MatchTypeDoubles,
 		}
 		store.GetMatchesForProcessingFunc = func() ([]*playtomic.PadelMatch, error) {
 			// Ensure the returned match has the End time set for the test
@@ -169,8 +172,9 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		require.True(t, ok2, "Data sent to pubsub should be a PadelMatch")
 		assert.Equal(t, "m1", sentMatch2.MatchID)
 
-		require.Len(t, store.UpdateProcessingStatusCalls, 0, "Status should NOT be updated by ProcessMatches in the second cycle; handler does it")
-		// The status update to StatusStatsUpdated happens within the UpdatePlayerStats handler.
+		// The processor should update the status to 'UPDATING_PLAYER_STATS' to prevent re-processing.
+		require.Len(t, store.UpdateProcessingStatusCalls, 1, "Status should be updated to 'UPDATING_PLAYER_STATS'")
+		assert.Equal(t, playtomic.StatusUpdatingPlayerStats, store.UpdateProcessingStatusCalls[0].Status)
 	})
 
 	t.Run("new and played match with unconfirmed results sends no notifications", func(t *testing.T) {
@@ -186,6 +190,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 			ProcessingStatus: playtomic.StatusNew,
 			GameStatus:       playtomic.GameStatusPlayed,
 			ResultsStatus:    playtomic.ResultsStatusValidating, // Not confirmed
+			MatchType:        playtomic.MatchTypeDoubles,
 		}
 		store.GetMatchesForProcessingFunc = func() ([]*playtomic.PadelMatch, error) {
 			return []*playtomic.PadelMatch{match}, nil

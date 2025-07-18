@@ -13,6 +13,7 @@ type EventType string
 const (
 	EventAssignBallBoy     EventType = "assign_ball_boy"
 	EventUpdatePlayerStats EventType = "update_player_stats"
+	EventUpdateWeeklyStats EventType = "update_weekly_stats"
 	EventNotifyBooking     EventType = "notify_booking"
 	EventNotifyResult      EventType = "notify_result"
 )

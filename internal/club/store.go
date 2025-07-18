@@ -40,8 +40,8 @@ func (s *store) UpsertMatch(match *playtomic.PadelMatch) error {
 		return err
 	}
 
-	// Determine match type based on team size
-	matchTypeEnum := determineMatchType(match.Teams)
+	// Use the match type determined by the Playtomic client.
+	matchTypeEnum := match.MatchType
 
 	// This statement is the heart of the "dumb upsert".
 	// ON CONFLICT, it updates all fields EXCEPT processing_status.
@@ -131,8 +131,8 @@ func (s *store) UpsertMatches(matches []*playtomic.PadelMatch) error {
 			return fmt.Errorf("failed to marshal results for match %s: %w", match.MatchID, err)
 		}
 
-		// Determine match type based on team size
-		matchTypeEnum := determineMatchType(match.Teams)
+		// Use the match type determined by the Playtomic client.
+		matchTypeEnum := match.MatchType
 
 		_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew, matchTypeEnum)
 		if err != nil {
@@ -157,21 +157,27 @@ func (s *store) UpdateNotificationTimestamp(matchID string, notificationType str
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var columnName string
+	var query string
 	switch notificationType {
 	case "booking":
-		columnName = "booking_notified_ts"
+		query = "UPDATE matches SET booking_notified_ts = ? WHERE id = ?"
 	case "result":
-		columnName = "result_notified_ts"
+		query = "UPDATE matches SET result_notified_ts = ? WHERE id = ?"
 	default:
 		return fmt.Errorf("invalid notification type: %s", notificationType)
 	}
 
-	query := fmt.Sprintf("UPDATE matches SET %s = ? WHERE id = ?", columnName)
 	_, err := s.db.Exec(query, time.Now().Unix(), matchID)
 	if err != nil {
 		return fmt.Errorf("failed to update %s timestamp for match %s: %w", notificationType, matchID, err)
 	}
+
+	// This check is a good practice to ensure the update actually happened.
+	// It's commented out as it might be too verbose for this specific use case,
+	// but it's a useful pattern.
+	// if rowsAffected == 0 {
+	// 	log.Warn("Update notification timestamp had no effect, match ID might not exist", "matchID", matchID, "type", notificationType)
+	// }
 	log.Debug("Successfully updated notification timestamp", "matchID", matchID, "type", notificationType)
 	return nil
 }
@@ -261,21 +267,140 @@ func (s *store) UpdatePlayerStats(match *playtomic.PadelMatch) {
 }
 
 func (s *store) updatePlayerStatsLocked(match *playtomic.PadelMatch) {
-	// Determine match type based on team composition
-	matchTypePtr := determineMatchType(match.Teams)
-	if matchTypePtr == nil {
+	// Use the match type determined by the Playtomic client.
+	matchType := match.MatchType
+	if matchType == "" {
 		log.Debug("Skipping stats update for match with undetermined type", "matchID", match.MatchID)
 		return
 	}
-	matchType := *matchTypePtr
 
 	tx, err := s.db.Begin()
 	if err != nil {
 		log.Error("Failed to begin transaction for stats update", "error", err, "matchID", match.MatchID)
 		return
 	}
+	defer tx.Rollback() // Rollback on error
 
-	// Using a map to aggregate stats per player before updating the DB.
+	playerStats := aggregateMatchStats(match)
+
+	// Choose the correct table based on match type
+	var tableName string
+	switch matchType {
+	case "SINGLES":
+		tableName = "player_stats_singles"
+	case "DOUBLES":
+		tableName = "player_stats_doubles"
+	default:
+		log.Error("Unknown match type, skipping stats update", "matchType", matchType, "matchID", match.MatchID)
+		return
+	}
+
+	stmt, err := tx.Prepare(fmt.Sprintf(`
+		INSERT INTO %s (player_id, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(player_id) DO UPDATE SET
+			matches_played = matches_played + excluded.matches_played,
+			matches_won = matches_won + excluded.matches_won,
+			matches_lost = matches_lost + excluded.matches_lost,
+			sets_won = sets_won + excluded.sets_won,
+			sets_lost = sets_lost + excluded.sets_lost,
+			games_won = games_won + excluded.games_won,
+			games_lost = games_lost + excluded.games_lost;
+	`, tableName))
+	if err != nil {
+		log.Error("Failed to prepare player_stats statement", "error", err, "table", tableName)
+		return
+	}
+	defer stmt.Close()
+
+	for playerID, stats := range playerStats {
+		_, err := stmt.Exec(playerID, stats["matches_played"], stats["matches_won"], stats["matches_lost"], stats["sets_won"], stats["sets_lost"], stats["games_won"], stats["games_lost"])
+		if err != nil {
+			log.Error("Failed to execute player_stats statement", "error", err, "playerID", playerID, "table", tableName)
+		} else {
+			log.Info("Updated player stats", "playerID", playerID, "matchType", matchType, "table", tableName)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("Failed to commit player_stats transaction", "error", err)
+	}
+}
+
+// UpdateWeeklyStats updates the weekly performance snapshot for each player in a match.
+func (s *store) UpdateWeeklyStats(match *playtomic.PadelMatch) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Use the match type determined by the Playtomic client.
+	matchType := match.MatchType
+	if matchType == "" {
+		log.Debug("Skipping weekly stats update for match with undetermined type", "matchID", match.MatchID)
+		return
+	}
+
+	// Calculate the start of the week for this match
+	if match.End == 0 {
+		log.Warn("Skipping weekly stats update for match with zero end time", "matchID", match.MatchID)
+		return
+	}
+	weekStartDate := getWeekStartDate(match.End)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		log.Error("Failed to begin transaction for weekly stats update", "error", err, "matchID", match.MatchID)
+		return
+	}
+	defer tx.Rollback() // Rollback on error
+
+	playerStats := aggregateMatchStats(match)
+
+	// Prepare the upsert statement for weekly_player_stats
+	stmt, err := tx.Prepare(`
+		INSERT INTO weekly_player_stats (week_start_date, player_id, match_type_enum, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(week_start_date, player_id, match_type_enum) DO UPDATE SET
+			matches_played = matches_played + excluded.matches_played,
+			matches_won = matches_won + excluded.matches_won,
+			matches_lost = matches_lost + excluded.matches_lost,
+			sets_won = sets_won + excluded.sets_won,
+			sets_lost = sets_lost + excluded.sets_lost,
+			games_won = games_won + excluded.games_won,
+			games_lost = games_lost + excluded.games_lost;
+	`)
+	if err != nil {
+		log.Error("Failed to prepare weekly_player_stats statement", "error", err, "matchID", match.MatchID)
+		return
+	}
+	defer stmt.Close()
+
+	for playerID, stats := range playerStats {
+		_, err := stmt.Exec(
+			weekStartDate,
+			playerID,
+			matchType,
+			stats["matches_played"],
+			stats["matches_won"],
+			stats["matches_lost"],
+			stats["sets_won"],
+			stats["sets_lost"],
+			stats["games_won"],
+			stats["games_lost"],
+		)
+		if err != nil {
+			log.Error("Failed to execute weekly_player_stats statement", "error", err, "playerID", playerID, "week", weekStartDate)
+		} else {
+			log.Info("Updated weekly player stats", "playerID", playerID, "week", weekStartDate, "matchType", matchType)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Error("Failed to commit weekly_player_stats transaction", "error", err)
+	}
+}
+
+// aggregateMatchStats calculates per-player stats for a single match.
+func aggregateMatchStats(match *playtomic.PadelMatch) map[string]map[string]int {
 	playerStats := make(map[string]map[string]int)
 
 	var winningTeamID string
@@ -302,26 +427,26 @@ func (s *store) updatePlayerStatsLocked(match *playtomic.PadelMatch) {
 	}
 
 	for _, set := range match.Results {
-		var setWinnerID, setLoserID string
-		var maxScore, minScore int = -1, -1
-
-		// Determine the winner and loser of the set
-		for teamID, score := range set.Scores {
-			if maxScore == -1 || score > maxScore {
-				maxScore = score
-				setWinnerID = teamID
-			}
-			if minScore == -1 || score < minScore {
-				minScore = score
-			}
+		// Since matches are always 2 teams, we can determine winner/loser directly.
+		var teamIDs []string
+		for teamID := range set.Scores {
+			teamIDs = append(teamIDs, teamID)
 		}
-		// Find the losing team ID
-		for teamID, score := range set.Scores {
-			if score < maxScore {
-				setLoserID = teamID
-				minScore = score
-				break
-			}
+
+		if len(teamIDs) != 2 {
+			log.Warn("Cannot determine set winner/loser for a set without exactly 2 teams", "matchID", match.MatchID, "scores", set.Scores)
+			continue // Skip this set
+		}
+
+		var setWinnerID, setLoserID string
+		var maxScore, minScore int
+
+		if set.Scores[teamIDs[0]] > set.Scores[teamIDs[1]] {
+			setWinnerID, setLoserID = teamIDs[0], teamIDs[1]
+			maxScore, minScore = set.Scores[teamIDs[0]], set.Scores[teamIDs[1]]
+		} else {
+			setWinnerID, setLoserID = teamIDs[1], teamIDs[0]
+			maxScore, minScore = set.Scores[teamIDs[1]], set.Scores[teamIDs[0]]
 		}
 
 		// Update stats for the winning team's players
@@ -342,79 +467,61 @@ func (s *store) updatePlayerStatsLocked(match *playtomic.PadelMatch) {
 			}
 		}
 	}
+	return playerStats
+}
 
-	// Choose the correct table based on match type
-	var tableName string
-	if matchType == "SINGLES" {
-		tableName = "player_stats_singles"
-	} else if matchType == "DOUBLES" {
-		tableName = "player_stats_doubles"
-	} else {
-		log.Error("Unknown match type, skipping stats update", "matchType", matchType, "matchID", match.MatchID)
-		return
-	}
+// getWeekStartDate returns the Unix timestamp for the start of the week (Sunday 00:00:00)
+// for a given timestamp.
+func getWeekStartDate(timestamp int64) int64 {
+	t := time.Unix(timestamp, 0).UTC() // Use UTC for consistency
+	weekday := t.Weekday()             // Sunday = 0, Monday = 1, ...
 
-	for playerID, stats := range playerStats {
-		stmt, err := tx.Prepare(fmt.Sprintf(`
-			INSERT INTO %s (player_id, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(player_id) DO UPDATE SET
-				matches_played = matches_played + excluded.matches_played,
-				matches_won = matches_won + excluded.matches_won,
-				matches_lost = matches_lost + excluded.matches_lost,
-				sets_won = sets_won + excluded.sets_won,
-				sets_lost = sets_lost + excluded.sets_lost,
-				games_won = games_won + excluded.games_won,
-				games_lost = games_lost + excluded.games_lost;
-		`, tableName))
-		if err != nil {
-			log.Error("Failed to prepare player_stats statement", "error", err, "playerID", playerID, "table", tableName)
-			continue
-		}
-		defer stmt.Close()
+	// Truncate to the beginning of the day
+	startOfDay := t.Truncate(24 * time.Hour)
 
-		_, err = stmt.Exec(playerID, stats["matches_played"], stats["matches_won"], stats["matches_lost"], stats["sets_won"], stats["sets_lost"], stats["games_won"], stats["games_lost"])
-		if err != nil {
-			log.Error("Failed to execute player_stats statement", "error", err, "playerID", playerID, "table", tableName)
-		} else {
-			log.Info("Updated player stats", "playerID", playerID, "matchType", matchType, "table", tableName)
-		}
-	}
+	// Subtract days to get to the previous Sunday
+	startOfWeek := startOfDay.AddDate(0, 0, -int(weekday))
 
-	if err := tx.Commit(); err != nil {
-		log.Error("Failed to commit player_stats transaction", "error", err)
-	}
+	return startOfWeek.Unix()
 }
 
 // GetPlayerStatsByName retrieves the statistics for a single player by their name.
 // It performs a case-insensitive, fuzzy search (e.g., "morten" will match "Morten Voss").
-func (s *store) GetPlayerStatsByName(playerName string) (*PlayerStats, error) {
+// The matchType can be "SINGLES", "DOUBLES", or "ALL" for combined stats.
+func (s *store) GetPlayerStatsByName(playerName string, matchType playtomic.MatchType) (*PlayerStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	query := `
-		SELECT
-			p.id,
-			p.name,
-			COALESCE(ps.matches_played, 0),
-			COALESCE(ps.matches_won, 0),
-			COALESCE(ps.matches_lost, 0),
-			COALESCE(ps.sets_won, 0),
-			COALESCE(ps.sets_lost, 0),
-			COALESCE(ps.games_won, 0),
-			COALESCE(ps.games_lost, 0)
-		FROM players p
-		LEFT JOIN player_stats ps ON p.id = ps.player_id
-		WHERE p.name LIKE ? COLLATE NOCASE
-		LIMIT 1
-	`
+	var query string
+	var fromClause string
+
+	switch matchType {
+	case playtomic.MatchTypeSingles:
+		fromClause = "player_stats_singles"
+		query = `SELECT p.id, p.name, COALESCE(s.matches_played, 0), COALESCE(s.matches_won, 0), COALESCE(s.matches_lost, 0), COALESCE(s.sets_won, 0), COALESCE(s.sets_lost, 0), COALESCE(s.games_won, 0), COALESCE(s.games_lost, 0)
+                 FROM players p LEFT JOIN %s s ON p.id = s.player_id WHERE p.name LIKE ? COLLATE NOCASE LIMIT 1`
+		query = fmt.Sprintf(query, fromClause)
+	case playtomic.MatchTypeDoubles:
+		fromClause = "player_stats_doubles"
+		query = `SELECT p.id, p.name, COALESCE(s.matches_played, 0), COALESCE(s.matches_won, 0), COALESCE(s.matches_lost, 0), COALESCE(s.sets_won, 0), COALESCE(s.sets_lost, 0), COALESCE(s.games_won, 0), COALESCE(s.games_lost, 0)
+                 FROM players p LEFT JOIN %s s ON p.id = s.player_id WHERE p.name LIKE ? COLLATE NOCASE LIMIT 1`
+		query = fmt.Sprintf(query, fromClause)
+	default: // MatchTypeAll or empty
+		query = `SELECT p.id, p.name, COALESCE(SUM(s.matches_played), 0), COALESCE(SUM(s.matches_won), 0), COALESCE(SUM(s.matches_lost), 0), COALESCE(SUM(s.sets_won), 0), COALESCE(SUM(s.sets_lost), 0), COALESCE(SUM(s.games_won), 0), COALESCE(SUM(s.games_lost), 0)
+                 FROM players p LEFT JOIN (
+                     SELECT player_id, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost FROM player_stats_singles
+                     UNION ALL
+                     SELECT player_id, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost FROM player_stats_doubles
+                 ) s ON p.id = s.player_id
+                 WHERE p.name LIKE ? COLLATE NOCASE GROUP BY p.id, p.name LIMIT 1`
+	}
 
 	var stat PlayerStats
 	// Use a fuzzy search pattern.
 	pattern := "%" + playerName + "%"
 
 	row := s.db.QueryRow(query, pattern)
-	err := row.Scan(
+	err := row.Scan( // The GROUP BY p.id, p.name makes this safe without an aggregate on name
 		&stat.PlayerID,
 		&stat.PlayerName,
 		&stat.MatchesPlayed,
@@ -443,25 +550,40 @@ func (s *store) GetPlayerStatsByName(playerName string) (*PlayerStats, error) {
 	return &stat, nil
 }
 
-func (s *store) GetPlayerStats() ([]PlayerStats, error) {
+func (s *store) GetPlayerStats(matchType playtomic.MatchType) ([]PlayerStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`
-		SELECT
-			ps.player_id,
-			p.name,
-			ps.matches_played,
-			ps.matches_won,
-			ps.matches_lost,
-			ps.sets_won,
-			ps.sets_lost,
-			ps.games_won,
-			ps.games_lost
-		FROM player_stats ps
-		JOIN players p ON ps.player_id = p.id
-		ORDER BY ps.matches_won DESC, ps.sets_won DESC, ps.games_won DESC;
-	`)
+	var query string
+	switch matchType {
+	case playtomic.MatchTypeSingles:
+		query = `SELECT p.id, p.name, s.matches_played, s.matches_won, s.matches_lost, s.sets_won, s.sets_lost, s.games_won, s.games_lost
+                 FROM players p JOIN player_stats_singles s ON p.id = s.player_id
+                 WHERE s.matches_played > 0 ORDER BY s.matches_won DESC, s.sets_won DESC, s.games_won DESC`
+	case playtomic.MatchTypeDoubles:
+		query = `SELECT p.id, p.name, s.matches_played, s.matches_won, s.matches_lost, s.sets_won, s.sets_lost, s.games_won, s.games_lost
+                 FROM players p JOIN player_stats_doubles s ON p.id = s.player_id
+                 WHERE s.matches_played > 0 ORDER BY s.matches_won DESC, s.sets_won DESC, s.games_won DESC`
+	default: // MatchTypeAll or empty
+		query = `SELECT p.id, p.name,
+                   COALESCE(SUM(s.matches_played), 0) as total_matches_played,
+                   COALESCE(SUM(s.matches_won), 0) as total_matches_won,
+                   COALESCE(SUM(s.matches_lost), 0) as total_matches_lost,
+                   COALESCE(SUM(s.sets_won), 0) as total_sets_won,
+                   COALESCE(SUM(s.sets_lost), 0) as total_sets_lost,
+                   COALESCE(SUM(s.games_won), 0) as total_games_won,
+                   COALESCE(SUM(s.games_lost), 0) as total_games_lost
+                 FROM players p LEFT JOIN (
+                     SELECT player_id, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost FROM player_stats_singles
+                     UNION ALL
+                     SELECT player_id, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost FROM player_stats_doubles
+                 ) s ON p.id = s.player_id
+                 WHERE COALESCE(s.matches_played, 0) > 0
+                 GROUP BY p.id, p.name
+                 ORDER BY total_matches_won DESC, total_sets_won DESC, total_games_won DESC`
+	}
+
+	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -496,27 +618,22 @@ func (s *store) AddPlayer(playerID, name string, level float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var exists bool
-	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM players WHERE id = ?)", playerID).Scan(&exists)
+	// Use INSERT...ON CONFLICT to perform an atomic "upsert".
+	// This is safer than the previous "check-then-act" pattern and prevents race conditions.
+	stmt, err := s.db.Prepare(`
+		INSERT INTO players (id, name, level)
+		VALUES (?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			level = excluded.level;
+	`)
 	if err != nil {
-		log.Error("Failed to check if player exists", "error", err, "playerID", playerID)
+		log.Error("Failed to prepare upsert player statement", "error", err)
 		return
 	}
-
-	if !exists {
-		_, err := s.db.Exec("INSERT INTO players (id, name, level) VALUES (?, ?, ?)", playerID, name, level)
-		if err != nil {
-			log.Error("Failed to add player", "error", err, "playerID", playerID)
-		} else {
-			log.Info("Discovered and added new player to the store", "playerID", playerID, "name", name, "player_level", level)
-		}
-	} else {
-		_, err := s.db.Exec("UPDATE players SET name = ?, level = ? WHERE id = ?", name, level, playerID)
-		if err != nil {
-			log.Error("Failed to update player", "error", err, "playerID", playerID)
-		} else {
-			log.Info("Updated existing player in the store", "playerID", playerID, "name", name, "player_level", level)
-		}
+	defer stmt.Close()
+	if _, err := stmt.Exec(playerID, name, level); err != nil {
+		log.Error("Failed to upsert player", "error", err, "playerID", playerID)
 	}
 }
 
@@ -611,7 +728,7 @@ func (s *store) ClearMatch(matchID string) {
 func (s *store) GetAllPlayers() ([]PlayerInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query("SELECT id, name, ball_bringer_count, level FROM players ORDER BY name")
+	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, level FROM players ORDER BY name")
 	if err != nil {
 		log.Error("Failed to query all players", "error", err)
 		return nil, err
@@ -623,7 +740,7 @@ func (s *store) GetAllPlayers() ([]PlayerInfo, error) {
 		var p PlayerInfo
 		var name sql.NullString
 		var level sql.NullFloat64
-		if err := rows.Scan(&p.ID, &name, &p.BallBringerCount, &level); err != nil {
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &level); err != nil {
 			log.Error("Failed to scan player row", "error", err)
 			continue
 		}
@@ -643,7 +760,7 @@ func (s *store) GetPlayers(playerIDs []string) ([]PlayerInfo, error) {
 		return []PlayerInfo{}, nil
 	}
 
-	query := "SELECT id, name, ball_bringer_count, level FROM players WHERE id IN (?" + strings.Repeat(",?", len(playerIDs)-1) + ")"
+	query := "SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, level FROM players WHERE id IN (?" + strings.Repeat(",?", len(playerIDs)-1) + ")"
 	args := make([]interface{}, len(playerIDs))
 	for i, id := range playerIDs {
 		args[i] = id
@@ -661,7 +778,7 @@ func (s *store) GetPlayers(playerIDs []string) ([]PlayerInfo, error) {
 		var p PlayerInfo
 		var name sql.NullString
 		var level sql.NullFloat64
-		if err := rows.Scan(&p.ID, &name, &p.BallBringerCount, &level); err != nil {
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &level); err != nil {
 			log.Error("Failed to scan player row", "error", err)
 			continue // Or handle error more gracefully
 		}
@@ -670,34 +787,6 @@ func (s *store) GetPlayers(playerIDs []string) ([]PlayerInfo, error) {
 		players = append(players, p)
 	}
 	return players, nil
-}
-
-// SetBallBringer assigns a player as the ball bringer for a match and increments their count.
-// This function is now deprecated and replaced by AssignBallBringerAtomically to prevent race conditions.
-func (s *store) SetBallBringer(matchID, playerID, playerName string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	// Update the match with the ball bringer's details
-	_, err = tx.Exec("UPDATE matches SET ball_bringer_id = ?, ball_bringer_name = ? WHERE id = ?", playerID, playerName, matchID)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("failed to update match with ball bringer: %w", err)
-	}
-
-	// Increment the player's ball bringer count
-	_, err = tx.Exec("UPDATE players SET ball_bringer_count = ball_bringer_count + 1 WHERE id = ?", playerID)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("failed to increment ball bringer count: %w", err)
-	}
-
-	return tx.Commit()
 }
 
 // AssignBallBringerAtomically finds the player with the minimum ball_bringer_count among the given player IDs,
@@ -716,11 +805,11 @@ func (s *store) AssignBallBringerAtomically(matchID string, playerIDs []string) 
 	}
 	defer tx.Rollback() // Rollback on error by default
 
-	// Check if a ball bringer is already assigned to this match
-	var existingBallBringerID, existingBallBringerName sql.NullString
-	err = tx.QueryRow("SELECT ball_bringer_id, ball_bringer_name FROM matches WHERE id = ?", matchID).Scan(&existingBallBringerID, &existingBallBringerName)
+	// Get match type and check if a ball bringer is already assigned
+	var existingBallBringerID, existingBallBringerName, matchTypeEnum sql.NullString
+	err = tx.QueryRow("SELECT ball_bringer_id, ball_bringer_name, match_type_enum FROM matches WHERE id = ?", matchID).Scan(&existingBallBringerID, &existingBallBringerName, &matchTypeEnum)
 	if err != nil && err != sql.ErrNoRows {
-		return "", "", fmt.Errorf("failed to query existing ball bringer for match %s: %w", matchID, err)
+		return "", "", fmt.Errorf("failed to query match details for %s: %w", matchID, err)
 	}
 
 	if existingBallBringerID.Valid && existingBallBringerName.Valid {
@@ -728,17 +817,27 @@ func (s *store) AssignBallBringerAtomically(matchID string, playerIDs []string) 
 		return existingBallBringerID.String, existingBallBringerName.String, nil
 	}
 
-	// Find the player with the minimum ball_bringer_count among the provided playerIDs
-	// Using SQL to find the minimum and then update ensures atomicity for selection and increment.
-	query := `
+	if !matchTypeEnum.Valid || (matchTypeEnum.String != "SINGLES" && matchTypeEnum.String != "DOUBLES") {
+		return "", "", fmt.Errorf("cannot assign ball bringer for match %s with invalid type: %s", matchID, matchTypeEnum.String)
+	}
+
+	var countColumn string
+	if matchTypeEnum.String == "SINGLES" {
+		countColumn = "ball_bringer_count_singles"
+	} else {
+		countColumn = "ball_bringer_count_doubles"
+	}
+
+	// Find the player with the minimum count for the specific match type.
+	// Ordering by name provides deterministic tie-breaking.
+	query := fmt.Sprintf(`
 		SELECT id, name
 		FROM players
-		WHERE id IN (
-			?` + strings.Repeat(",?", len(playerIDs)-1) + `
-		)
-		ORDER BY ball_bringer_count ASC, name ASC -- Order by name for deterministic tie-breaking
+		WHERE id IN (?`+strings.Repeat(",?", len(playerIDs)-1)+`)
+		ORDER BY %s ASC, name ASC
 		LIMIT 1;
-	`
+	`, countColumn)
+
 	args := ToAnySlice(playerIDs) // Helper to convert []string to []any
 
 	var selectedPlayerID string
@@ -751,8 +850,9 @@ func (s *store) AssignBallBringerAtomically(matchID string, playerIDs []string) 
 		return "", "", fmt.Errorf("failed to select next ball bringer: %w", err)
 	}
 
-	// Atomically increment the selected player's ball bringer count
-	_, err = tx.Exec("UPDATE players SET ball_bringer_count = ball_bringer_count + 1 WHERE id = ?", selectedPlayerID)
+	// Atomically increment the selected player's count for the correct match type
+	updateQuery := fmt.Sprintf("UPDATE players SET %s = %s + 1 WHERE id = ?", countColumn, countColumn)
+	_, err = tx.Exec(updateQuery, selectedPlayerID)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to increment ball bringer count for player %s: %w", selectedPlayerID, err)
 	}
@@ -776,7 +876,7 @@ func (s *store) GetPlayersSortedByLevel() ([]PlayerInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query("SELECT id, name, ball_bringer_count, level FROM players ORDER BY level DESC")
+	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, level FROM players ORDER BY level DESC")
 	if err != nil {
 		log.Error("Failed to query all players sorted by level", "error", err)
 		return nil, err
@@ -788,7 +888,7 @@ func (s *store) GetPlayersSortedByLevel() ([]PlayerInfo, error) {
 		var p PlayerInfo
 		var name sql.NullString
 		var level sql.NullFloat64
-		if err := rows.Scan(&p.ID, &name, &p.BallBringerCount, &level); err != nil {
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &level); err != nil {
 			log.Error("Failed to scan player row", "error", err)
 			continue
 		}
@@ -834,35 +934,6 @@ func ToAnySlice[T any](s []T) []any {
 	return a
 }
 
-// determineMatchType analyzes team composition to determine if it's singles or doubles
-func determineMatchType(teams []playtomic.Team) *string {
-	// If we don't have exactly 2 teams, we can't determine the match type yet
-	if len(teams) != 2 {
-		return nil // NULL in database = undetermined
-	}
-	
-	// Check team sizes
-	team1Size := len(teams[0].Players)
-	team2Size := len(teams[1].Players)
-	
-	// Only determine type if both teams have players
-	if team1Size == 0 || team2Size == 0 {
-		return nil // NULL in database = undetermined
-	}
-	
-	if team1Size == 1 && team2Size == 1 {
-		result := "SINGLES"
-		return &result
-	} else if team1Size == 2 && team2Size == 2 {
-		result := "DOUBLES"
-		return &result
-	}
-	
-	// For any other configuration, we can't determine the type yet
-	// This handles cases like 1v2, 3v1, etc. which will likely resolve to doubles
-	return nil
-}
-
 // Slack mapping methods implementation
 
 // GetPlayerBySlackUserID retrieves a player by their Slack user ID
@@ -871,21 +942,22 @@ func (s *store) GetPlayerBySlackUserID(slackUserID string) (*PlayerInfo, error) 
 	defer s.mu.RUnlock()
 
 	query := `
-		SELECT id, name, level, ball_bringer_count, 
+		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, 
 			   slack_user_id, slack_username, slack_display_name, 
 			   mapping_status, mapping_confidence, mapping_updated_at
 		FROM players 
 		WHERE slack_user_id = ?
 	`
-	
+
 	row := s.db.QueryRow(query, slackUserID)
-	
+
 	var player PlayerInfo
 	err := row.Scan(
 		&player.ID,
 		&player.Name,
 		&player.Level,
-		&player.BallBringerCount,
+		&player.BallBringerCountSingles,
+		&player.BallBringerCountDoubles,
 		&player.SlackUserID,
 		&player.SlackUsername,
 		&player.SlackDisplayName,
@@ -893,14 +965,14 @@ func (s *store) GetPlayerBySlackUserID(slackUserID string) (*PlayerInfo, error) 
 		&player.MappingConfidence,
 		&player.MappingUpdatedAt,
 	)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // No player found with this Slack user ID
 		}
 		return nil, fmt.Errorf("failed to get player by slack user ID: %w", err)
 	}
-	
+
 	return &player, nil
 }
 
@@ -910,20 +982,20 @@ func (s *store) GetUnmappedPlayers() ([]PlayerInfo, error) {
 	defer s.mu.RUnlock()
 
 	query := `
-		SELECT id, name, level, ball_bringer_count, 
+		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, 
 			   slack_user_id, slack_username, slack_display_name, 
 			   mapping_status, mapping_confidence, mapping_updated_at
 		FROM players 
 		WHERE slack_user_id IS NULL OR slack_user_id = ''
 		ORDER BY name COLLATE NOCASE
 	`
-	
+
 	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get unmapped players: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var players []PlayerInfo
 	for rows.Next() {
 		var player PlayerInfo
@@ -931,7 +1003,8 @@ func (s *store) GetUnmappedPlayers() ([]PlayerInfo, error) {
 			&player.ID,
 			&player.Name,
 			&player.Level,
-			&player.BallBringerCount,
+			&player.BallBringerCountSingles,
+			&player.BallBringerCountDoubles,
 			&player.SlackUserID,
 			&player.SlackUsername,
 			&player.SlackDisplayName,
@@ -944,7 +1017,7 @@ func (s *store) GetUnmappedPlayers() ([]PlayerInfo, error) {
 		}
 		players = append(players, player)
 	}
-	
+
 	return players, nil
 }
 
@@ -963,13 +1036,13 @@ func (s *store) UpdatePlayerSlackMapping(playerID, slackUserID, slackUsername, s
 			mapping_updated_at = ?
 		WHERE id = ?
 	`
-	
+
 	now := time.Now().Unix()
 	_, err := s.db.Exec(query, slackUserID, slackUsername, slackDisplayName, status, confidence, now, playerID)
 	if err != nil {
 		return fmt.Errorf("failed to update player Slack mapping: %w", err)
 	}
-	
+
 	log.Info("Updated player Slack mapping", "player_id", playerID, "slack_user_id", slackUserID, "status", status, "confidence", confidence)
 	return nil
 }
@@ -981,9 +1054,9 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 
 	// Simple similarity search using SQL LIKE - could be enhanced with more sophisticated algorithms
 	searchPattern := "%" + strings.ToLower(searchName) + "%"
-	
+
 	query := `
-		SELECT id, name, level, ball_bringer_count, 
+		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, 
 			   slack_user_id, slack_username, slack_display_name, 
 			   mapping_status, mapping_confidence, mapping_updated_at
 		FROM players 
@@ -998,17 +1071,17 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 			END,
 			name COLLATE NOCASE
 	`
-	
+
 	// Pattern variations for better matching
 	startsWith := strings.ToLower(searchName) + "%"
 	endsWith := "%" + strings.ToLower(searchName)
-	
+
 	rows, err := s.db.Query(query, searchPattern, startsWith, endsWith, searchName, searchName+"%")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find players by name similarity: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var players []PlayerInfo
 	for rows.Next() {
 		var player PlayerInfo
@@ -1016,7 +1089,8 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 			&player.ID,
 			&player.Name,
 			&player.Level,
-			&player.BallBringerCount,
+			&player.BallBringerCountSingles,
+			&player.BallBringerCountDoubles,
 			&player.SlackUserID,
 			&player.SlackUsername,
 			&player.SlackDisplayName,
@@ -1029,6 +1103,6 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 		}
 		players = append(players, player)
 	}
-	
+
 	return players, nil
 }

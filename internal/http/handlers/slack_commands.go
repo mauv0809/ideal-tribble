@@ -8,6 +8,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
+	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/slack-go/slack"
 )
 
@@ -22,7 +23,9 @@ func respondWithSlackMsg(w http.ResponseWriter, msg slack.Message) {
 
 func LeaderboardCommandHandler(store club.ClubStore, notifier notifier.Notifier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		stats, err := store.GetPlayerStats()
+		// For the main leaderboard, we get combined stats from all match types.
+		// A future command could be `/leaderboard singles` to specify.
+		stats, err := store.GetPlayerStats(playtomic.MatchTypeAll)
 		if err != nil {
 			http.Error(w, "Failed to get player stats", http.StatusInternalServerError)
 			log.Error("Failed to get player stats from store", "error", err)
@@ -61,7 +64,9 @@ func PlayerStatsCommandHandler(store club.ClubStore, notifier notifier.Notifier)
 
 		log.Info("Received player stats command", "player", playerName)
 
-		stats, err := store.GetPlayerStatsByName(playerName)
+		// For individual stats, we also show combined stats by default.
+		// A future command could be `/padel-stats [name] singles`
+		stats, err := store.GetPlayerStatsByName(playerName, playtomic.MatchTypeAll)
 		var msg any
 		if err != nil {
 			log.Warn("Could not find player stats", "player", playerName, "error", err)

@@ -28,6 +28,15 @@ type Mock struct {
 	FormatLevelLeaderboardResponseFunc func(players []club.PlayerInfo) (any, error)
 	FormatPlayerStatsResponseFunc      func(stats *club.PlayerStats, query string) (any, error)
 	FormatPlayerNotFoundResponseFunc   func(query string) (any, error)
+	FormatMatchRequestResponseFunc     func(request any) (any, error)
+
+	// Spies for matchmaking functions
+	SendMatchAvailabilityRequestFunc func(request any, dryRun bool) (string, string, error)
+	SendMatchProposalFunc            func(request any, proposal any, dryRun bool) error
+	SendMatchConfirmationFunc        func(request any, dryRun bool) error
+
+	// For direct messages
+	SendDirectMessageFunc func(userID string, text string) (string, string, error)
 
 	// Call records for format functions
 	LastLeaderboardResponse      any
@@ -144,4 +153,44 @@ func (m *Mock) FormatPlayerNotFoundResponse(query string) (any, error) {
 		return resp, err
 	}
 	return "formatted_player_not_found", nil
+}
+func (m *Mock) FormatMatchRequestResponse(request any) (any, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.FormatMatchRequestResponseFunc != nil {
+		return m.FormatMatchRequestResponseFunc(request)
+	}
+	return "formatted_match_request", nil
+}
+func (m *Mock) SendDirectMessage(userID string, text string) (string, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.SendDirectMessageFunc != nil {
+		return m.SendDirectMessageFunc(userID, text)
+	}
+	return "", "", nil
+}
+func (m *Mock) SendMatchAvailabilityRequest(request any, dryRun bool) (string, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.SendMatchAvailabilityRequestFunc != nil {
+		return m.SendMatchAvailabilityRequestFunc(request, dryRun)
+	}
+	return "", "", nil
+}
+func (m *Mock) SendMatchConfirmation(request any, dryRun bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.SendMatchConfirmationFunc != nil {
+		return m.SendMatchConfirmationFunc(request, dryRun)
+	}
+	return nil
+}
+func (m *Mock) SendMatchProposal(request any, proposal any, dryRun bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.SendMatchProposalFunc != nil {
+		return m.SendMatchProposalFunc(request, proposal, dryRun)
+	}
+	return nil
 }

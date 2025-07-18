@@ -148,9 +148,9 @@ func TestFormatBookingNotification(t *testing.T) {
 func TestFormatResultNotification(t *testing.T) {
 	loc, _ := time.LoadLocation("Europe/Copenhagen")
 	match := &playtomic.PadelMatch{
-		ResourceName: "Court 1",
-		Start:        time.Date(2025, 7, 9, 18, 0, 0, 0, loc).Unix(),
-		MatchType:    playtomic.MatchTypeCompetition,
+		ResourceName:    "Court 1",
+		Start:           time.Date(2025, 7, 9, 18, 0, 0, 0, loc).Unix(),
+		CompetitionType: playtomic.Competition,
 		Teams: []playtomic.Team{
 			{ID: "t1", TeamResult: "WON", Players: []playtomic.Player{{Name: "Player A"}, {Name: "Player B"}}},
 			{ID: "t2", Players: []playtomic.Player{{Name: "Player C"}, {Name: "Player D"}}},

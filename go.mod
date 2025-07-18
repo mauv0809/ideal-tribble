@@ -5,6 +5,7 @@ go 1.24.4
 require (
 	cloud.google.com/go/pubsub v1.49.0
 	github.com/charmbracelet/log v0.4.2
+	github.com/google/uuid v1.6.0
 	github.com/inngest/inngestgo v0.13.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.28
@@ -41,7 +42,6 @@ require (
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
