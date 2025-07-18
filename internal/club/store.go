@@ -806,3 +806,173 @@ func ToAnySlice[T any](s []T) []any {
 	}
 	return a
 }
+
+// Slack mapping methods implementation
+
+// GetPlayerBySlackUserID retrieves a player by their Slack user ID
+func (s *store) GetPlayerBySlackUserID(slackUserID string) (*PlayerInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `
+		SELECT id, name, level, ball_bringer_count, 
+			   slack_user_id, slack_username, slack_display_name, 
+			   mapping_status, mapping_confidence, mapping_updated_at
+		FROM players 
+		WHERE slack_user_id = ?
+	`
+	
+	row := s.db.QueryRow(query, slackUserID)
+	
+	var player PlayerInfo
+	err := row.Scan(
+		&player.ID,
+		&player.Name,
+		&player.Level,
+		&player.BallBringerCount,
+		&player.SlackUserID,
+		&player.SlackUsername,
+		&player.SlackDisplayName,
+		&player.MappingStatus,
+		&player.MappingConfidence,
+		&player.MappingUpdatedAt,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // No player found with this Slack user ID
+		}
+		return nil, fmt.Errorf("failed to get player by slack user ID: %w", err)
+	}
+	
+	return &player, nil
+}
+
+// GetUnmappedPlayers retrieves all players that don't have a Slack mapping
+func (s *store) GetUnmappedPlayers() ([]PlayerInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `
+		SELECT id, name, level, ball_bringer_count, 
+			   slack_user_id, slack_username, slack_display_name, 
+			   mapping_status, mapping_confidence, mapping_updated_at
+		FROM players 
+		WHERE slack_user_id IS NULL OR slack_user_id = ''
+		ORDER BY name COLLATE NOCASE
+	`
+	
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unmapped players: %w", err)
+	}
+	defer rows.Close()
+	
+	var players []PlayerInfo
+	for rows.Next() {
+		var player PlayerInfo
+		err := rows.Scan(
+			&player.ID,
+			&player.Name,
+			&player.Level,
+			&player.BallBringerCount,
+			&player.SlackUserID,
+			&player.SlackUsername,
+			&player.SlackDisplayName,
+			&player.MappingStatus,
+			&player.MappingConfidence,
+			&player.MappingUpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan unmapped player: %w", err)
+		}
+		players = append(players, player)
+	}
+	
+	return players, nil
+}
+
+// UpdatePlayerSlackMapping updates a player's Slack mapping information
+func (s *store) UpdatePlayerSlackMapping(playerID, slackUserID, slackUsername, slackDisplayName, status string, confidence float64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `
+		UPDATE players 
+		SET slack_user_id = ?, 
+			slack_username = ?, 
+			slack_display_name = ?, 
+			mapping_status = ?, 
+			mapping_confidence = ?, 
+			mapping_updated_at = ?
+		WHERE id = ?
+	`
+	
+	now := time.Now().Unix()
+	_, err := s.db.Exec(query, slackUserID, slackUsername, slackDisplayName, status, confidence, now, playerID)
+	if err != nil {
+		return fmt.Errorf("failed to update player Slack mapping: %w", err)
+	}
+	
+	log.Info("Updated player Slack mapping", "player_id", playerID, "slack_user_id", slackUserID, "status", status, "confidence", confidence)
+	return nil
+}
+
+// FindPlayersByNameSimilarity finds players with names similar to the search term
+func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Simple similarity search using SQL LIKE - could be enhanced with more sophisticated algorithms
+	searchPattern := "%" + strings.ToLower(searchName) + "%"
+	
+	query := `
+		SELECT id, name, level, ball_bringer_count, 
+			   slack_user_id, slack_username, slack_display_name, 
+			   mapping_status, mapping_confidence, mapping_updated_at
+		FROM players 
+		WHERE LOWER(name) LIKE ? 
+		   OR LOWER(name) LIKE ? 
+		   OR LOWER(name) LIKE ?
+		ORDER BY 
+			CASE 
+				WHEN LOWER(name) = LOWER(?) THEN 1  -- Exact match
+				WHEN LOWER(name) LIKE LOWER(?) THEN 2  -- Starts with
+				ELSE 3  -- Contains
+			END,
+			name COLLATE NOCASE
+	`
+	
+	// Pattern variations for better matching
+	startsWith := strings.ToLower(searchName) + "%"
+	endsWith := "%" + strings.ToLower(searchName)
+	
+	rows, err := s.db.Query(query, searchPattern, startsWith, endsWith, searchName, searchName+"%")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find players by name similarity: %w", err)
+	}
+	defer rows.Close()
+	
+	var players []PlayerInfo
+	for rows.Next() {
+		var player PlayerInfo
+		err := rows.Scan(
+			&player.ID,
+			&player.Name,
+			&player.Level,
+			&player.BallBringerCount,
+			&player.SlackUserID,
+			&player.SlackUsername,
+			&player.SlackDisplayName,
+			&player.MappingStatus,
+			&player.MappingConfidence,
+			&player.MappingUpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan similar player: %w", err)
+		}
+		players = append(players, player)
+	}
+	
+	return players, nil
+}

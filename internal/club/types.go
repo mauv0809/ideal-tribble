@@ -27,8 +27,14 @@ type PlayerStats struct {
 
 // PlayerInfo represents a player in the store.
 type PlayerInfo struct {
-	ID               string
-	Name             string
-	BallBringerCount int
-	Level            float64
+	ID                  string
+	Name                string
+	BallBringerCount    int
+	Level               float64
+	SlackUserID         *string
+	SlackUsername       *string
+	SlackDisplayName    *string
+	MappingStatus       *string
+	MappingConfidence   *float64
+	MappingUpdatedAt    *int64
 }

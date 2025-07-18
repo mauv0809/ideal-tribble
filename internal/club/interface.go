@@ -23,4 +23,10 @@ type ClubStore interface {
 	SetBallBringer(matchID, playerID, playerName string) error // Deprecated: Use AssignBallBringerAtomically instead
 	AssignBallBringerAtomically(matchID string, playerIDs []string) (string, string, error)
 	UpdateNotificationTimestamp(matchID string, notificationType string) error
+
+	// Slack mapping methods
+	GetPlayerBySlackUserID(slackUserID string) (*PlayerInfo, error)
+	GetUnmappedPlayers() ([]PlayerInfo, error)
+	UpdatePlayerSlackMapping(playerID, slackUserID, slackUsername, slackDisplayName, status string, confidence float64) error
+	FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, error)
 }
