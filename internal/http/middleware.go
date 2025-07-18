@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+	handlers "github.com/mauv0809/ideal-tribble/internal/http/handlers"
 	"github.com/slack-go/slack"
 )
 
@@ -21,13 +22,6 @@ func Chain(h http.Handler, middlewares ...Middleware) http.Handler {
 	}
 	return h
 }
-
-// contextKey is a custom type to avoid key collisions in context.
-type contextKey string
-
-const (
-	dryRunKey contextKey = "dryRun"
-)
 
 // paramsMiddleware handles common query parameters like 'verbose' and 'dry_run'.
 func paramsMiddleware(next http.Handler) http.Handler {
@@ -45,17 +39,11 @@ func paramsMiddleware(next http.Handler) http.Handler {
 
 		// Handle 'dry_run' and add it to the request context.
 		isDryRun := r.URL.Query().Get("dry_run") == "true"
-		ctx := context.WithValue(r.Context(), dryRunKey, isDryRun)
+		ctx := context.WithValue(r.Context(), handlers.DryRunKey, isDryRun)
 
 		// Call the next handler with the modified context.
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// isDryRunFromContext is a helper to safely retrieve the dry_run flag from the request context.
-func isDryRunFromContext(r *http.Request) bool {
-	dryRun, ok := r.Context().Value(dryRunKey).(bool)
-	return ok && dryRun
 }
 
 // VerifySlackSignature is a middleware that verifies the Slack request signature.
