@@ -23,4 +23,10 @@ type Notifier interface {
 	FormatLevelLeaderboardResponse(players []club.PlayerInfo) (any, error)
 	FormatPlayerStatsResponse(stats *club.PlayerStats, query string) (any, error)
 	FormatPlayerNotFoundResponse(query string) (any, error)
+
+	// For matchmaking
+	SendMatchAvailabilityRequest(request any, dryRun bool) (string, string, error)
+	SendMatchProposal(request any, proposal any, dryRun bool) error
+	SendMatchConfirmation(request any, dryRun bool) error
+	FormatMatchRequestResponse(request any) (any, error)
 }
