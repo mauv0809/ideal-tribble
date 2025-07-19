@@ -36,7 +36,7 @@ func NewClient() PlaytomicClient {
 var _ PlaytomicClient = (*APIClient)(nil)
 
 // determineMatchType analyzes team composition to determine if it's singles or doubles.
-func determineMatchType(teams []Team) MatchType {
+func determineMatchType(teams []Team) MatchTypeEnum {
 	// If we don't have exactly 2 teams, we can't determine the match type yet.
 	if len(teams) != 2 {
 		return "" // Return empty string for undetermined
@@ -52,9 +52,9 @@ func determineMatchType(teams []Team) MatchType {
 	}
 
 	if team1Size == 1 && team2Size == 1 {
-		return MatchTypeSingles
+		return MatchTypeEnumSingles
 	} else if team1Size == 2 && team2Size == 2 {
-		return MatchTypeDoubles
+		return MatchTypeEnumDoubles
 	}
 	return "" // Undetermined for other configurations (e.g., 1v2)
 }
@@ -246,14 +246,14 @@ func (c *APIClient) GetSpecificMatch(matchID string) (PadelMatch, error) {
 		log.Warn("Unknown results status received from Playtomic API", "status", matchResponse.ResultsStatus, "matchID", matchID)
 	}
 
-	var competitionType CompetitionType
-	switch matchResponse.CompetitionType {
-	case string(Competition):
-		competitionType = Competition
-	case string(Practice):
-		competitionType = Practice
+	var competitionType MatchType
+	switch matchResponse.MatchType {
+	case string(MatchTypeCompetitive):
+		competitionType = MatchTypeCompetitive
+	case string(MatchTypeFriendly):
+		competitionType = MatchTypeFriendly
 	default:
-		log.Warn("Unknown match type received from Playtomic API", "type", matchResponse.CompetitionType, "matchID", matchID)
+		log.Warn("Unknown match type received from Playtomic API", "type", matchResponse.MatchType, "matchID", matchID)
 	}
 	padelMatch := PadelMatch{
 		MatchID:       matchID,
@@ -273,8 +273,8 @@ func (c *APIClient) GetSpecificMatch(matchID string) (PadelMatch, error) {
 			ID:   matchResponse.Tenant.ID,
 			Name: matchResponse.Tenant.Name,
 		},
-		CompetitionType: competitionType,
-		MatchType:       determineMatchType(teams),
+		MatchType:     competitionType,
+		MatchTypeEnum: determineMatchType(teams),
 	}
 
 	if matchResponse.MerchantAccessCode != nil {

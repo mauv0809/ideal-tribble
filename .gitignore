@@ -47,3 +47,4 @@ air.log
 
 #terraform
 terraform/.terraform/
+cli

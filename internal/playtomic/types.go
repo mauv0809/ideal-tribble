@@ -15,16 +15,16 @@ type MatchSummary struct {
 	OwnerID *string
 }
 
-// MatchType represents the type of a padel match.
-type MatchType string
+// MatchTypeEnum represents the format of a padel match (singles vs doubles).
+type MatchTypeEnum string
 
 const (
-	// MatchTypeAll represents all match types combined.
-	MatchTypeAll MatchType = "ALL"
-	// MatchTypeSingles represents a singles match.
-	MatchTypeSingles MatchType = "SINGLES"
-	// MatchTypeDoubles represents a doubles match.
-	MatchTypeDoubles MatchType = "DOUBLES"
+	// MatchTypeEnumAll represents all match types combined.
+	MatchTypeEnumAll MatchTypeEnum = "ALL"
+	// MatchTypeEnumSingles represents a singles match.
+	MatchTypeEnumSingles MatchTypeEnum = "SINGLES"
+	// MatchTypeEnumDoubles represents a doubles match.
+	MatchTypeEnumDoubles MatchTypeEnum = "DOUBLES"
 )
 
 // PadelMatch represents a single padel match with all its details.
@@ -46,10 +46,10 @@ type PadelMatch struct {
 	Tenant            Tenant
 	BallBringerID     string
 	BallBringerName   string
-	BookingNotifiedTs *int64 // Unix timestamp when booking notification was sent
-	ResultNotifiedTs  *int64 // Unix timestamp when result notification was sent
-	CompetitionType   CompetitionType
-	MatchType         MatchType
+	BookingNotifiedTs *int64        // Unix timestamp when booking notification was sent
+	ResultNotifiedTs  *int64        // Unix timestamp when result notification was sent
+	MatchType         MatchType     // MatchTypeCompetitive mode -> competitive or friendly
+	MatchTypeEnum     MatchTypeEnum // Singles or Doubles
 	ProcessingStatus  ProcessingStatus
 }
 
@@ -70,12 +70,12 @@ const (
 	StatusCompleted            ProcessingStatus = "COMPLETED"
 )
 
-// CompetitionType defines the type of match.
-type CompetitionType string
+// MatchType defines the competition type of match (competitive vs friendly).
+type MatchType string
 
 const (
-	Competition CompetitionType = "COMPETITIVE"
-	Practice    CompetitionType = "FRIENDLY"
+	MatchTypeCompetitive MatchType = "COMPETITIVE"
+	MatchTypeFriendly    MatchType = "FRIENDLY"
 )
 
 // GameStatus defines the status of a game.
@@ -148,7 +148,7 @@ type playtomicMatchResponse struct {
 	MerchantAccessCode *playtomicMerchantAccessCode `json:"merchant_access_code"`
 	Price              string                       `json:"price"`
 	Tenant             playtomicTenant              `json:"tenant"`
-	CompetitionType    string                       `json:"competition_mode"`
+	MatchType          string                       `json:"competition_mode"`
 }
 
 // playtomicResult defines a set result.
