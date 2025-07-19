@@ -158,7 +158,7 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 			{ID: "t1", TeamResult: "WON", Players: []playtomic.Player{{UserID: "p1", Name: "Morten Voss"}, {UserID: "p2", Name: "Player Two"}}},
 			{ID: "t2", Players: []playtomic.Player{{UserID: "p3", Name: "Player Three"}, {UserID: "p4", Name: "Player Four"}}},
 		},
-		MatchType: playtomic.MatchTypeDoubles,
+		MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
 		Results: []playtomic.SetResult{
 			{Name: "Set-1", Scores: map[string]int{"t1": 6, "t2": 4}},
 			{Name: "Set-2", Scores: map[string]int{"t1": 6, "t2": 4}},
@@ -289,7 +289,7 @@ func TestFetchMatchesHandler(t *testing.T) {
 				{Players: []playtomic.Player{{UserID: "p1"}, {UserID: "p2"}}},
 				{Players: []playtomic.Player{{UserID: "p3"}, {UserID: "p4"}}},
 			},
-			MatchType: playtomic.MatchTypeDoubles,
+			MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
 		}, nil
 	}
 
@@ -329,7 +329,7 @@ func TestProcessMatchesHandler(t *testing.T) {
 			OwnerID:          "p1",
 			ProcessingStatus: playtomic.StatusNew,
 			Start:            time.Now().Unix(),
-			MatchType:        playtomic.MatchTypeDoubles,
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
 			Teams: []playtomic.Team{
 				{Players: []playtomic.Player{{UserID: "p1"}}},
 				{Players: []playtomic.Player{{UserID: "p2"}}},
@@ -370,7 +370,7 @@ func TestProcessMatchesHandler(t *testing.T) {
 				{Players: []playtomic.Player{{UserID: "p1"}, {UserID: "p2"}}},
 				{Players: []playtomic.Player{{UserID: "p3"}, {UserID: "p4"}}},
 			},
-			MatchType: playtomic.MatchTypeDoubles,
+			MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
 		}
 		require.NoError(t, server.Store.UpsertMatch(match))
 

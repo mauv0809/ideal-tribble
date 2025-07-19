@@ -75,7 +75,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 			GameStatus:       playtomic.GameStatusPlayed,
 			ResultsStatus:    playtomic.ResultsStatusConfirmed,
 			End:              time.Now().Unix(), // Set end time to now to trigger result notification
-			MatchType:        playtomic.MatchTypeDoubles,
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
 		}
 		store.GetMatchesForProcessingFunc = func() ([]*playtomic.PadelMatch, error) {
 			// Ensure the returned match has the End time set for the test
@@ -133,7 +133,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 			GameStatus:       playtomic.GameStatusPlayed,
 			ResultsStatus:    playtomic.ResultsStatusConfirmed,
 			End:              time.Now().Unix(), // Set end time to now to trigger result notification
-			MatchType:        playtomic.MatchTypeDoubles,
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
 		}
 		store.GetMatchesForProcessingFunc = func() ([]*playtomic.PadelMatch, error) {
 			// Ensure the returned match has the End time set for the test
@@ -190,7 +190,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 			ProcessingStatus: playtomic.StatusNew,
 			GameStatus:       playtomic.GameStatusPlayed,
 			ResultsStatus:    playtomic.ResultsStatusValidating, // Not confirmed
-			MatchType:        playtomic.MatchTypeDoubles,
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
 		}
 		store.GetMatchesForProcessingFunc = func() ([]*playtomic.PadelMatch, error) {
 			return []*playtomic.PadelMatch{match}, nil

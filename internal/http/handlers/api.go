@@ -46,7 +46,7 @@ func ListMatchesHandler(store club.ClubStore) http.HandlerFunc {
 
 func LeaderboardHandler(store club.ClubStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		stats, err := store.GetPlayerStats(playtomic.MatchTypeAll)
+		stats, err := store.GetPlayerStats(playtomic.MatchTypeEnumAll)
 		if err != nil {
 			http.Error(w, "Failed to get player stats", http.StatusInternalServerError)
 			log.Error("Failed to get player stats from store", "error", err)

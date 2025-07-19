@@ -202,7 +202,7 @@ func (s *Notifier) formatResultNotification(match *playtomic.PadelMatch) slack.M
 	detailsText := fmt.Sprintf("%s at %s", match.ResourceName, timeStr)
 	blocks = append(blocks, slack.NewSectionBlock(slack.NewTextBlockObject("plain_text", detailsText, false, false), nil, nil))
 
-	if match.CompetitionType == playtomic.Competition {
+	if match.MatchType == playtomic.MatchTypeCompetitive {
 		// Results
 		if len(match.Results) > 0 {
 			teamNames := make(map[string]string)
