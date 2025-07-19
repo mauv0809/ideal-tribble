@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
+	"cloud.google.com/go/pubsub"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +28,7 @@ func addCommands(root *cobra.Command) {
 	root.AddCommand(leaderboardCmd)
 	root.AddCommand(metricsCmd)
 	root.AddCommand(clearCmd)
+	root.AddCommand(setupPubsubCmd)
 
 	// Slack commands
 	commandCmd.AddCommand(commandLeaderboardCmd)
@@ -106,6 +110,18 @@ var clearCmd = &cobra.Command{
 	},
 }
 
+var setupPubsubCmd = &cobra.Command{
+	Use:   "setup-pubsub",
+	Short: "Set up Pub/Sub topics and subscriptions for local development",
+	Long: `Creates all required Pub/Sub topics and subscriptions for local development.
+This command connects to the Pub/Sub emulator at localhost:8085 and creates:
+- Topics: assign_ball_boy, update_player_stats, update_weekly_stats, notify_booking, notify_result
+- Push subscriptions for each topic pointing to localhost endpoints`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return setupPubSubTopicsAndSubscriptions()
+	},
+}
+
 var commandCmd = &cobra.Command{
 	Use:   "command",
 	Short: "Execute Slack commands",
@@ -167,6 +183,78 @@ func performGetRequest(endpoint string) error {
 		fmt.Printf("Status Code: %d\n", resp.StatusCode)
 	}
 
+	return nil
+}
+
+func setupPubSubTopicsAndSubscriptions() error {
+	ctx := context.Background()
+
+	// Set the emulator host
+	os.Setenv("PUBSUB_EMULATOR_HOST", "localhost:8085")
+
+	// Topics and their corresponding endpoints (matching terraform/variables.tf)
+	topics := map[string]string{
+		"assign_ball_boy":     "/assign-ball-boy",
+		"update_player_stats": "/update-player-stats",
+		"update_weekly_stats": "/update-weekly-stats",
+		"notify_booking":      "/notify-booking",
+		"notify_result":       "/notify-result",
+	}
+
+	// Create client (project ID doesn't matter for emulator)
+	client, err := pubsub.NewClient(ctx, "TEST")
+	if err != nil {
+		return fmt.Errorf("failed to create pubsub client: %w", err)
+	}
+	defer client.Close()
+
+	fmt.Printf("Setting up Pub/Sub topics and subscriptions on emulator (localhost:8085)...\n")
+
+	for topicName, endpoint := range topics {
+		// Create topic
+		topic := client.Topic(topicName)
+		exists, err := topic.Exists(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to check if topic %s exists: %w", topicName, err)
+		}
+
+		if !exists {
+			_, err = client.CreateTopic(ctx, topicName)
+			if err != nil {
+				return fmt.Errorf("failed to create topic %s: %w", topicName, err)
+			}
+			fmt.Printf("✓ Created topic: %s\n", topicName)
+		} else {
+			fmt.Printf("- Topic already exists: %s\n", topicName)
+		}
+
+		// Create push subscription
+		subName := topicName + "-sub"
+		sub := client.Subscription(subName)
+		exists, err = sub.Exists(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to check if subscription %s exists: %w", subName, err)
+		}
+
+		if !exists {
+			pushConfig := pubsub.PushConfig{
+				Endpoint: "http://localhost:8080" + endpoint,
+			}
+
+			_, err = client.CreateSubscription(ctx, subName, pubsub.SubscriptionConfig{
+				Topic:      topic,
+				PushConfig: pushConfig,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create subscription %s: %w", subName, err)
+			}
+			fmt.Printf("✓ Created subscription: %s -> http://localhost:8080%s\n", subName, endpoint)
+		} else {
+			fmt.Printf("- Subscription already exists: %s\n", subName)
+		}
+	}
+
+	fmt.Printf("\nPub/Sub setup complete! All topics and subscriptions are ready for local development.\n")
 	return nil
 }
 
