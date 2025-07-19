@@ -41,7 +41,7 @@ func (s *store) UpsertMatch(match *playtomic.PadelMatch) error {
 	}
 
 	// Use the match type determined by the Playtomic client.
-	matchTypeEnum := match.MatchType
+	matchTypeEnum := match.MatchTypeEnum
 
 	// This statement is the heart of the "dumb upsert".
 	// ON CONFLICT, it updates all fields EXCEPT processing_status.
@@ -132,7 +132,7 @@ func (s *store) UpsertMatches(matches []*playtomic.PadelMatch) error {
 		}
 
 		// Use the match type determined by the Playtomic client.
-		matchTypeEnum := match.MatchType
+		matchTypeEnum := match.MatchTypeEnum
 
 		_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew, matchTypeEnum)
 		if err != nil {
@@ -188,7 +188,7 @@ func (s *store) GetMatchesForProcessing() ([]*playtomic.PadelMatch, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status, booking_notified_ts, result_notified_ts
+		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status, booking_notified_ts, result_notified_ts, match_type_enum
 		FROM matches
 		WHERE processing_status != ?
 		AND game_status != ?
@@ -223,7 +223,7 @@ func (s *store) scanMatch(scanner interface{ Scan(...any) error }) (*playtomic.P
 		&match.Status, &match.GameStatus, &match.ResultsStatus, &match.ResourceName, &match.AccessCode, &match.Price,
 		&match.Tenant.ID, &match.Tenant.Name, &match.MatchType, &teamsBlob, &resultsBlob,
 		&ballBringerID, &ballBringerName, &match.ProcessingStatus,
-		&bookingNotifiedTs, &resultNotifiedTs, // Include new fields here
+		&bookingNotifiedTs, &resultNotifiedTs, &match.MatchTypeEnum, // Include new fields here
 	)
 	if err != nil {
 		return nil, err
@@ -268,7 +268,7 @@ func (s *store) UpdatePlayerStats(match *playtomic.PadelMatch) {
 
 func (s *store) updatePlayerStatsLocked(match *playtomic.PadelMatch) {
 	// Use the match type determined by the Playtomic client.
-	matchType := match.MatchType
+	matchType := match.MatchTypeEnum
 	if matchType == "" {
 		log.Debug("Skipping stats update for match with undetermined type", "matchID", match.MatchID)
 		return
@@ -333,8 +333,8 @@ func (s *store) UpdateWeeklyStats(match *playtomic.PadelMatch) {
 	defer s.mu.Unlock()
 
 	// Use the match type determined by the Playtomic client.
-	matchType := match.MatchType
-	if matchType == "" {
+	matchTypeEnum := match.MatchTypeEnum
+	if matchTypeEnum == "" {
 		log.Debug("Skipping weekly stats update for match with undetermined type", "matchID", match.MatchID)
 		return
 	}
@@ -378,7 +378,7 @@ func (s *store) UpdateWeeklyStats(match *playtomic.PadelMatch) {
 		_, err := stmt.Exec(
 			weekStartDate,
 			playerID,
-			matchType,
+			matchTypeEnum,
 			stats["matches_played"],
 			stats["matches_won"],
 			stats["matches_lost"],
@@ -390,7 +390,7 @@ func (s *store) UpdateWeeklyStats(match *playtomic.PadelMatch) {
 		if err != nil {
 			log.Error("Failed to execute weekly_player_stats statement", "error", err, "playerID", playerID, "week", weekStartDate)
 		} else {
-			log.Info("Updated weekly player stats", "playerID", playerID, "week", weekStartDate, "matchType", matchType)
+			log.Info("Updated weekly player stats", "playerID", playerID, "week", weekStartDate, "matchType", matchTypeEnum)
 		}
 	}
 
@@ -488,7 +488,7 @@ func getWeekStartDate(timestamp int64) int64 {
 // GetPlayerStatsByName retrieves the statistics for a single player by their name.
 // It performs a case-insensitive, fuzzy search (e.g., "morten" will match "Morten Voss").
 // The matchType can be "SINGLES", "DOUBLES", or "ALL" for combined stats.
-func (s *store) GetPlayerStatsByName(playerName string, matchType playtomic.MatchType) (*PlayerStats, error) {
+func (s *store) GetPlayerStatsByName(playerName string, matchType playtomic.MatchTypeEnum) (*PlayerStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -496,17 +496,17 @@ func (s *store) GetPlayerStatsByName(playerName string, matchType playtomic.Matc
 	var fromClause string
 
 	switch matchType {
-	case playtomic.MatchTypeSingles:
+	case playtomic.MatchTypeEnumSingles:
 		fromClause = "player_stats_singles"
 		query = `SELECT p.id, p.name, COALESCE(s.matches_played, 0), COALESCE(s.matches_won, 0), COALESCE(s.matches_lost, 0), COALESCE(s.sets_won, 0), COALESCE(s.sets_lost, 0), COALESCE(s.games_won, 0), COALESCE(s.games_lost, 0)
                  FROM players p LEFT JOIN %s s ON p.id = s.player_id WHERE p.name LIKE ? COLLATE NOCASE LIMIT 1`
 		query = fmt.Sprintf(query, fromClause)
-	case playtomic.MatchTypeDoubles:
+	case playtomic.MatchTypeEnumDoubles:
 		fromClause = "player_stats_doubles"
 		query = `SELECT p.id, p.name, COALESCE(s.matches_played, 0), COALESCE(s.matches_won, 0), COALESCE(s.matches_lost, 0), COALESCE(s.sets_won, 0), COALESCE(s.sets_lost, 0), COALESCE(s.games_won, 0), COALESCE(s.games_lost, 0)
                  FROM players p LEFT JOIN %s s ON p.id = s.player_id WHERE p.name LIKE ? COLLATE NOCASE LIMIT 1`
 		query = fmt.Sprintf(query, fromClause)
-	default: // MatchTypeAll or empty
+	default: // MatchTypeEnumAll or empty
 		query = `SELECT p.id, p.name, COALESCE(SUM(s.matches_played), 0), COALESCE(SUM(s.matches_won), 0), COALESCE(SUM(s.matches_lost), 0), COALESCE(SUM(s.sets_won), 0), COALESCE(SUM(s.sets_lost), 0), COALESCE(SUM(s.games_won), 0), COALESCE(SUM(s.games_lost), 0)
                  FROM players p LEFT JOIN (
                      SELECT player_id, matches_played, matches_won, matches_lost, sets_won, sets_lost, games_won, games_lost FROM player_stats_singles
@@ -550,21 +550,21 @@ func (s *store) GetPlayerStatsByName(playerName string, matchType playtomic.Matc
 	return &stat, nil
 }
 
-func (s *store) GetPlayerStats(matchType playtomic.MatchType) ([]PlayerStats, error) {
+func (s *store) GetPlayerStats(matchType playtomic.MatchTypeEnum) ([]PlayerStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var query string
 	switch matchType {
-	case playtomic.MatchTypeSingles:
+	case playtomic.MatchTypeEnumSingles:
 		query = `SELECT p.id, p.name, s.matches_played, s.matches_won, s.matches_lost, s.sets_won, s.sets_lost, s.games_won, s.games_lost
                  FROM players p JOIN player_stats_singles s ON p.id = s.player_id
                  WHERE s.matches_played > 0 ORDER BY s.matches_won DESC, s.sets_won DESC, s.games_won DESC`
-	case playtomic.MatchTypeDoubles:
+	case playtomic.MatchTypeEnumDoubles:
 		query = `SELECT p.id, p.name, s.matches_played, s.matches_won, s.matches_lost, s.sets_won, s.sets_lost, s.games_won, s.games_lost
                  FROM players p JOIN player_stats_doubles s ON p.id = s.player_id
                  WHERE s.matches_played > 0 ORDER BY s.matches_won DESC, s.sets_won DESC, s.games_won DESC`
-	default: // MatchTypeAll or empty
+	default: // MatchTypeEnumAll or empty
 		query = `SELECT p.id, p.name,
                    COALESCE(SUM(s.matches_played), 0) as total_matches_played,
                    COALESCE(SUM(s.matches_won), 0) as total_matches_won,
@@ -905,7 +905,7 @@ func (s *store) GetAllMatches() ([]*playtomic.PadelMatch, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status, booking_notified_ts, result_notified_ts
+		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status, booking_notified_ts, result_notified_ts, match_type_enum
 		FROM matches
 	`)
 	if err != nil {

@@ -55,7 +55,7 @@ func TestUpsertMatch(t *testing.T) {
 			{Players: []playtomic.Player{{UserID: "p1"}, {UserID: "p2"}}},
 			{Players: []playtomic.Player{{UserID: "p3"}, {UserID: "p4"}}},
 		},
-		MatchType: playtomic.MatchTypeDoubles,
+		MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
 	}
 	err := store.UpsertMatch(match)
 	require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestUpdateProcessingStatus(t *testing.T) {
 
 	store.AddPlayer("owner1", "owner name", 1.0)
 
-	match := &playtomic.PadelMatch{MatchID: "match1", OwnerID: "owner1", MatchType: playtomic.MatchTypeDoubles}
+	match := &playtomic.PadelMatch{MatchID: "match1", OwnerID: "owner1", MatchTypeEnum: playtomic.MatchTypeEnumDoubles}
 	err := store.UpsertMatch(match)
 	require.NoError(t, err)
 
@@ -155,7 +155,7 @@ func TestGetPlayerStatsByName(t *testing.T) {
 				{ID: "t1", TeamResult: "WON", Players: []playtomic.Player{{UserID: "player1", Name: "Morten Voss"}, {UserID: "p2", Name: "Player Two"}}},
 				{ID: "t2", TeamResult: "LOST", Players: []playtomic.Player{{UserID: "p3", Name: "Player Three"}, {UserID: "p4", Name: "Player Four"}}},
 			},
-			MatchType: playtomic.MatchTypeDoubles,
+			MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
 			Results: []playtomic.SetResult{
 				{Name: "Set-1", Scores: map[string]int{"t1": 6, "t2": 4}},
 				{Name: "Set-2", Scores: map[string]int{"t1": 7, "t2": 5}},
@@ -164,7 +164,7 @@ func TestGetPlayerStatsByName(t *testing.T) {
 		store.UpsertMatch(match)
 		store.UpdatePlayerStats(match)
 
-		stats, err := store.GetPlayerStatsByName("morten", playtomic.MatchTypeAll)
+		stats, err := store.GetPlayerStatsByName("morten", playtomic.MatchTypeEnumAll)
 		require.NoError(t, err)
 		require.NotNil(t, stats)
 
@@ -177,7 +177,7 @@ func TestGetPlayerStatsByName(t *testing.T) {
 	t.Run("returns zero stats for player with no stats entry", func(t *testing.T) {
 		store.AddPlayer("player2", "New Player", 1.0)
 
-		stats, err := store.GetPlayerStatsByName("New Player", playtomic.MatchTypeAll)
+		stats, err := store.GetPlayerStatsByName("New Player", playtomic.MatchTypeEnumAll)
 		require.NoError(t, err)
 		require.NotNil(t, stats)
 		assert.Equal(t, "New Player", stats.PlayerName)
@@ -185,7 +185,7 @@ func TestGetPlayerStatsByName(t *testing.T) {
 	})
 
 	t.Run("returns error when player not found", func(t *testing.T) {
-		stats, err := store.GetPlayerStatsByName("nonexistent", playtomic.MatchTypeAll)
+		stats, err := store.GetPlayerStatsByName("nonexistent", playtomic.MatchTypeEnumAll)
 		assert.Error(t, err)
 		assert.Nil(t, stats)
 	})
@@ -220,7 +220,7 @@ func TestClear(t *testing.T) {
 
 	// Add some data
 	store.AddPlayer("player1", "Player One", 1.0)
-	match := &playtomic.PadelMatch{MatchID: "m1", OwnerID: "player1", MatchType: playtomic.MatchTypeDoubles}
+	match := &playtomic.PadelMatch{MatchID: "m1", OwnerID: "player1", MatchTypeEnum: playtomic.MatchTypeEnumDoubles}
 	err := store.UpsertMatch(match)
 	require.NoError(t, err)
 
@@ -254,7 +254,7 @@ func TestUpdatePlayerStats(t *testing.T) {
 				{ID: "t1", TeamResult: "WON", Players: []playtomic.Player{{UserID: "p1", Name: "Morten Voss"}, {UserID: "p2", Name: "Player Two"}}},
 				{ID: "t2", TeamResult: "LOST", Players: []playtomic.Player{{UserID: "p3", Name: "Player Three"}, {UserID: "p4", Name: "Player Four"}}},
 			},
-			MatchType: playtomic.MatchTypeDoubles,
+			MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
 			Results: []playtomic.SetResult{
 				{Name: "Set-1", Scores: map[string]int{"t1": 6, "t2": 4}},
 				{Name: "Set-2", Scores: map[string]int{"t1": 7, "t2": 5}},
@@ -263,7 +263,7 @@ func TestUpdatePlayerStats(t *testing.T) {
 
 		store.UpdatePlayerStats(match)
 
-		stats, err := store.GetPlayerStatsByName("Morten Voss", playtomic.MatchTypeDoubles)
+		stats, err := store.GetPlayerStatsByName("Morten Voss", playtomic.MatchTypeEnumDoubles)
 		require.NoError(t, err)
 		assert.Equal(t, 1, stats.MatchesPlayed)
 		assert.Equal(t, 1, stats.MatchesWon)
@@ -274,7 +274,7 @@ func TestUpdatePlayerStats(t *testing.T) {
 		assert.Equal(t, 9, stats.GamesLost)
 		assert.InDelta(t, 100.0, stats.WinPercentage, 0.01)
 
-		stats, err = store.GetPlayerStatsByName("Player Three", playtomic.MatchTypeDoubles)
+		stats, err = store.GetPlayerStatsByName("Player Three", playtomic.MatchTypeEnumDoubles)
 		require.NoError(t, err)
 		assert.Equal(t, 1, stats.MatchesPlayed)
 		assert.Equal(t, 0, stats.MatchesWon)
@@ -309,7 +309,7 @@ func TestUpdateNotificationTimestamp(t *testing.T) {
 		ResourceName:     "Court 1",
 		Tenant:           playtomic.Tenant{ID: "tenant1", Name: "Tenant Name"},
 		ProcessingStatus: "NEW",
-		MatchType:        playtomic.MatchTypeDoubles,
+		MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
 	}
 	require.NoError(t, store.UpsertMatch(match))
 
@@ -365,8 +365,8 @@ func TestAssignBallBringerAtomically(t *testing.T) {
 			ResourceName:     "Court 1",
 			Tenant:           playtomic.Tenant{ID: "tenant1", Name: "Tenant Name"},
 			ProcessingStatus: "NEW",
-			MatchType:        playtomic.MatchTypeDoubles,
-			CompetitionType:  playtomic.Competition,
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
+			MatchType:        playtomic.MatchTypeCompetitive,
 			Teams: []playtomic.Team{
 				{ID: "t1", Players: []playtomic.Player{{UserID: "p1", Name: "Player A"}, {UserID: "p2", Name: "Player B"}}},
 				{ID: "t2", Players: []playtomic.Player{{UserID: "p3", Name: "Player C"}, {UserID: "p4", Name: "Player D"}}},
@@ -400,8 +400,8 @@ func TestAssignBallBringerAtomically(t *testing.T) {
 			ResourceName:     "Court 1",
 			Tenant:           playtomic.Tenant{ID: "tenant1", Name: "Tenant Name"},
 			ProcessingStatus: "NEW",
-			MatchType:        playtomic.MatchTypeSingles,
-			CompetitionType:  playtomic.Competition,
+			MatchTypeEnum:    playtomic.MatchTypeEnumSingles,
+			MatchType:        playtomic.MatchTypeCompetitive,
 			Teams: []playtomic.Team{
 				{ID: "t1", Players: []playtomic.Player{{UserID: "p1", Name: "Player A"}}},
 				{ID: "t2", Players: []playtomic.Player{{UserID: "p2", Name: "Player B"}}},
