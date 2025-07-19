@@ -15,6 +15,7 @@ import (
 )
 
 var days int
+var playerName, emoji string
 
 func addCommands(root *cobra.Command) {
 	root.AddCommand(healthCmd)
@@ -29,6 +30,13 @@ func addCommands(root *cobra.Command) {
 	root.AddCommand(metricsCmd)
 	root.AddCommand(clearCmd)
 	root.AddCommand(setupPubsubCmd)
+
+	// React command for testing
+	reactCmd.Flags().StringVar(&playerName, "name", "", "Player name to react as (required)")
+	reactCmd.Flags().StringVar(&emoji, "emoji", "", "Emoji reaction: one, two, three, four, five, six, seven (required)")
+	reactCmd.MarkFlagRequired("name")
+	reactCmd.MarkFlagRequired("emoji")
+	root.AddCommand(reactCmd)
 
 	// Slack commands
 	commandCmd.AddCommand(commandLeaderboardCmd)
@@ -119,6 +127,39 @@ This command connects to the Pub/Sub emulator at localhost:8085 and creates:
 - Push subscriptions for each topic pointing to localhost endpoints`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return setupPubSubTopicsAndSubscriptions()
+	},
+}
+
+var reactCmd = &cobra.Command{
+	Use:   "react",
+	Short: "Simulate a player emoji reaction for testing match availability",
+	Long: `Simulates a player adding an emoji reaction to a match request for testing purposes.
+This bypasses Slack and directly adds availability to the active match request.
+
+Emoji options:
+  one   = Monday
+  two   = Tuesday  
+  three = Wednesday
+  four  = Thursday
+  five  = Friday
+  six   = Saturday
+  seven = Sunday
+
+Example: ./tribble-cli react --name="Jacob Smith" --emoji="three"`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Validate emoji
+		validEmojis := map[string]bool{
+			"one": true, "two": true, "three": true, "four": true,
+			"five": true, "six": true, "seven": true,
+		}
+		if !validEmojis[emoji] {
+			return fmt.Errorf("invalid emoji '%s'. Valid options: one, two, three, four, five, six, seven", emoji)
+		}
+
+		form := url.Values{}
+		form.Add("player_name", playerName)
+		form.Add("emoji", emoji)
+		return performPostRequest("/test/react", strings.NewReader(form.Encode()))
 	},
 }
 

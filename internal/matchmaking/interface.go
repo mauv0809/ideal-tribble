@@ -29,6 +29,9 @@ type MatchmakingService interface {
 	// UpdateMatchRequestStatus updates the status of a match request
 	UpdateMatchRequestStatus(requestID string, status MatchRequestStatus) error
 	
+	// UpdateMatchRequestMessageTimestamps updates thread and availability message timestamps
+	UpdateMatchRequestMessageTimestamps(requestID, threadTS, availabilityMessageTS string) error
+	
 	// GetActiveMatchRequests gets all active match requests
 	GetActiveMatchRequests() ([]MatchRequest, error)
 	
@@ -56,5 +59,5 @@ type Notifier interface {
 	SendMatchConfirmation(request *MatchRequest, dryRun bool) error
 	
 	// FormatMatchRequestResponse formats a response for the /match command
-	FormatMatchRequestResponse(request *MatchRequest) (interface{}, error)
+	FormatMatchRequestResponse(request *MatchRequest) (any, error)
 }

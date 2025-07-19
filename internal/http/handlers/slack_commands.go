@@ -266,7 +266,14 @@ func MatchCommandHandler(store club.ClubStore, notifier notifier.Notifier, match
 		// Update match request with thread information
 		request.ThreadTS = &timestamp
 		request.AvailabilityMessageTS = &timestamp
-		// Note: In a real implementation, you'd want to update these in the database
+		
+		// Update the database with the message timestamps
+		err = matchmakingService.UpdateMatchRequestMessageTimestamps(request.ID, timestamp, timestamp)
+		if err != nil {
+			log.Error("Failed to update match request timestamps", "error", err)
+			http.Error(w, "Failed to update match request", http.StatusInternalServerError)
+			return
+		}
 
 		// Format response for the user
 		msg, err := notifier.FormatMatchRequestResponse(request)
