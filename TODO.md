@@ -159,7 +159,7 @@ This branch (`feature/matchmaking-system`) implements a matchmaking feature for 
 
 ### Database Design:
 - `match_requests` table tracks overall match requests
-- `player_availability` table tracks individual player availability
+- `match_request_availability` table tracks individual player availability
 - Foreign key relationships ensure data integrity
 - Indexes on frequently queried fields for performance
 

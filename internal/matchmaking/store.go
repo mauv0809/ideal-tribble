@@ -45,14 +45,14 @@ func (s *store) CreateMatchRequest(requesterID, requesterName, channelID string)
 			id, requester_id, requester_name, created_at, updated_at, status, channel_id
 		) VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
-	
-	_, err := s.db.Exec(query, 
-		request.ID, 
-		request.RequesterID, 
-		request.RequesterName, 
-		request.CreatedAt.Unix(), 
-		request.UpdatedAt.Unix(), 
-		string(request.Status), 
+
+	_, err := s.db.Exec(query,
+		request.ID,
+		request.RequesterID,
+		request.RequesterName,
+		request.CreatedAt.Unix(),
+		request.UpdatedAt.Unix(),
+		string(request.Status),
 		request.ChannelID,
 	)
 	if err != nil {
@@ -75,14 +75,14 @@ func (s *store) GetMatchRequest(requestID string) (*MatchRequest, error) {
 		FROM match_requests
 		WHERE id = ?
 	`
-	
+
 	row := s.db.QueryRow(query, requestID)
-	
+
 	var request MatchRequest
 	var createdAt, updatedAt int64
 	var status string
 	var teamAssignmentsBlob []byte
-	
+
 	err := row.Scan(
 		&request.ID,
 		&request.RequesterID,
@@ -110,7 +110,7 @@ func (s *store) GetMatchRequest(requestID string) (*MatchRequest, error) {
 	request.CreatedAt = time.Unix(createdAt, 0)
 	request.UpdatedAt = time.Unix(updatedAt, 0)
 	request.Status = MatchRequestStatus(status)
-	
+
 	if teamAssignmentsBlob != nil {
 		var teamAssignments TeamAssignments
 		if err := json.Unmarshal(teamAssignmentsBlob, &teamAssignments); err != nil {
@@ -146,7 +146,7 @@ func (s *store) RecordPlayerAvailability(requestID, playerID, playerName string,
 		INSERT INTO match_request_availability (match_request_id, player_id, player_name, available_date, responded_at)
 		VALUES (?, ?, ?, ?, ?)
 	`
-	
+
 	now := time.Now()
 	for _, date := range availableDates {
 		_, err = tx.Exec(insertQuery, requestID, playerID, playerName, date, now.Unix())
@@ -174,7 +174,7 @@ func (s *store) GetPlayerAvailability(requestID string) ([]PlayerAvailability, e
 		WHERE match_request_id = ?
 		ORDER BY responded_at ASC
 	`
-	
+
 	rows, err := s.db.Query(query, requestID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query availability: %w", err)
@@ -185,7 +185,7 @@ func (s *store) GetPlayerAvailability(requestID string) ([]PlayerAvailability, e
 	for rows.Next() {
 		var availability PlayerAvailability
 		var respondedAt int64
-		
+
 		err := rows.Scan(
 			&availability.ID,
 			&availability.MatchRequestID,
@@ -197,7 +197,7 @@ func (s *store) GetPlayerAvailability(requestID string) ([]PlayerAvailability, e
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan availability row: %w", err)
 		}
-		
+
 		availability.RespondedAt = time.Unix(respondedAt, 0)
 		availabilities = append(availabilities, availability)
 	}
@@ -300,9 +300,9 @@ func (s *store) ProposeMatch(requestID, date, startTime, endTime string) (*Match
 			team_assignments_blob = ?, status = ?, updated_at = ?
 		WHERE id = ?
 	`
-	
+
 	now := time.Now()
-	_, err = s.db.Exec(updateQuery, 
+	_, err = s.db.Exec(updateQuery,
 		date, startTime, endTime,
 		bookingResponsible.ID, bookingResponsible.Name,
 		teamAssignmentsBlob, string(StatusProposingMatch), now.Unix(),
@@ -343,13 +343,30 @@ func (s *store) UpdateMatchRequestStatus(requestID string, status MatchRequestSt
 
 	query := `UPDATE match_requests SET status = ?, updated_at = ? WHERE id = ?`
 	now := time.Now()
-	
+
 	_, err := s.db.Exec(query, string(status), now.Unix(), requestID)
 	if err != nil {
 		return fmt.Errorf("failed to update match request status: %w", err)
 	}
 
 	log.Info("Updated match request status", "id", requestID, "status", status)
+	return nil
+}
+
+// UpdateMatchRequestMessageTimestamps updates thread and availability message timestamps
+func (s *store) UpdateMatchRequestMessageTimestamps(requestID, threadTS, availabilityMessageTS string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `UPDATE match_requests SET thread_ts = ?, availability_message_ts = ?, updated_at = ? WHERE id = ?`
+	now := time.Now()
+
+	_, err := s.db.Exec(query, threadTS, availabilityMessageTS, now.Unix(), requestID)
+	if err != nil {
+		return fmt.Errorf("failed to update match request message timestamps: %w", err)
+	}
+
+	log.Info("Updated match request message timestamps", "id", requestID, "threadTS", threadTS, "availabilityMessageTS", availabilityMessageTS)
 	return nil
 }
 
@@ -366,7 +383,7 @@ func (s *store) GetActiveMatchRequests() ([]MatchRequest, error) {
 		WHERE status IN (?, ?)
 		ORDER BY created_at DESC
 	`
-	
+
 	rows, err := s.db.Query(query, string(StatusCollectingAvailability), string(StatusProposingMatch))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query active match requests: %w", err)
@@ -379,7 +396,7 @@ func (s *store) GetActiveMatchRequests() ([]MatchRequest, error) {
 		var createdAt, updatedAt int64
 		var status string
 		var teamAssignmentsBlob []byte
-		
+
 		err := rows.Scan(
 			&request.ID,
 			&request.RequesterID,
@@ -404,7 +421,7 @@ func (s *store) GetActiveMatchRequests() ([]MatchRequest, error) {
 		request.CreatedAt = time.Unix(createdAt, 0)
 		request.UpdatedAt = time.Unix(updatedAt, 0)
 		request.Status = MatchRequestStatus(status)
-		
+
 		if teamAssignmentsBlob != nil {
 			var teamAssignments TeamAssignments
 			if err := json.Unmarshal(teamAssignmentsBlob, &teamAssignments); err != nil {
@@ -430,7 +447,7 @@ func (s *store) IsActiveMatchRequestMessage(messageTimestamp string) (string, bo
 		FROM match_requests 
 		WHERE availability_message_ts = ? AND status = ?
 	`
-	
+
 	var requestID string
 	err := s.db.QueryRow(query, messageTimestamp, string(StatusCollectingAvailability)).Scan(&requestID)
 	if err != nil {
@@ -451,7 +468,7 @@ func (s *store) AddPlayerAvailability(requestID, playerID, playerName, day strin
 	// Check if this availability already exists
 	var existingID string
 	checkQuery := `
-		SELECT id FROM player_availability 
+		SELECT id FROM match_request_availability 
 		WHERE match_request_id = ? AND player_id = ? AND available_date = ?
 	`
 	err := s.db.QueryRow(checkQuery, requestID, playerID, day).Scan(&existingID)
@@ -462,16 +479,15 @@ func (s *store) AddPlayerAvailability(requestID, playerID, playerName, day strin
 		return fmt.Errorf("failed to check existing availability: %w", err)
 	}
 
-	// Insert new availability
+	// Insert new availability (id is auto-increment, so we don't specify it)
 	insertQuery := `
-		INSERT INTO player_availability (id, match_request_id, player_id, player_name, available_date, responded_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO match_request_availability (match_request_id, player_id, player_name, available_date, responded_at)
+		VALUES (?, ?, ?, ?, ?)
 	`
-	
-	availabilityID := uuid.New().String()
+
 	now := time.Now().Unix()
-	
-	_, err = s.db.Exec(insertQuery, availabilityID, requestID, playerID, playerName, day, now)
+
+	_, err = s.db.Exec(insertQuery, requestID, playerID, playerName, day, now)
 	if err != nil {
 		return fmt.Errorf("failed to insert player availability: %w", err)
 	}
@@ -486,10 +502,10 @@ func (s *store) RemovePlayerAvailability(requestID, playerID, day string) error 
 	defer s.mu.Unlock()
 
 	query := `
-		DELETE FROM player_availability 
+		DELETE FROM match_request_availability 
 		WHERE match_request_id = ? AND player_id = ? AND available_date = ?
 	`
-	
+
 	result, err := s.db.Exec(query, requestID, playerID, day)
 	if err != nil {
 		return fmt.Errorf("failed to remove player availability: %w", err)

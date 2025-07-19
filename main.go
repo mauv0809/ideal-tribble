@@ -113,14 +113,23 @@ func main() {
 
 	// Start the server in a goroutine
 	go func() {
-		if listener != nil {
-			log.Info("Server started with ngrok tunnel", "port", cfg.Port, "tunnel_url", listener.URL())
-			serverErrors <- srv.Serve(listener)
-		} else {
-			log.Info("Server started", "port", cfg.Port)
-			serverErrors <- srv.ListenAndServe()
-		}
+		log.Info("Server started", "port", cfg.Port)
+		serverErrors <- srv.ListenAndServe()
 	}()
+
+	// If ngrok is enabled, also serve through the tunnel
+	if listener != nil {
+		log.Info("Server also available via ngrok tunnel", "tunnel_url", listener.URL())
+		go func() {
+			// Create a separate server instance for ngrok to avoid port conflicts
+			ngrokSrv := &http.Server{
+				Handler: s,
+			}
+			if err := ngrokSrv.Serve(listener); err != nil && err != http.ErrServerClosed {
+				log.Error("Ngrok server error", "error", err)
+			}
+		}()
+	}
 
 	// Channel to listen for interrupt signals
 	shutdown := make(chan os.Signal, 1)
