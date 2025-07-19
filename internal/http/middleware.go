@@ -65,14 +65,31 @@ func (s *Server) VerifySlackSignature(next http.Handler) http.Handler {
 			return
 		}
 
-		r.Body = io.NopCloser(io.TeeReader(r.Body, &verifier))
+		// Read the entire body to verify the signature before proceeding
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("failed to read request body", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 
-		next.ServeHTTP(w, r)
+		// Write the body to the verifier for signature calculation
+		if _, err := verifier.Write(body); err != nil {
+			log.Error("failed to write body to verifier", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 
+		// Verify the signature BEFORE calling the handler
 		if err = verifier.Ensure(); err != nil {
 			log.Error("Slack signature verification failed", "error", err)
 			http.Error(w, "Unauthorized: Slack signature verification failed", http.StatusUnauthorized)
 			return
 		}
+
+		// Restore the body for the handler to read
+		r.Body = io.NopCloser(strings.NewReader(string(body)))
+
+		next.ServeHTTP(w, r)
 	})
 }
