@@ -43,6 +43,9 @@ func Load() Config {
 			EventKey:   getEnv("INNGEST_EVENT_KEY"),
 		},*/
 		ProjectID: getEnv("GCP_PROJECT"),
+		Ngrok: NgrokConfig{
+			AuthToken: os.Getenv("NGROK_AUTHTOKEN"),
+		},
 	}
 	return cfg
 }

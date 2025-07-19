@@ -10,6 +10,7 @@ type Config struct {
 	Turso         TursoConfig
 	//Inngest        InngestConfig
 	ProjectID string
+	Ngrok     NgrokConfig
 }
 type SlackConfig struct {
 	Token         string
@@ -24,4 +25,7 @@ type InngestConfig struct {
 	SingingKey string
 	EventKey   string
 	AppID      string
+}
+type NgrokConfig struct {
+	AuthToken string
 }

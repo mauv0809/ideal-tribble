@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
@@ -21,11 +22,45 @@ func respondWithSlackMsg(w http.ResponseWriter, msg slack.Message) {
 	}
 }
 
+// parsePlayerStatsText parses the text field from Slack to extract player name and match type.
+// Expected formats: "John Doe", "John Doe singles", "John Doe doubles", "John Doe all"
+func parsePlayerStatsText(text string) (playerName string, matchType playtomic.MatchTypeEnum) {
+	text = strings.TrimSpace(text)
+	parts := strings.Fields(text)
+	
+	if len(parts) == 0 {
+		return "", playtomic.MatchTypeEnumAll
+	}
+	
+	// Default match type
+	matchType = playtomic.MatchTypeEnumAll
+	
+	// Check if last part is a match type
+	if len(parts) > 1 {
+		lastPart := strings.ToLower(parts[len(parts)-1])
+		switch lastPart {
+		case "singles":
+			matchType = playtomic.MatchTypeEnumSingles
+			parts = parts[:len(parts)-1] // Remove match type from name parts
+		case "doubles":
+			matchType = playtomic.MatchTypeEnumDoubles
+			parts = parts[:len(parts)-1] // Remove match type from name parts
+		case "all":
+			matchType = playtomic.MatchTypeEnumAll
+			parts = parts[:len(parts)-1] // Remove match type from name parts
+		}
+	}
+	
+	// Join remaining parts as player name
+	playerName = strings.Join(parts, " ")
+	return playerName, matchType
+}
+
 func LeaderboardCommandHandler(store club.ClubStore, notifier notifier.Notifier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// For the main leaderboard, we get combined stats from all match types.
 		// A future command could be `/leaderboard singles` to specify.
-		stats, err := store.GetPlayerStats(playtomic.MatchTypeAll)
+		stats, err := store.GetPlayerStats(playtomic.MatchTypeEnumAll)
 		if err != nil {
 			http.Error(w, "Failed to get player stats", http.StatusInternalServerError)
 			log.Error("Failed to get player stats from store", "error", err)
@@ -56,17 +91,22 @@ func PlayerStatsCommandHandler(store club.ClubStore, notifier notifier.Notifier)
 			http.Error(w, "Error parsing form", http.StatusBadRequest)
 			return
 		}
-		playerName := r.FormValue("text")
+		
+		// Parse player name and match type from the text field
+		text := r.FormValue("text")
+		if text == "" {
+			http.Error(w, "Player name is required.", http.StatusBadRequest)
+			return
+		}
+		
+		playerName, matchTypeEnum := parsePlayerStatsText(text)
 		if playerName == "" {
 			http.Error(w, "Player name is required.", http.StatusBadRequest)
 			return
 		}
 
-		log.Info("Received player stats command", "player", playerName)
-
-		// For individual stats, we also show combined stats by default.
-		// A future command could be `/padel-stats [name] singles`
-		stats, err := store.GetPlayerStatsByName(playerName, playtomic.MatchTypeAll)
+		log.Info("Received player stats command", "player", playerName, "match_type", matchTypeEnum)
+		stats, err := store.GetPlayerStatsByName(playerName, matchTypeEnum)
 		var msg any
 		if err != nil {
 			log.Warn("Could not find player stats", "player", playerName, "error", err)

@@ -19,6 +19,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
 	"github.com/mauv0809/ideal-tribble/internal/pubsub"
+	"golang.ngrok.com/ngrok/v2"
 )
 
 func main() {
@@ -77,6 +78,30 @@ func main() {
 	metricsSvc.SetStartupTime(startupDuration.Seconds())
 	log.Info("Startup time recorded", "duration_ms", startupDuration.Milliseconds())
 
+	// --- Ngrok setup for local development ---
+	var listener ngrok.EndpointListener
+	if cfg.Ngrok.AuthToken != "" {
+		log.Info("Creating ngrok tunnel")
+		a, err := ngrok.NewAgent(ngrok.WithAuthtoken(cfg.Ngrok.AuthToken))
+		if err != nil {
+			log.Fatal(err)
+		}
+		l, err := a.Listen(context.Background(), ngrok.WithURL("dove-saving-gnu.ngrok-free.app"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Info("Ngrok tunnel created", "url", l.URL())
+		listener = l
+	} else {
+		log.Info("Ngrok tunnel disabled")
+	}
+	defer func() {
+		if listener != nil {
+			log.Info("Closing ngrok tunnel")
+			listener.Close()
+		}
+	}()
+
 	// --- Graceful shutdown setup ---
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
@@ -88,8 +113,13 @@ func main() {
 
 	// Start the server in a goroutine
 	go func() {
-		log.Info("Server started", "port", cfg.Port)
-		serverErrors <- srv.ListenAndServe()
+		if listener != nil {
+			log.Info("Server started with ngrok tunnel", "port", cfg.Port, "tunnel_url", listener.URL())
+			serverErrors <- srv.Serve(listener)
+		} else {
+			log.Info("Server started", "port", cfg.Port)
+			serverErrors <- srv.ListenAndServe()
+		}
 	}()
 
 	// Channel to listen for interrupt signals
