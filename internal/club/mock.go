@@ -29,8 +29,9 @@ type MockStore struct {
 	GetAllMatchesFunc               func() ([]*playtomic.PadelMatch, error)
 	GetPlayerStatsByNameFunc        func(playerName string, matchType playtomic.MatchTypeEnum) (*PlayerStats, error)
 	GetPlayersFunc                  func(playerIDs []string) ([]PlayerInfo, error)
-	AssignBallBringerAtomicallyFunc func(matchID string, playerIDs []string) (string, string, error)
-	UpdateNotificationTimestampFunc func(matchID string, notificationType string) error
+	AssignBallBringerAtomicallyFunc    func(matchID string, playerIDs []string) (string, string, error)
+	AssignBookingResponsibleAtomicallyFunc func(playerIDs []string) (string, string, error)
+	UpdateNotificationTimestampFunc        func(matchID string, notificationType string) error
 
 	// Call records
 	UpsertPlayersCalls          [][]PlayerInfo
@@ -50,6 +51,7 @@ type MockStore struct {
 		MatchID   string
 		PlayerIDs []string
 	}
+	AssignBookingResponsibleAtomicallyCalls [][]string
 }
 
 // NewMockStore creates a new mock instance.
@@ -66,6 +68,7 @@ func (m *MockStore) Reset() {
 	m.UpdateProcessingStatusCalls = nil
 	m.GetPlayerStatsByNameCalls = nil
 	m.GetPlayersCalls = nil
+	m.AssignBookingResponsibleAtomicallyCalls = nil
 }
 
 func (m *MockStore) UpsertMatch(match *playtomic.PadelMatch) error {
@@ -238,6 +241,16 @@ func (m *MockStore) AssignBallBringerAtomically(matchID string, playerIDs []stri
 	})
 	if m.AssignBallBringerAtomicallyFunc != nil {
 		return m.AssignBallBringerAtomicallyFunc(matchID, playerIDs)
+	}
+	return "", "", nil
+}
+
+func (m *MockStore) AssignBookingResponsibleAtomically(playerIDs []string) (string, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.AssignBookingResponsibleAtomicallyCalls = append(m.AssignBookingResponsibleAtomicallyCalls, playerIDs)
+	if m.AssignBookingResponsibleAtomicallyFunc != nil {
+		return m.AssignBookingResponsibleAtomicallyFunc(playerIDs)
 	}
 	return "", "", nil
 }

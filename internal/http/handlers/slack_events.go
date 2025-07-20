@@ -94,7 +94,7 @@ func SlackEventsHandler(store club.ClubStore, notifier notifier.Notifier, matchm
 			if eventPayload.Event.Type == "reaction_added" {
 				log.Info("Reaction added", "user", eventPayload.Event.User, "reaction", eventPayload.Event.Reaction, "timestamp", eventPayload.Event.Item.Timestamp)
 
-				if err := handleReactionAdded(eventPayload.Event.User, eventPayload.Event.Reaction, eventPayload.Event.Item.Timestamp, store, matchmakingService); err != nil {
+				if err := handleReactionAdded(eventPayload.Event.User, eventPayload.Event.Reaction, eventPayload.Event.Item.Timestamp, store, matchmakingService, notifier); err != nil {
 					log.Error("Failed to handle reaction added", "error", err, "user", eventPayload.Event.User)
 					// Don't return error to Slack to avoid retries
 				}
@@ -104,7 +104,7 @@ func SlackEventsHandler(store club.ClubStore, notifier notifier.Notifier, matchm
 			if eventPayload.Event.Type == "reaction_removed" {
 				log.Info("Reaction removed", "user", eventPayload.Event.User, "reaction", eventPayload.Event.Reaction, "timestamp", eventPayload.Event.Item.Timestamp)
 
-				if err := handleReactionRemoved(eventPayload.Event.User, eventPayload.Event.Reaction, eventPayload.Event.Item.Timestamp, store, matchmakingService); err != nil {
+				if err := handleReactionRemoved(eventPayload.Event.User, eventPayload.Event.Reaction, eventPayload.Event.Item.Timestamp, store, matchmakingService, notifier); err != nil {
 					log.Error("Failed to handle reaction removed", "error", err, "user", eventPayload.Event.User)
 					// Don't return error to Slack to avoid retries
 				}
@@ -134,7 +134,7 @@ func handleNewMember(slackUserID string, notifier notifier.Notifier) error {
 }
 
 // handleReactionAdded processes emoji reactions for availability collection
-func handleReactionAdded(slackUserID, reaction, messageTimestamp string, store club.ClubStore, matchmakingService matchmaking.MatchmakingService) error {
+func handleReactionAdded(slackUserID, reaction, messageTimestamp string, store club.ClubStore, matchmakingService matchmaking.MatchmakingService, notifier notifier.Notifier) error {
 	log.Info("Processing reaction added", "user", slackUserID, "reaction", reaction, "timestamp", messageTimestamp)
 	
 	// Check if this is a reaction to an active match request message
@@ -183,11 +183,18 @@ func handleReactionAdded(slackUserID, reaction, messageTimestamp string, store c
 	}
 
 	log.Info("Successfully added player availability from reaction", "player", foundPlayer.Name, "day", day, "requestID", requestID)
+	
+	// Check if we can now propose a match
+	if err := checkAndProposeMatch(requestID, matchmakingService, notifier); err != nil {
+		log.Error("Failed to check and propose match", "error", err, "requestID", requestID)
+		// Don't return error - availability was still added successfully
+	}
+
 	return nil
 }
 
 // handleReactionRemoved processes emoji reaction removals for availability collection
-func handleReactionRemoved(slackUserID, reaction, messageTimestamp string, store club.ClubStore, matchmakingService matchmaking.MatchmakingService) error {
+func handleReactionRemoved(slackUserID, reaction, messageTimestamp string, store club.ClubStore, matchmakingService matchmaking.MatchmakingService, notifier notifier.Notifier) error {
 	// Check if this is a reaction to an active match request message
 	requestID, isActiveRequest, err := matchmakingService.IsActiveMatchRequestMessage(messageTimestamp)
 	if err != nil {
@@ -225,6 +232,13 @@ func handleReactionRemoved(slackUserID, reaction, messageTimestamp string, store
 	}
 
 	log.Info("Removed player availability from reaction", "player", foundPlayer.Name, "day", day, "requestID", requestID)
+	
+	// Check if we still can propose a match after removal (might affect availability count)
+	if err := checkAndProposeMatch(requestID, matchmakingService, notifier); err != nil {
+		log.Error("Failed to check and propose match after removal", "error", err, "requestID", requestID)
+		// Don't return error - availability was still removed successfully
+	}
+
 	return nil
 }
 
@@ -241,4 +255,56 @@ func emojiToDay(reaction string) string {
 	}
 
 	return emojiDayMap[reaction]
+}
+
+// checkAndProposeMatch checks if enough players are available and automatically proposes a match
+func checkAndProposeMatch(requestID string, matchmakingService matchmaking.MatchmakingService, notifier notifier.Notifier) error {
+	// Check if we can propose a match
+	canPropose, bestResult, err := matchmakingService.CanProposeMatch(requestID)
+	if err != nil {
+		return fmt.Errorf("failed to check if match can be proposed: %w", err)
+	}
+
+	log.Info("Checked match proposal possibility", "requestID", requestID, "canPropose", canPropose)
+
+	if !canPropose {
+		if bestResult != nil {
+			log.Info("Not enough players for match proposal", "requestID", requestID, "bestDate", bestResult.Date, "playerCount", bestResult.PlayerCount)
+		} else {
+			log.Info("No availability for match proposal", "requestID", requestID)
+		}
+		return nil // No error, just not enough players yet
+	}
+
+	// We can propose a match! Get the best date from the result
+	bestDate := bestResult.Date
+	log.Info("Enough players available, proposing match", "requestID", requestID, "date", bestDate, "playerCount", bestResult.PlayerCount)
+
+	// Define default match times (06:00-07:30 based on user configuration in TODO.md)
+	defaultStartTime := "06:00"
+	defaultEndTime := "07:30"
+
+	// Propose the match with team assignments and booking responsibility
+	proposal, err := matchmakingService.ProposeMatch(requestID, bestDate, defaultStartTime, defaultEndTime)
+	if err != nil {
+		return fmt.Errorf("failed to propose match: %w", err)
+	}
+
+	log.Info("Successfully proposed match", "requestID", requestID, "date", proposal.Date, "booking_responsible", proposal.BookingResponsibleName)
+
+	// Get the match request to send the proposal notification
+	matchRequest, err := matchmakingService.GetMatchRequest(requestID)
+	if err != nil {
+		return fmt.Errorf("failed to get match request for notification: %w", err)
+	}
+
+	// Send match proposal notification via Slack
+	log.Info("About to send match proposal", "requestID", requestID, "channelID", matchRequest.ChannelID, "threadTS", matchRequest.ThreadTS)
+	err = notifier.SendMatchProposal(matchRequest, proposal, false) // false = not dry run
+	if err != nil {
+		return fmt.Errorf("failed to send match proposal notification: %w", err)
+	}
+
+	log.Info("Match proposal notification sent successfully", "requestID", requestID, "date", proposal.Date)
+	return nil
 }

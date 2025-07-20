@@ -22,6 +22,7 @@ type ClubStore interface {
 	GetPlayerStatsByName(playerName string, matchType playtomic.MatchTypeEnum) (*PlayerStats, error)
 	GetPlayers(playerIDs []string) ([]PlayerInfo, error)
 	AssignBallBringerAtomically(matchID string, playerIDs []string) (string, string, error)
+	AssignBookingResponsibleAtomically(playerIDs []string) (string, string, error)
 	UpdateNotificationTimestamp(matchID string, notificationType string) error
 
 	// Slack mapping methods

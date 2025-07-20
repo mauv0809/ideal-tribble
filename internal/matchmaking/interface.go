@@ -43,6 +43,9 @@ type MatchmakingService interface {
 	
 	// RemovePlayerAvailability removes a day from a player's availability  
 	RemovePlayerAvailability(requestID, playerID, day string) error
+	
+	// CanProposeMatch checks if there are enough players available to propose a match
+	CanProposeMatch(requestID string) (bool, *AvailabilityResult, error)
 }
 
 // Notifier defines the notification operations required by matchmaking.

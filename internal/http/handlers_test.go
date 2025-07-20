@@ -51,7 +51,7 @@ func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, no
 	metricsHandler := metrics.NewMetricsHandler(reg)
 	pubsub := pubsub.NewMock("TEST")
 	proc := processor.New(clubStore, notifier, metricsSvc, pubsub)
-	matchMaking := matchmaking.NewStore(db)
+	matchMaking := matchmaking.NewStore(db, clubStore)
 	// A real mux is needed to prevent the router from being nil.
 	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, matchMaking, pubsub)
 

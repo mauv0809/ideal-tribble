@@ -9,18 +9,21 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/google/uuid"
+	"github.com/mauv0809/ideal-tribble/internal/club"
 )
 
 // store handles database operations for matchmaking
 type store struct {
-	db *sql.DB
-	mu sync.RWMutex
+	db        *sql.DB
+	clubStore club.ClubStore
+	mu        sync.RWMutex
 }
 
 // NewStore creates a new matchmaking store
-func NewStore(db *sql.DB) MatchmakingService {
+func NewStore(db *sql.DB, clubStore club.ClubStore) MatchmakingService {
 	return &store{
-		db: db,
+		db:        db,
+		clubStore: clubStore,
 	}
 }
 
@@ -247,14 +250,15 @@ func (s *store) AnalyzeAvailability(requestID string) ([]AvailabilityResult, err
 
 // ProposeMatch proposes a match with team assignments and booking responsibility
 func (s *store) ProposeMatch(requestID, date, startTime, endTime string) (*MatchProposal, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	log.Info("ProposeMatch called", "requestID", requestID, "date", date, "startTime", startTime, "endTime", endTime)
 
-	// Get available players for the date
+	// Get available players for the date (GetPlayerAvailability handles its own locking)
+	log.Info("Getting player availability", "requestID", requestID)
 	availabilities, err := s.GetPlayerAvailability(requestID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get availabilities: %w", err)
 	}
+	log.Info("Got player availability", "count", len(availabilities))
 
 	var availablePlayers []Player
 	for _, availability := range availabilities {
@@ -284,10 +288,34 @@ func (s *store) ProposeMatch(requestID, date, startTime, endTime string) (*Match
 		}
 	}
 
-	// Assign booking responsibility to first player
-	bookingResponsible := availablePlayers[0]
+	// Assign booking responsibility atomically based on booking counts
+	log.Info("Creating team assignments for 4 players")
+	playerIDs := make([]string, 4)
+	for i, player := range availablePlayers[:4] {
+		playerIDs[i] = player.ID
+	}
+	log.Info("Calling AssignBookingResponsibleAtomically", "playerIDs", playerIDs)
 
-	// Update match request with proposal
+	bookingResponsibleID, bookingResponsibleName, err := s.clubStore.AssignBookingResponsibleAtomically(playerIDs)
+	log.Info("AssignBookingResponsibleAtomically returned", "error", err, "id", bookingResponsibleID, "name", bookingResponsibleName)
+	
+	var bookingResponsible Player
+	if err != nil {
+		log.Warn("Failed to assign booking responsible player atomically, using first player", "error", err)
+		bookingResponsible = availablePlayers[0]
+	} else {
+		bookingResponsible = Player{
+			ID:   bookingResponsibleID,
+			Name: bookingResponsibleName,
+		}
+	}
+	log.Info("Selected booking responsible player", "id", bookingResponsible.ID, "name", bookingResponsible.Name)
+
+	// Update match request with proposal (need to lock for database write)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	log.Info("Acquired lock for database update")
+	
 	teamAssignmentsBlob, err := json.Marshal(teamAssignments)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal team assignments: %w", err)
@@ -301,6 +329,7 @@ func (s *store) ProposeMatch(requestID, date, startTime, endTime string) (*Match
 		WHERE id = ?
 	`
 
+	log.Info("Executing database update")
 	now := time.Now()
 	_, err = s.db.Exec(updateQuery,
 		date, startTime, endTime,
@@ -311,6 +340,7 @@ func (s *store) ProposeMatch(requestID, date, startTime, endTime string) (*Match
 	if err != nil {
 		return nil, fmt.Errorf("failed to update match request with proposal: %w", err)
 	}
+	log.Info("Database update completed")
 
 	proposal := &MatchProposal{
 		Date:                   date,
@@ -523,4 +553,26 @@ func (s *store) RemovePlayerAvailability(requestID, playerID, day string) error 
 	}
 
 	return nil
+}
+
+// CanProposeMatch checks if there are enough players available to propose a match
+func (s *store) CanProposeMatch(requestID string) (bool, *AvailabilityResult, error) {
+	results, err := s.AnalyzeAvailability(requestID)
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to analyze availability: %w", err)
+	}
+
+	// Check if any date has 4 or more players (minimum for a match)
+	for _, result := range results {
+		if result.PlayerCount >= 4 {
+			return true, &result, nil
+		}
+	}
+
+	// Return the best available option even if not enough players
+	if len(results) > 0 {
+		return false, &results[0], nil
+	}
+
+	return false, nil, nil
 }

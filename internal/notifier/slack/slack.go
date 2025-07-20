@@ -403,6 +403,8 @@ func (s *Notifier) SendMatchAvailabilityRequest(request any, dryRun bool) (strin
 
 // SendMatchProposal sends a reply with the proposed match in the thread
 func (s *Notifier) SendMatchProposal(request any, proposal any, dryRun bool) error {
+	log.Info("SendMatchProposal called", "dryRun", dryRun)
+	
 	matchRequest, ok := request.(*matchmaking.MatchRequest)
 	if !ok {
 		return fmt.Errorf("invalid request type for SendMatchProposal")
@@ -413,9 +415,19 @@ func (s *Notifier) SendMatchProposal(request any, proposal any, dryRun bool) err
 		return fmt.Errorf("invalid proposal type for SendMatchProposal")
 	}
 
+	log.Info("SendMatchProposal inputs", "channelID", matchRequest.ChannelID, "threadTS", matchRequest.ThreadTS, "requestID", matchRequest.ID)
+	
 	msg := s.formatMatchProposal(matchRequest, matchProposal)
+	log.Info("Formatted match proposal message, calling sendMessageToThread")
+	
 	_, _, err := s.sendMessageToThread(msg, matchRequest.ChannelID, matchRequest.ThreadTS, dryRun)
-	return err
+	if err != nil {
+		log.Error("sendMessageToThread failed", "error", err)
+		return err
+	}
+	
+	log.Info("SendMatchProposal completed successfully")
+	return nil
 }
 
 // SendMatchConfirmation sends a reply with confirmation in the thread
@@ -466,12 +478,15 @@ func (s *Notifier) SendDirectMessage(userID string, text string) (string, string
 
 // sendMessageToThread sends a message to a thread
 func (s *Notifier) sendMessageToThread(message slack.Message, channelID string, threadTS *string, dryRun bool) (string, string, error) {
+	log.Info("sendMessageToThread called", "channelID", channelID, "threadTS", threadTS, "dryRun", dryRun)
+	
 	if dryRun {
 		jsonMsg, _ := json.MarshalIndent(message, "", "  ")
 		log.Info("[Dry Run] Would send Slack thread message", "channel", channelID, "thread_ts", threadTS, "message", string(jsonMsg))
 		return "dry-run-ts", "dry-run-thread-ts", nil
 	}
 
+	log.Info("Creating context with 10 second timeout")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -480,11 +495,17 @@ func (s *Notifier) sendMessageToThread(message slack.Message, channelID string, 
 		slack.MsgOptionAsUser(true),
 	}
 
-	if threadTS != nil {
+	if threadTS != nil && *threadTS != "" {
+		log.Info("Adding threadTS to options as thread reply", "threadTS", *threadTS)
 		options = append(options, slack.MsgOptionTS(*threadTS))
+	} else {
+		log.Info("No valid threadTS provided, sending as regular message", "threadTS_is_nil", threadTS == nil, "threadTS_is_empty", threadTS != nil && *threadTS == "")
 	}
 
+	log.Info("About to call PostMessageContext", "channelID", channelID, "optionsCount", len(options))
 	channelID, timestamp, err := s.api.PostMessageContext(ctx, channelID, options...)
+	log.Info("PostMessageContext returned", "error", err, "channelID", channelID, "timestamp", timestamp)
+	
 	if err != nil {
 		s.metrics.IncSlackNotifFailed()
 		log.Error("Failed to send Slack thread message", "error", err, "channel", channelID, "thread_ts", threadTS)

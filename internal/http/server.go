@@ -71,7 +71,7 @@ func (s *Server) routes() {
 	s.Router.Handle("/slack/events", Chain(handlers.SlackEventsHandler(s.Store, s.Notifier, s.MatchmakingService, s.Cfg), s.VerifySlackSignature, paramsMiddleware))
 
 	// Test endpoints (for development)
-	s.Router.Handle("/test/react", Chain(handlers.TestReactHandler(s.Store, s.MatchmakingService), paramsMiddleware))
+	s.Router.Handle("/test/react", Chain(handlers.TestReactHandler(s.Store, s.MatchmakingService, s.Notifier), paramsMiddleware))
 
 	//s.Router.Handle("/inngest/send", s.SendInngestEventHandler())
 	//s.Router.Handle("/api/inngest", s.InngestClient.Serve())
