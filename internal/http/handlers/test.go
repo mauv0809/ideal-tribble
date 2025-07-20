@@ -7,11 +7,12 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
+	"github.com/mauv0809/ideal-tribble/internal/notifier"
 )
 
 // TestReactHandler simulates emoji reactions for testing purposes
 // This bypasses Slack user mapping and works directly with player names
-func TestReactHandler(store club.ClubStore, matchmakingService matchmaking.MatchmakingService) http.HandlerFunc {
+func TestReactHandler(store club.ClubStore, matchmakingService matchmaking.MatchmakingService, notifier notifier.Notifier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Error parsing form", http.StatusBadRequest)
@@ -79,6 +80,12 @@ func TestReactHandler(store club.ClubStore, matchmakingService matchmaking.Match
 		}
 
 		log.Info("Successfully added test availability", "player", foundPlayer.Name, "day", day, "requestID", request.ID)
+		
+		// Check if we can now propose a match (same logic as real reaction handlers)
+		if err := checkAndProposeMatch(request.ID, matchmakingService, notifier); err != nil {
+			log.Error("Failed to check and propose match", "error", err, "requestID", request.ID)
+			// Don't return error - availability was still added successfully
+		}
 		
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

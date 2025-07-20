@@ -59,27 +59,44 @@ This branch (`feature/matchmaking-system`) implements a matchmaking feature for 
 - **What**: Automatic welcome message when new members join the Slack channel
 - **Flow**: New member joins → Send DM with instructions → User shares Playtomic profile URL → Manual linking process
 
+### 9. Booking Responsibility Assignment
+- **Files**: `internal/club/store.go`, `internal/matchmaking/store.go`, `migrations/000007_add_booking_counts.sql`
+- **What**: Added atomic booking responsibility assignment with fairness tracking
+- **Features**: 
+  - Database fields for tracking booking counts per player
+  - Atomic assignment method that selects player with lowest booking count
+  - Integration with match proposal system
+  - Proper fallback handling when assignment fails
+
+### 10. Availability Checking System 
+- **Files**: `internal/matchmaking/interface.go`, `internal/matchmaking/store.go`, `internal/matchmaking/store_test.go`
+- **What**: Added method to check if enough players are available to propose a match
+- **Features**:
+  - `CanProposeMatch` method returns true when 4+ players available for any date
+  - Returns best available date even when insufficient players (for debugging)
+  - Comprehensive test suite covering all scenarios
+  - Ready for integration with automatic match proposal workflow
+
 ## 🚧 PENDING TASKS
 
-### 9. Match Proposal Algorithm (HIGH PRIORITY)
-- **What**: Analyze collected availability and propose matches
+### 11. Automatic Match Proposal Workflow (HIGH PRIORITY)
+- **What**: Integrate availability checking with automatic match proposals
 - **Requirements**: 
-  - Find days with 4+ available players
-  - Rank by player count and date proximity
-  - Handle multiple match requests for same day
-  - Consider skill level balancing (future enhancement)
-- **Files to modify**: `internal/matchmaking/store.go` (enhance AnalyzeAvailability)
+  - Trigger `CanProposeMatch` after each availability update 
+  - Automatically call `ProposeMatch` when enough players available
+  - Send match proposal notification via Slack
+  - Handle timing (wait for sufficient responses vs immediate proposals)
+- **Files to modify**: `internal/http/handlers/slack_events.go` (reaction processing), `internal/matchmaking/store.go`
 
-### 10. Team Assignment & Booking Responsibility (HIGH PRIORITY)
-- **What**: Assign teams and determine who books the court
+### 12. Team Assignment Enhancement (MEDIUM PRIORITY)
+- **What**: Improve team balancing algorithm in ProposeMatch
 - **Requirements**:
-  - Balance teams by skill level (use existing player levels)
-  - Rotate booking responsibility fairly
-  - Track booking history to ensure fairness
-  - Handle team preferences (future enhancement)
-- **Files to modify**: `internal/matchmaking/store.go` (enhance ProposeMatch)
+  - Balance teams by skill level (use existing player levels from database)
+  - Consider player preferences/partnerships (future enhancement)
+  - Handle odd number of players (>4 available)
+- **Files to modify**: `internal/matchmaking/store.go` (enhance ProposeMatch method)
 
-### 11. Match Confirmation & Notification System (MEDIUM PRIORITY)
+### 13. Match Confirmation & Notification System (MEDIUM PRIORITY)
 - **What**: Send match proposals and handle confirmations
 - **Requirements**:
   - Send threaded message with match proposal
@@ -88,7 +105,7 @@ This branch (`feature/matchmaking-system`) implements a matchmaking feature for 
   - Send final confirmation with court booking details
 - **Files to modify**: `internal/notifier/slack/slack.go`, `internal/http/handlers/slack_events.go`
 
-### 12. Cleanup Job (LOW PRIORITY)
+### 14. Cleanup Job (LOW PRIORITY)
 - **What**: Remove old match request data after completion
 - **Requirements**:
   - Clean up player availability records for completed matches
@@ -97,7 +114,7 @@ This branch (`feature/matchmaking-system`) implements a matchmaking feature for 
   - Run periodically via scheduled endpoint
 - **Files to create**: New cleanup service or enhance existing processor
 
-### 13. End-to-End Testing (LOW PRIORITY)
+### 15. End-to-End Testing (LOW PRIORITY)
 - **What**: Test complete matchmaking flow
 - **Requirements**:
   - Test `/match` command → availability collection → match proposal → confirmation
@@ -137,11 +154,31 @@ This branch (`feature/matchmaking-system`) implements a matchmaking feature for 
 
 ## 🚀 NEXT STEPS TO RESUME WORK
 
-1. **Review recent commits** to understand current state
-2. **Focus on Match Proposal Algorithm** (task #9) - this is the critical missing piece
-3. **Test the current flow** with `/match` command and emoji reactions
-4. **Implement team assignment logic** once proposals are working
-5. **Add comprehensive error handling** throughout the flow
+### IMMEDIATE PRIORITY: Task #11 - Automatic Match Proposal Workflow
+
+1. **Integrate CanProposeMatch into reaction processing** 
+   - Modify `internal/http/handlers/slack_events.go` 
+   - Call `CanProposeMatch` after each `AddPlayerAvailability`/`RemovePlayerAvailability`
+   - When `canPropose == true`, automatically trigger match proposal
+
+2. **Add automatic match proposal logic**
+   - Define default match times (e.g., 06:00-07:30)
+   - Call `ProposeMatch` with best available date and default times
+   - Update match request status to `StatusProposingMatch`
+
+3. **Send match proposal notification**
+   - Use existing `SendMatchProposal` method in notifier
+   - Include team assignments and booking responsibility
+   - Send as threaded reply to original availability request
+
+4. **Add configuration/timing logic**
+   - Consider waiting period vs immediate proposals
+   - Handle multiple requests for same day
+   - Add logging for proposal decisions
+
+### SECONDARY PRIORITIES:
+- **Task #12**: Enhance team balancing with skill levels
+- **Task #13**: Add player confirmation workflow
 
 ## 💡 IMPLEMENTATION NOTES
 

@@ -728,7 +728,7 @@ func (s *store) ClearMatch(matchID string) {
 func (s *store) GetAllPlayers() ([]PlayerInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, level FROM players ORDER BY name")
+	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, level FROM players ORDER BY name")
 	if err != nil {
 		log.Error("Failed to query all players", "error", err)
 		return nil, err
@@ -740,7 +740,7 @@ func (s *store) GetAllPlayers() ([]PlayerInfo, error) {
 		var p PlayerInfo
 		var name sql.NullString
 		var level sql.NullFloat64
-		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &level); err != nil {
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &p.BookingCountSingles, &p.BookingCountDoubles, &level); err != nil {
 			log.Error("Failed to scan player row", "error", err)
 			continue
 		}
@@ -760,7 +760,7 @@ func (s *store) GetPlayers(playerIDs []string) ([]PlayerInfo, error) {
 		return []PlayerInfo{}, nil
 	}
 
-	query := "SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, level FROM players WHERE id IN (?" + strings.Repeat(",?", len(playerIDs)-1) + ")"
+	query := "SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, level FROM players WHERE id IN (?" + strings.Repeat(",?", len(playerIDs)-1) + ")"
 	args := make([]interface{}, len(playerIDs))
 	for i, id := range playerIDs {
 		args[i] = id
@@ -778,7 +778,7 @@ func (s *store) GetPlayers(playerIDs []string) ([]PlayerInfo, error) {
 		var p PlayerInfo
 		var name sql.NullString
 		var level sql.NullFloat64
-		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &level); err != nil {
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &p.BookingCountSingles, &p.BookingCountDoubles, &level); err != nil {
 			log.Error("Failed to scan player row", "error", err)
 			continue // Or handle error more gracefully
 		}
@@ -871,12 +871,73 @@ func (s *store) AssignBallBringerAtomically(matchID string, playerIDs []string) 
 	return selectedPlayerID, selectedPlayerName, nil
 }
 
+// AssignBookingResponsibleAtomically finds the player with the minimum booking count among the given player IDs,
+// increments their booking count, and returns their ID and name.
+func (s *store) AssignBookingResponsibleAtomically(playerIDs []string) (string, string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(playerIDs) == 0 {
+		return "", "", fmt.Errorf("no player IDs provided")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// For now, we'll use doubles booking count since most matches are doubles
+	// In the future, we could add a match type parameter
+	placeholders := strings.Repeat("?,", len(playerIDs))
+	placeholders = placeholders[:len(placeholders)-1] // Remove trailing comma
+
+	query := fmt.Sprintf(`
+		SELECT id, name, booking_count_doubles 
+		FROM players 
+		WHERE id IN (%s) 
+		ORDER BY booking_count_doubles ASC, id ASC
+		LIMIT 1
+	`, placeholders)
+
+	args := make([]interface{}, len(playerIDs))
+	for i, id := range playerIDs {
+		args[i] = id
+	}
+
+	var bookingResponsibleID, bookingResponsibleName string
+	var currentCount int
+	err = tx.QueryRow(query, args...).Scan(&bookingResponsibleID, &bookingResponsibleName, &currentCount)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to find booking responsible player: %w", err)
+	}
+
+	// Increment the booking count
+	updateQuery := `UPDATE players SET booking_count_doubles = booking_count_doubles + 1 WHERE id = ?`
+	_, err = tx.Exec(updateQuery, bookingResponsibleID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to increment booking count: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return "", "", fmt.Errorf("failed to commit booking assignment transaction: %w", err)
+	}
+
+	log.Info("Assigned booking responsibility atomically", 
+		"playerID", bookingResponsibleID, 
+		"playerName", bookingResponsibleName, 
+		"previousCount", currentCount,
+		"newCount", currentCount+1)
+
+	return bookingResponsibleID, bookingResponsibleName, nil
+}
+
 // GetPlayersSortedByLevel retrieves all players from the database, sorted by their level.
 func (s *store) GetPlayersSortedByLevel() ([]PlayerInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, level FROM players ORDER BY level DESC")
+	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, level FROM players ORDER BY level DESC")
 	if err != nil {
 		log.Error("Failed to query all players sorted by level", "error", err)
 		return nil, err
@@ -888,7 +949,7 @@ func (s *store) GetPlayersSortedByLevel() ([]PlayerInfo, error) {
 		var p PlayerInfo
 		var name sql.NullString
 		var level sql.NullFloat64
-		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &level); err != nil {
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &p.BookingCountSingles, &p.BookingCountDoubles, &level); err != nil {
 			log.Error("Failed to scan player row", "error", err)
 			continue
 		}
@@ -942,7 +1003,7 @@ func (s *store) GetPlayerBySlackUserID(slackUserID string) (*PlayerInfo, error) 
 	defer s.mu.RUnlock()
 
 	query := `
-		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, 
+		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, 
 			   slack_user_id, slack_username, slack_display_name, 
 			   mapping_status, mapping_confidence, mapping_updated_at
 		FROM players 
@@ -958,6 +1019,8 @@ func (s *store) GetPlayerBySlackUserID(slackUserID string) (*PlayerInfo, error) 
 		&player.Level,
 		&player.BallBringerCountSingles,
 		&player.BallBringerCountDoubles,
+		&player.BookingCountSingles,
+		&player.BookingCountDoubles,
 		&player.SlackUserID,
 		&player.SlackUsername,
 		&player.SlackDisplayName,
@@ -982,7 +1045,7 @@ func (s *store) GetUnmappedPlayers() ([]PlayerInfo, error) {
 	defer s.mu.RUnlock()
 
 	query := `
-		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, 
+		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, 
 			   slack_user_id, slack_username, slack_display_name, 
 			   mapping_status, mapping_confidence, mapping_updated_at
 		FROM players 
@@ -1005,6 +1068,8 @@ func (s *store) GetUnmappedPlayers() ([]PlayerInfo, error) {
 			&player.Level,
 			&player.BallBringerCountSingles,
 			&player.BallBringerCountDoubles,
+			&player.BookingCountSingles,
+			&player.BookingCountDoubles,
 			&player.SlackUserID,
 			&player.SlackUsername,
 			&player.SlackDisplayName,
@@ -1056,7 +1121,7 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 	searchPattern := "%" + strings.ToLower(searchName) + "%"
 
 	query := `
-		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, 
+		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, 
 			   slack_user_id, slack_username, slack_display_name, 
 			   mapping_status, mapping_confidence, mapping_updated_at
 		FROM players 
@@ -1091,6 +1156,8 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 			&player.Level,
 			&player.BallBringerCountSingles,
 			&player.BallBringerCountDoubles,
+			&player.BookingCountSingles,
+			&player.BookingCountDoubles,
 			&player.SlackUserID,
 			&player.SlackUsername,
 			&player.SlackDisplayName,

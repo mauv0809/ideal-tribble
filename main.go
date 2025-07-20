@@ -57,7 +57,7 @@ func main() {
 	notifier := slack.NewNotifier(cfg.Slack.Token, cfg.Slack.ChannelID, metricsSvc)
 	pubsub := pubsub.New(cfg.ProjectID)
 	processor := processor.New(clubStore, notifier, metricsSvc, pubsub)
-	matchmakingService := matchmaking.NewStore(db)
+	matchmakingService := matchmaking.NewStore(db, clubStore)
 
 	s := server.NewServer(
 		clubStore,

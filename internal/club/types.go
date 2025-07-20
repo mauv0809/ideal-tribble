@@ -31,6 +31,8 @@ type PlayerInfo struct {
 	Name                    string
 	BallBringerCountSingles int `json:"ball_bringer_count_singles"`
 	BallBringerCountDoubles int `json:"ball_bringer_count_doubles"`
+	BookingCountSingles     int `json:"booking_count_singles"`
+	BookingCountDoubles     int `json:"booking_count_doubles"`
 	Level                   float64
 	SlackUserID             *string
 	SlackUsername           *string
