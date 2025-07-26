@@ -194,6 +194,8 @@ func (c *APIClient) GetSpecificMatch(matchID string) (PadelMatch, error) {
 		gameStatus = GameStatusWaitingFor
 	case string(GameStatusExpired):
 		gameStatus = GameStatusExpired
+	case string(GameStatusInProgress):
+		gameStatus = GameStatusInProgress
 	default:
 		gameStatus = GameStatusUnknown
 		log.Warn("Unknown game status received from Playtomic API", "status", matchResponse.GameStatus, "matchID", matchID)

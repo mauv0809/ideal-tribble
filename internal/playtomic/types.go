@@ -72,6 +72,7 @@ const (
 	GameStatusCanceled   GameStatus = "CANCELED"
 	GameStatusWaitingFor GameStatus = "WAITING_FOR"
 	GameStatusExpired    GameStatus = "EXPIRED"
+	GameStatusInProgress GameStatus = "IN_PROGRESS"
 )
 
 // ResultsStatus defines the status of the match results.
