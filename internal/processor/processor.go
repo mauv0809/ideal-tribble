@@ -129,6 +129,9 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 			if match.GameStatus == playtomic.GameStatusPlayed && match.ResultsStatus == playtomic.ResultsStatusConfirmed {
 				log.Info("Match has been played. Marking as result available.", "matchID", match.MatchID)
 				p.updateStatus(match, playtomic.StatusResultAvailable, dryRun)
+			} else if match.GameStatus == playtomic.GameStatusCanceled || match.GameStatus == playtomic.GameStatusExpired {
+				log.Info("Match has been canceled or expired. Marking as completed.", "matchID", match.MatchID)
+				p.updateStatus(match, playtomic.StatusCompleted, dryRun)
 			}
 
 		case playtomic.StatusResultAvailable:
