@@ -113,8 +113,8 @@ traffic {
   percent = var.latest_traffic_percent
 }
 
-  # Make the service private, only allowing authenticated invocations
-  ingress = "INGRESS_TRAFFIC_ALL"
+  # Make the service internal - only allow authenticated requests (API Gateway + Pub/Sub + Scheduler)
+  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   depends_on = [google_project_service.run_api]
 }

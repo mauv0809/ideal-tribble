@@ -22,7 +22,7 @@ func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg conf
 		isDryRun := IsDryRunFromContext(r)
 
 		daysStr := r.URL.Query().Get("days")
-		daysToSubtract := 0
+		daysToSubtract := 1
 		if daysStr != "" {
 			parsedDays, err := strconv.Atoi(daysStr)
 			if err == nil && parsedDays > 0 {

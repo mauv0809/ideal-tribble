@@ -1,0 +1,315 @@
+openapi: 3.0.3
+info:
+  title: Wally - Padel Club Management API
+  description: API Gateway for Slack slash commands and external integrations
+  version: 1.0.0
+servers:
+  - url: https://wally-api.${DOMAIN}
+    description: Production API Gateway
+paths:
+  # Slack Command Endpoints - Only these should be exposed externally
+  /slack/command/leaderboard:
+    post:
+      summary: Get player leaderboard via Slack command
+      description: Returns formatted leaderboard for Slack (/leaderboard command)
+      security:
+        - slack_signature: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - token
+                - team_id
+                - user_id
+                - user_name
+                - command
+                - channel_id
+              properties:
+                token:
+                  type: string
+                  description: Slack verification token
+                team_id:
+                  type: string
+                  description: Slack team ID
+                user_id:
+                  type: string
+                  description: Slack user ID
+                user_name:
+                  type: string
+                  description: Slack username
+                command:
+                  type: string
+                  description: The slash command used
+                  example: "/leaderboard"
+                text:
+                  type: string
+                  description: Additional parameters
+                channel_id:
+                  type: string
+                  description: Slack channel ID
+                response_url:
+                  type: string
+                  description: URL to send delayed responses
+      responses:
+        '200':
+          description: Formatted leaderboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackResponse'
+        '401':
+          description: Unauthorized - Invalid Slack signature
+        '500':
+          description: Internal server error
+      x-google-backend:
+        address: ${CLOUD_RUN_URL}/slack/command/leaderboard
+        protocol: h2
+
+  /slack/command/player-stats:
+    post:
+      summary: Get player statistics via Slack command
+      description: Returns player stats for specified player (/player-stats command)
+      security:
+        - slack_signature: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - token
+                - team_id
+                - user_id
+                - user_name
+                - command
+                - text
+                - channel_id
+              properties:
+                token:
+                  type: string
+                team_id:
+                  type: string
+                user_id:
+                  type: string
+                user_name:
+                  type: string
+                command:
+                  type: string
+                  example: "/player-stats"
+                text:
+                  type: string
+                  description: Player name to look up
+                  example: "John Doe singles"
+                channel_id:
+                  type: string
+                response_url:
+                  type: string
+      responses:
+        '200':
+          description: Player statistics response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackResponse'
+        '400':
+          description: Bad request - Missing player name
+        '401':
+          description: Unauthorized - Invalid Slack signature
+        '500':
+          description: Internal server error
+      x-google-backend:
+        address: ${CLOUD_RUN_URL}/slack/command/player-stats
+        protocol: h2
+
+  /slack/command/level-leaderboard:
+    post:
+      summary: Get level-based leaderboard via Slack command
+      description: Returns leaderboard sorted by player level (/level-leaderboard command)
+      security:
+        - slack_signature: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - token
+                - team_id
+                - user_id
+                - user_name
+                - command
+                - channel_id
+              properties:
+                token:
+                  type: string
+                team_id:
+                  type: string
+                user_id:
+                  type: string
+                user_name:
+                  type: string
+                command:
+                  type: string
+                  example: "/level-leaderboard"
+                text:
+                  type: string
+                channel_id:
+                  type: string
+                response_url:
+                  type: string
+      responses:
+        '200':
+          description: Level-based leaderboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackResponse'
+        '401':
+          description: Unauthorized - Invalid Slack signature
+        '500':
+          description: Internal server error
+      x-google-backend:
+        address: ${CLOUD_RUN_URL}/slack/command/level-leaderboard
+        protocol: h2
+
+  /slack/command/match:
+    post:
+      summary: Initiate matchmaking via Slack command
+      description: Starts the matchmaking process for the requesting player (/match command)
+      security:
+        - slack_signature: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - token
+                - team_id
+                - user_id
+                - user_name
+                - command
+                - channel_id
+              properties:
+                token:
+                  type: string
+                team_id:
+                  type: string
+                user_id:
+                  type: string
+                user_name:
+                  type: string
+                command:
+                  type: string
+                  example: "/match"
+                text:
+                  type: string
+                  description: Optional match preferences
+                channel_id:
+                  type: string
+                response_url:
+                  type: string
+      responses:
+        '200':
+          description: Matchmaking initiated response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackResponse'
+        '400':
+          description: Bad request - Invalid parameters
+        '401':
+          description: Unauthorized - Invalid Slack signature
+        '500':
+          description: Internal server error
+      x-google-backend:
+        address: ${CLOUD_RUN_URL}/slack/command/match
+        protocol: h2
+
+  /slack/events:
+    post:
+      summary: Handle Slack Events API callbacks
+      description: Processes Slack events like member joins, reactions, etc.
+      security:
+        - slack_signature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [url_verification, event_callback]
+                  description: Type of Slack event
+                challenge:
+                  type: string
+                  description: Challenge string for URL verification
+                event:
+                  type: object
+                  description: Event details
+      responses:
+        '200':
+          description: Event processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Unauthorized - Invalid Slack signature
+        '500':
+          description: Internal server error
+      x-google-backend:
+        address: ${CLOUD_RUN_URL}/slack/events
+        protocol: h2
+
+components:
+  securitySchemes:
+    slack_signature:
+      type: apiKey
+      in: header
+      name: X-Slack-Signature
+      description: Slack request signature for verification
+      
+  schemas:
+    SlackResponse:
+      type: object
+      properties:
+        response_type:
+          type: string
+          enum: [ephemeral, in_channel]
+          description: How the response should be displayed in Slack
+        text:
+          type: string
+          description: Main response text
+        blocks:
+          type: array
+          description: Slack Block Kit elements
+          items:
+            type: object
+        attachments:
+          type: array
+          description: Legacy Slack message attachments
+          items:
+            type: object
+
+# Security configuration for API Gateway
+security:
+  - slack_signature: []
+
+# Rate limiting and quota configuration
+x-google-quota:
+  metric_name: "slack-commands"
+  limit: 1000
+  interval: "1m"
+
+# Request validation
+x-google-allow_cors: false
+x-google-disable_auth: false
