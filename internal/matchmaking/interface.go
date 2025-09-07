@@ -1,5 +1,7 @@
 package matchmaking
 
+import "github.com/mauv0809/ideal-tribble/internal/playtomic"
+
 // MatchmakingService handles match requests and availability collection
 type MatchmakingService interface {
 	// CreateMatchRequest creates a new match request and initiates availability collection
@@ -46,6 +48,12 @@ type MatchmakingService interface {
 	
 	// CanProposeMatch checks if there are enough players available to propose a match
 	CanProposeMatch(requestID string) (bool, *AvailabilityResult, error)
+	
+	// GetMatchRequestsInProposingStatus gets all match requests that are in PROPOSING_MATCH status
+	GetMatchRequestsInProposingStatus() ([]MatchRequest, error)
+	
+	// DetectMatchedRequests checks if any proposed match requests have been booked on Playtomic
+	DetectMatchedRequests(padelMatches []*playtomic.PadelMatch) ([]string, error)
 }
 
 // Notifier defines the notification operations required by matchmaking.

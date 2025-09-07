@@ -3,10 +3,12 @@ package matchmaking_test
 import (
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/database"
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
+	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -353,4 +355,283 @@ func TestGetActiveMatchRequests(t *testing.T) {
 	assert.Contains(t, activeIDs, request1.ID)
 	assert.Contains(t, activeIDs, request2.ID)
 	assert.NotContains(t, activeIDs, request3.ID)
+}
+
+func TestGetMatchRequestsInProposingStatus(t *testing.T) {
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Create test users in the players table first
+	clubStore := club.New(db)
+	clubStore.AddPlayer("user1", "User 1", 1.0)
+	clubStore.AddPlayer("user2", "User 2", 1.0)
+	clubStore.AddPlayer("user3", "User 3", 1.0)
+
+	// Create match requests with different statuses
+	request1, err := store.CreateMatchRequest("user1", "User 1", "channel1")
+	require.NoError(t, err)
+
+	request2, err := store.CreateMatchRequest("user2", "User 2", "channel1")
+	require.NoError(t, err)
+
+	request3, err := store.CreateMatchRequest("user3", "User 3", "channel1")
+	require.NoError(t, err)
+
+	// Set different statuses
+	err = store.UpdateMatchRequestStatus(request1.ID, matchmaking.StatusProposingMatch)
+	require.NoError(t, err)
+	
+	err = store.UpdateMatchRequestStatus(request2.ID, matchmaking.StatusProposingMatch)
+	require.NoError(t, err)
+	
+	err = store.UpdateMatchRequestStatus(request3.ID, matchmaking.StatusCompleted)
+	require.NoError(t, err)
+
+	// Get requests in proposing status
+	proposingRequests, err := store.GetMatchRequestsInProposingStatus()
+	require.NoError(t, err)
+
+	// Should have 2 requests in proposing status
+	assert.Len(t, proposingRequests, 2)
+
+	proposingIDs := make([]string, len(proposingRequests))
+	for i, req := range proposingRequests {
+		proposingIDs[i] = req.ID
+		assert.Equal(t, matchmaking.StatusProposingMatch, req.Status)
+	}
+
+	assert.Contains(t, proposingIDs, request1.ID)
+	assert.Contains(t, proposingIDs, request2.ID)
+	assert.NotContains(t, proposingIDs, request3.ID)
+}
+
+func TestDetectMatchedRequests(t *testing.T) {
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Create test players
+	clubStore := club.New(db)
+	clubStore.AddPlayer("user1", "User 1", 1.0)
+	clubStore.AddPlayer("player1", "Player 1", 1.0)
+	clubStore.AddPlayer("player2", "Player 2", 1.0)
+	clubStore.AddPlayer("player3", "Player 3", 1.0)
+	clubStore.AddPlayer("player4", "Player 4", 1.0)
+
+	tests := []struct {
+		name           string
+		setupRequest   func() string
+		createMatch    func() *playtomic.PadelMatch
+		expectDetected bool
+	}{
+		{
+			name: "perfect match detected",
+			setupRequest: func() string {
+				request, err := store.CreateMatchRequest("user1", "User 1", "channel1")
+				require.NoError(t, err)
+
+				// Set up a complete proposal
+				err = store.UpdateMatchRequestStatus(request.ID, matchmaking.StatusProposingMatch)
+				require.NoError(t, err)
+
+				// Update with proposal data
+				proposedDate := "2024-01-15"
+				proposedStartTime := "10:00"
+				proposedEndTime := "11:30"
+				bookingResponsibleID := "player1"
+				bookingResponsibleName := "Player 1"
+				
+				// We need to update the request with proposal data using SQL directly
+				// since the interface doesn't have a method for this
+				_, err = db.Exec(`
+					UPDATE match_requests 
+					SET proposed_date = ?, proposed_start_time = ?, proposed_end_time = ?,
+						booking_responsible_id = ?, booking_responsible_name = ?,
+						team_assignments_blob = ?
+					WHERE id = ?
+				`, proposedDate, proposedStartTime, proposedEndTime, 
+				   bookingResponsibleID, bookingResponsibleName, 
+				   `{"team1":[{"id":"player1","name":"Player 1"},{"id":"player2","name":"Player 2"}],"team2":[{"id":"player3","name":"Player 3"},{"id":"player4","name":"Player 4"}]}`,
+				   request.ID)
+				require.NoError(t, err)
+
+				return request.ID
+			},
+			createMatch: func() *playtomic.PadelMatch {
+				// Create a matching Playtomic match
+				matchDate, _ := time.Parse("2006-01-02 15:04", "2024-01-15 10:00")
+				matchEnd := matchDate.Add(90 * time.Minute)
+
+				return &playtomic.PadelMatch{
+					MatchID:       "match123",
+					OwnerID:       "player1",
+					OwnerName:     "Player 1",
+					Start:         matchDate.Unix(),
+					End:           matchEnd.Unix(),
+					BallBringerID: "player1",
+					Teams: []playtomic.Team{
+						{
+							Players: []playtomic.Player{
+								{UserID: "player1", Name: "Player 1"},
+								{UserID: "player2", Name: "Player 2"},
+							},
+						},
+						{
+							Players: []playtomic.Player{
+								{UserID: "player3", Name: "Player 3"},
+								{UserID: "player4", Name: "Player 4"},
+							},
+						},
+					},
+				}
+			},
+			expectDetected: true,
+		},
+		{
+			name: "different date - no match",
+			setupRequest: func() string {
+				request, err := store.CreateMatchRequest("user1", "User 1", "channel1")
+				require.NoError(t, err)
+
+				err = store.UpdateMatchRequestStatus(request.ID, matchmaking.StatusProposingMatch)
+				require.NoError(t, err)
+
+				// Set up proposal for different date
+				_, err = db.Exec(`
+					UPDATE match_requests 
+					SET proposed_date = ?, proposed_start_time = ?, proposed_end_time = ?,
+						booking_responsible_id = ?, booking_responsible_name = ?,
+						team_assignments_blob = ?
+					WHERE id = ?
+				`, "2024-01-16", "10:00", "11:30", "player1", "Player 1",
+				   `{"team1":[{"id":"player1","name":"Player 1"},{"id":"player2","name":"Player 2"}],"team2":[{"id":"player3","name":"Player 3"},{"id":"player4","name":"Player 4"}]}`,
+				   request.ID)
+				require.NoError(t, err)
+
+				return request.ID
+			},
+			createMatch: func() *playtomic.PadelMatch {
+				// Match on different date
+				matchDate, _ := time.Parse("2006-01-02 15:04", "2024-01-15 10:00")
+				matchEnd := matchDate.Add(90 * time.Minute)
+
+				return &playtomic.PadelMatch{
+					MatchID:       "match123",
+					OwnerID:       "player1",
+					Start:         matchDate.Unix(),
+					End:           matchEnd.Unix(),
+					BallBringerID: "player1",
+					Teams: []playtomic.Team{
+						{Players: []playtomic.Player{
+							{UserID: "player1", Name: "Player 1"},
+							{UserID: "player2", Name: "Player 2"},
+						}},
+						{Players: []playtomic.Player{
+							{UserID: "player3", Name: "Player 3"},
+							{UserID: "player4", Name: "Player 4"},
+						}},
+					},
+				}
+			},
+			expectDetected: false,
+		},
+		{
+			name: "missing player - no match", 
+			setupRequest: func() string {
+				request, err := store.CreateMatchRequest("user1", "User 1", "channel1")
+				require.NoError(t, err)
+
+				err = store.UpdateMatchRequestStatus(request.ID, matchmaking.StatusProposingMatch)
+				require.NoError(t, err)
+
+				// Set up proposal
+				_, err = db.Exec(`
+					UPDATE match_requests 
+					SET proposed_date = ?, proposed_start_time = ?, proposed_end_time = ?,
+						booking_responsible_id = ?, booking_responsible_name = ?,
+						team_assignments_blob = ?
+					WHERE id = ?
+				`, "2024-01-15", "10:00", "11:30", "player1", "Player 1",
+				   `{"team1":[{"id":"player1","name":"Player 1"},{"id":"player2","name":"Player 2"}],"team2":[{"id":"player3","name":"Player 3"},{"id":"player4","name":"Player 4"}]}`,
+				   request.ID)
+				require.NoError(t, err)
+
+				return request.ID
+			},
+			createMatch: func() *playtomic.PadelMatch {
+				matchDate, _ := time.Parse("2006-01-02 15:04", "2024-01-15 10:00")
+				matchEnd := matchDate.Add(90 * time.Minute)
+
+				return &playtomic.PadelMatch{
+					MatchID:       "match123", 
+					OwnerID:       "player1",
+					Start:         matchDate.Unix(),
+					End:           matchEnd.Unix(),
+					BallBringerID: "player1",
+					Teams: []playtomic.Team{
+						{Players: []playtomic.Player{
+							{UserID: "player1", Name: "Player 1"},
+							{UserID: "player2", Name: "Player 2"},
+						}},
+						{Players: []playtomic.Player{
+							{UserID: "player3", Name: "Player 3"},
+							{UserID: "different_player", Name: "Different Player"}, // Different player!
+						}},
+					},
+				}
+			},
+			expectDetected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clean up any previous data
+			_, err := db.Exec("DELETE FROM match_requests")
+			require.NoError(t, err)
+
+			requestID := tt.setupRequest()
+			padelMatch := tt.createMatch()
+
+			// Test detection
+			detectedIDs, err := store.DetectMatchedRequests([]*playtomic.PadelMatch{padelMatch})
+			require.NoError(t, err)
+
+			if tt.expectDetected {
+				assert.Len(t, detectedIDs, 1)
+				assert.Contains(t, detectedIDs, requestID)
+			} else {
+				assert.Len(t, detectedIDs, 0)
+			}
+		})
+	}
+}
+
+func TestStatusCompleted(t *testing.T) {
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Create test user
+	clubStore := club.New(db)
+	clubStore.AddPlayer("user1", "User 1", 1.0)
+
+	// Create a match request
+	request, err := store.CreateMatchRequest("user1", "User 1", "channel1")
+	require.NoError(t, err)
+
+	// Test updating to StatusCompleted
+	err = store.UpdateMatchRequestStatus(request.ID, matchmaking.StatusCompleted)
+	require.NoError(t, err)
+
+	// Verify the status was updated
+	retrievedRequest, err := store.GetMatchRequest(request.ID)
+	require.NoError(t, err)
+	assert.Equal(t, matchmaking.StatusCompleted, retrievedRequest.Status)
+
+	// Verify completed requests are not included in active requests
+	activeRequests, err := store.GetActiveMatchRequests()
+	require.NoError(t, err)
+	
+	for _, activeReq := range activeRequests {
+		assert.NotEqual(t, request.ID, activeReq.ID, "Completed request should not be in active list")
+	}
 }
