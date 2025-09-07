@@ -16,12 +16,12 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/config"
 	"github.com/mauv0809/ideal-tribble/internal/database"
 	"github.com/mauv0809/ideal-tribble/internal/http/handlers"
+	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
-	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/slack-go/slack"
 	"github.com/stretchr/testify/assert"
@@ -49,11 +49,11 @@ func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, no
 	reg := prometheus.NewRegistry()
 	metricsSvc := metrics.NewService(reg)
 	metricsHandler := metrics.NewMetricsHandler(reg)
-	pubsub := pubsub.NewMock("TEST")
 	matchMaking := matchmaking.NewStore(db, clubStore)
-	proc := processor.New(clubStore, notifier, metricsSvc, pubsub, matchMaking)
+	jobqueue := jobqueue.New(db)
+	proc := processor.New(clubStore, notifier, metricsSvc, jobqueue, matchMaking)
 	// A real mux is needed to prevent the router from being nil.
-	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, matchMaking, pubsub)
+	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, matchMaking, jobqueue)
 
 	teardown := func() {
 		if dbTeardown != nil {

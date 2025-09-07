@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/mauv0809/ideal-tribble/internal/club"
+	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
-	pubsubPkg "github.com/mauv0809/ideal-tribble/internal/pubsub"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,8 +20,8 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store := club.NewMock()
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
-		psClient := pubsubPkg.NewMock("TEST")
-		p := New(store, notif, metr, psClient, nil) // nil matchmaking service for tests
+		jobQueue := jobqueue.NewMock()
+		p := New(store, notif, metr, jobQueue, nil) // nil matchmaking service for tests
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",
@@ -45,11 +45,11 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		// Execute
 		p.ProcessMatches(false)
 
-		// Assert that the ball boy assignment event was sent
-		require.Len(t, psClient.SendMessageCalls, 1, "An AssignBallBoy pubsub message should be sent")
-		assert.Equal(t, string(pubsubPkg.EventAssignBallBoy), string(psClient.SendMessageCalls[0].Topic))
-		sentMatch, ok := psClient.SendMessageCalls[0].Data.(*playtomic.PadelMatch)
-		require.True(t, ok, "Data sent to pubsub should be a PadelMatch")
+		// Assert that the ball boy assignment job was enqueued
+		require.Len(t, jobQueue.EnqueueCalls, 1, "An AssignBallBoy job should be enqueued")
+		assert.Equal(t, jobqueue.JobTypeAssignBallBoy, jobQueue.EnqueueCalls[0].JobType)
+		sentMatch, ok := jobQueue.EnqueueCalls[0].Payload.(*playtomic.PadelMatch)
+		require.True(t, ok, "Data sent to job queue should be a PadelMatch")
 		assert.Equal(t, "m1", sentMatch.MatchID)
 
 		// Assert that the match status transitioned to StatusAssigningBallBringer
@@ -66,8 +66,8 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store := club.NewMock()
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
-		psClient := pubsubPkg.NewMock("TEST")
-		p := New(store, notif, metr, psClient, nil) // nil matchmaking service for tests
+		jobQueue := jobqueue.NewMock()
+		p := New(store, notif, metr, jobQueue, nil) // nil matchmaking service for tests
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",
@@ -88,30 +88,30 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 
 		// Assert
 		require.Len(t, notif.SendBookingNotificationCalls, 0, "Booking notification should be skipped")
-		// After the first ProcessMatches call, only one PubSub message (EventNotifyResult) should be sent,
-		// and the match should transition up to StatusResultNotified.
-		require.Len(t, psClient.SendMessageCalls, 1, "Only one pubsub message should be sent: EventNotifyResult")
-		assert.Equal(t, string(pubsubPkg.EventNotifyResult), string(psClient.SendMessageCalls[0].Topic))
-		sentMatch1, ok1 := psClient.SendMessageCalls[0].Data.(*playtomic.PadelMatch)
-		require.True(t, ok1, "Data sent to pubsub should be a PadelMatch")
+		// After the first ProcessMatches call, only one job (NotifyResult) should be enqueued,
+		// and the match should transition up to StatusResultAvailable.
+		require.Len(t, jobQueue.EnqueueCalls, 1, "Only one job should be enqueued: NotifyResult")
+		assert.Equal(t, jobqueue.JobTypeNotifyResult, jobQueue.EnqueueCalls[0].JobType)
+		sentMatch1, ok1 := jobQueue.EnqueueCalls[0].Payload.(*playtomic.PadelMatch)
+		require.True(t, ok1, "Data sent to job queue should be a PadelMatch")
 		assert.Equal(t, "m1", sentMatch1.MatchID)
 
 		require.Len(t, store.UpdateProcessingStatusCalls, 1, "Status should be updated once: New -> ResultAvailable")
 		assert.Equal(t, playtomic.StatusResultAvailable, store.UpdateProcessingStatusCalls[0].Status)
 
-		// Simulate the next processing cycle, triggered by the PubSub event for EventNotifyResult.
-		// The match should now be in StatusResultNotified (as updated by the PubSub handler).
+		// Simulate the next processing cycle, triggered by the job completion for NotifyResult.
+		// The match should now be in StatusResultNotified (as updated by the job handler).
 		match.ProcessingStatus = playtomic.StatusResultNotified // Manually update status for next mock call
-		psClient.SendMessageCalls = nil                         // Clear previous PubSub calls
+		jobQueue.EnqueueCalls = nil                             // Clear previous job calls
 		store.UpdateProcessingStatusCalls = nil                 // Clear previous status updates
 
 		p.ProcessMatches(false)
 
-		// Assert the next step: EventUpdatePlayerStats is sent, and status becomes StatusStatsUpdated
-		require.Len(t, psClient.SendMessageCalls, 1, "One pubsub message should be sent in the second cycle: EventUpdatePlayerStats")
-		assert.Equal(t, string(pubsubPkg.EventUpdatePlayerStats), string(psClient.SendMessageCalls[0].Topic))
-		sentMatch2, ok2 := psClient.SendMessageCalls[0].Data.(*playtomic.PadelMatch)
-		require.True(t, ok2, "Data sent to pubsub should be a PadelMatch")
+		// Assert the next step: UpdatePlayerStats job is enqueued, and status becomes StatusUpdatingPlayerStats
+		require.Len(t, jobQueue.EnqueueCalls, 1, "One job should be enqueued in the second cycle: UpdatePlayerStats")
+		assert.Equal(t, jobqueue.JobTypeUpdatePlayerStats, jobQueue.EnqueueCalls[0].JobType)
+		sentMatch2, ok2 := jobQueue.EnqueueCalls[0].Payload.(*playtomic.PadelMatch)
+		require.True(t, ok2, "Data sent to job queue should be a PadelMatch")
 		assert.Equal(t, "m1", sentMatch2.MatchID)
 
 		// The processor should update the status to 'UPDATING_PLAYER_STATS' to prevent re-processing.
@@ -124,8 +124,8 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store := club.NewMock()
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
-		psClient := pubsubPkg.NewMock("TEST")
-		p := New(store, notif, metr, psClient, nil) // nil matchmaking service for tests
+		jobQueue := jobqueue.NewMock()
+		p := New(store, notif, metr, jobQueue, nil) // nil matchmaking service for tests
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",
@@ -146,30 +146,30 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 
 		// Assert
 		require.Len(t, notif.SendBookingNotificationCalls, 0, "Booking notification should not be sent again")
-		// After the first ProcessMatches call, only one PubSub message (EventNotifyResult) should be sent,
-		// and the match should transition up to StatusResultNotified.
-		require.Len(t, psClient.SendMessageCalls, 1, "Only one pubsub message should be sent: EventNotifyResult")
-		assert.Equal(t, string(pubsubPkg.EventNotifyResult), string(psClient.SendMessageCalls[0].Topic))
-		sentMatch1, ok1 := psClient.SendMessageCalls[0].Data.(*playtomic.PadelMatch)
-		require.True(t, ok1, "Data sent to pubsub should be a PadelMatch")
+		// After the first ProcessMatches call, only one job (NotifyResult) should be enqueued,
+		// and the match should transition up to StatusResultAvailable.
+		require.Len(t, jobQueue.EnqueueCalls, 1, "Only one job should be enqueued: NotifyResult")
+		assert.Equal(t, jobqueue.JobTypeNotifyResult, jobQueue.EnqueueCalls[0].JobType)
+		sentMatch1, ok1 := jobQueue.EnqueueCalls[0].Payload.(*playtomic.PadelMatch)
+		require.True(t, ok1, "Data sent to job queue should be a PadelMatch")
 		assert.Equal(t, "m1", sentMatch1.MatchID)
 
 		require.Len(t, store.UpdateProcessingStatusCalls, 1, "Status should be updated once: BookingNotified -> ResultAvailable")
 		assert.Equal(t, playtomic.StatusResultAvailable, store.UpdateProcessingStatusCalls[0].Status)
 
-		// Simulate the next processing cycle, triggered by the PubSub event for EventNotifyResult.
+		// Simulate the next processing cycle, triggered by the job completion for NotifyResult.
 		// The match should now be in StatusResultNotified.
 		match.ProcessingStatus = playtomic.StatusResultNotified // Manually update status for next mock call
-		psClient.SendMessageCalls = nil                         // Clear previous PubSub calls
+		jobQueue.EnqueueCalls = nil                             // Clear previous job calls
 		store.UpdateProcessingStatusCalls = nil                 // Clear previous status updates
 
 		p.ProcessMatches(false)
 
-		// Assert the next step: EventUpdatePlayerStats is sent, and status becomes StatusStatsUpdated
-		require.Len(t, psClient.SendMessageCalls, 1, "One pubsub message should be sent in the second cycle: EventUpdatePlayerStats")
-		assert.Equal(t, string(pubsubPkg.EventUpdatePlayerStats), string(psClient.SendMessageCalls[0].Topic))
-		sentMatch2, ok2 := psClient.SendMessageCalls[0].Data.(*playtomic.PadelMatch)
-		require.True(t, ok2, "Data sent to pubsub should be a PadelMatch")
+		// Assert the next step: UpdatePlayerStats job is enqueued, and status becomes StatusUpdatingPlayerStats
+		require.Len(t, jobQueue.EnqueueCalls, 1, "One job should be enqueued in the second cycle: UpdatePlayerStats")
+		assert.Equal(t, jobqueue.JobTypeUpdatePlayerStats, jobQueue.EnqueueCalls[0].JobType)
+		sentMatch2, ok2 := jobQueue.EnqueueCalls[0].Payload.(*playtomic.PadelMatch)
+		require.True(t, ok2, "Data sent to job queue should be a PadelMatch")
 		assert.Equal(t, "m1", sentMatch2.MatchID)
 
 		// The processor should update the status to 'UPDATING_PLAYER_STATS' to prevent re-processing.
@@ -182,8 +182,8 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		store := club.NewMock()
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
-		psClient := pubsubPkg.NewMock("TEST")
-		p := New(store, notif, metr, psClient, nil) // nil matchmaking service for tests
+		jobQueue := jobqueue.NewMock()
+		p := New(store, notif, metr, jobQueue, nil) // nil matchmaking service for tests
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",

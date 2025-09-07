@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,7 +19,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/notifier/slack"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
-	"github.com/mauv0809/ideal-tribble/internal/pubsub"
+	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 	"golang.ngrok.com/ngrok/v2"
 )
 
@@ -55,9 +56,9 @@ func main() {
 	metricsHandler := metrics.NewMetricsHandler()
 	playtomicClient := playtomic.NewClient()
 	notifier := slack.NewNotifier(cfg.Slack.Token, cfg.Slack.ChannelID, metricsSvc)
-	pubsub := pubsub.New(cfg.ProjectID)
+	jobQueue := jobqueue.New(db)
 	matchmakingService := matchmaking.NewStore(db, clubStore)
-	processor := processor.New(clubStore, notifier, metricsSvc, pubsub, matchmakingService)
+	processor := processor.New(clubStore, notifier, metricsSvc, jobQueue, matchmakingService)
 
 	s := server.NewServer(
 		clubStore,
@@ -68,10 +69,35 @@ func main() {
 		notifier,
 		processor,
 		matchmakingService,
-		pubsub,
+		jobQueue,
 		//inngestClient,
 	)
 	metricsSvc.SetStartupTime(float64(dbInitDuration.Milliseconds()) / 1000)
+
+	// --- Setup job queue worker ---
+	worker := jobqueue.NewWorker(jobQueue, log.StandardLog())
+	
+	// Register job handlers
+	worker.RegisterHandler(jobqueue.JobTypeAssignBallBoy, func(payload json.RawMessage) error {
+		// TODO: Implement ball boy assignment logic
+		return nil
+	})
+	worker.RegisterHandler(jobqueue.JobTypeNotifyBooking, func(payload json.RawMessage) error {
+		// TODO: Implement booking notification logic
+		return nil
+	})
+	worker.RegisterHandler(jobqueue.JobTypeNotifyResult, func(payload json.RawMessage) error {
+		// TODO: Implement result notification logic
+		return nil
+	})
+	worker.RegisterHandler(jobqueue.JobTypeUpdatePlayerStats, func(payload json.RawMessage) error {
+		// TODO: Implement player stats update logic
+		return nil
+	})
+	worker.RegisterHandler(jobqueue.JobTypeUpdateWeeklyStats, func(payload json.RawMessage) error {
+		// TODO: Implement weekly stats update logic
+		return nil
+	})
 
 	// --- Record startup time ---
 	startupDuration := time.Since(startTime)
@@ -111,6 +137,16 @@ func main() {
 	// Channel to listen for errors coming from the server
 	serverErrors := make(chan error, 1)
 
+	// Start the job worker in a goroutine
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	go func() {
+		log.Info("Starting job queue worker")
+		worker.StartCleanup(workerCtx, 1*time.Hour, 24*time.Hour) // Cleanup every hour, remove jobs older than 1 day
+		if err := worker.Start(workerCtx); err != nil && err != context.Canceled {
+			log.Error("Job worker error", "error", err)
+		}
+	}()
+
 	// Start the server in a goroutine
 	go func() {
 		log.Info("Server started", "port", cfg.Port)
@@ -147,6 +183,10 @@ func main() {
 		// Create a context with a timeout for the shutdown.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+
+		// Stop the job worker first
+		log.Info("Stopping job queue worker...")
+		cancelWorker()
 
 		// Attempt to gracefully shut down the server.
 		if err := srv.Shutdown(ctx); err != nil {

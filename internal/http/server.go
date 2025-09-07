@@ -11,10 +11,10 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
-	"github.com/mauv0809/ideal-tribble/internal/pubsub"
+	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 )
 
-func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler http.Handler, cfg config.Config, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier, processor *processor.Processor, matchmakingService matchmaking.MatchmakingService, pubsub pubsub.PubSubClient /*inngestClient inngest.InngestClient*/) *Server {
+func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler http.Handler, cfg config.Config, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier, processor *processor.Processor, matchmakingService matchmaking.MatchmakingService, jobQueue jobqueue.JobQueue /*inngestClient inngest.InngestClient*/) *Server {
 	server := &Server{
 		Store:              store,
 		Metrics:            metricsSvc,
@@ -25,7 +25,7 @@ func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler 
 		Processor:          processor,
 		MatchmakingService: matchmakingService,
 		Router:             http.NewServeMux(),
-		pubsub:             pubsub,
+		jobQueue:           jobQueue,
 		//InngestClient:   inngestClient,
 	}
 
@@ -54,12 +54,8 @@ func (s *Server) routes() {
 	s.Router.Handle("/fetch", Chain(handlers.FetchMatchesHandler(s.Store, s.Metrics, s.Cfg, s.PlaytomicClient), paramsMiddleware))
 	s.Router.Handle("/process", Chain(handlers.ProcessMatchesHandler(s.Processor), paramsMiddleware))
 
-	// Pub/Sub endpoints
-	s.Router.Handle("/assign-ball-boy", Chain(handlers.BallBoyHandler(s.Processor, s.pubsub), paramsMiddleware))
-	s.Router.Handle("/update-player-stats", Chain(handlers.UpdatePlayerStatsHandler(s.Processor, s.pubsub), paramsMiddleware))
-	s.Router.Handle("/update-weekly-stats", Chain(handlers.UpdateWeeklyStatsHandler(s.Processor, s.pubsub), paramsMiddleware))
-	s.Router.Handle("/notify-booking", Chain(handlers.NotifyBookingHandler(s.Processor, s.pubsub), paramsMiddleware))
-	s.Router.Handle("/notify-result", Chain(handlers.NotifyResultHandler(s.Processor, s.pubsub), paramsMiddleware))
+	// Job queue endpoints are now processed by background worker
+	// No HTTP endpoints needed for job processing
 
 	// Slack command endpoints
 	s.Router.Handle("/slack/command/leaderboard", Chain(handlers.LeaderboardCommandHandler(s.Store, s.Notifier), s.VerifySlackSignature, paramsMiddleware))

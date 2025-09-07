@@ -10,7 +10,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
-	"github.com/mauv0809/ideal-tribble/internal/pubsub"
+	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 )
 
 type Server struct {
@@ -23,6 +23,6 @@ type Server struct {
 	Processor          *processor.Processor
 	MatchmakingService matchmaking.MatchmakingService
 	Router             *http.ServeMux
-	pubsub             pubsub.PubSubClient
+	jobQueue           jobqueue.JobQueue
 	//InngestClient   inngest.InngestClient
 }

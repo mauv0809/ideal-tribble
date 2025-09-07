@@ -9,14 +9,14 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
-	"github.com/mauv0809/ideal-tribble/internal/pubsub"
+	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 )
 
 // New creates a new Processor.
-func New(store Store, notifier Notifier, metrics metrics.Metrics, pubsub pubsub.PubSubClient, matchmakingService matchmaking.MatchmakingService) *Processor {
+func New(store Store, notifier Notifier, metrics metrics.Metrics, jobQueue jobqueue.JobQueue, matchmakingService matchmaking.MatchmakingService) *Processor {
 	return &Processor{
 		store:             store,
-		pubsub:            pubsub,
+		jobQueue:          jobQueue,
 		notifier:          notifier,
 		metrics:           metrics,
 		matchmakingService: matchmakingService,
@@ -105,7 +105,7 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 				// This is a normal, upcoming match. Trigger ball bringer assignment and advance state.
 				log.Info("Match is new. Triggering ball bringer assignment asynchronously and advancing state.", "matchID", match.MatchID)
 				if !dryRun {
-					err := p.pubsub.SendMessage(pubsub.EventAssignBallBoy, match)
+					err := p.jobQueue.Enqueue(jobqueue.JobTypeAssignBallBoy, match)
 					if err != nil {
 						log.Error("Failed to send AssignBallBoy message", "error", err, "matchID", match.MatchID)
 						return // Exit processing for this match if we can't send message
@@ -122,7 +122,7 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 		case playtomic.StatusBallBoyAssigned:
 			log.Info("Ball boy assigned. Sending booking notification.", "matchID", match.MatchID)
 			if !dryRun {
-				err := p.pubsub.SendMessage(pubsub.EventNotifyBooking, match)
+				err := p.jobQueue.Enqueue(jobqueue.JobTypeNotifyBooking, match)
 				if err != nil {
 					return
 				}
@@ -147,7 +147,7 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 			//If game is ended more than 2 days ago we should not send results and just set update stats. This way we can fetch historic data without sending notifications.
 			if timeSinceEnd < 48*time.Hour {
 				if !dryRun {
-					err := p.pubsub.SendMessage(pubsub.EventNotifyResult, match)
+					err := p.jobQueue.Enqueue(jobqueue.JobTypeNotifyResult, match)
 					if err != nil {
 						return
 					}
@@ -163,7 +163,7 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 		case playtomic.StatusResultNotified:
 			log.Info("Match result has been notified. Updating player stats.", "matchID", match.MatchID)
 			if !dryRun {
-				err := p.pubsub.SendMessage(pubsub.EventUpdatePlayerStats, match)
+				err := p.jobQueue.Enqueue(jobqueue.JobTypeUpdatePlayerStats, match)
 				if err != nil {
 					return
 				}
@@ -181,7 +181,7 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 		case playtomic.StatusPlayerStatsUpdated:
 			log.Info("Player stats updated. Updating weekly stats.", "matchID", match.MatchID)
 			if !dryRun {
-				err := p.pubsub.SendMessage(pubsub.EventUpdateWeeklyStats, match)
+				err := p.jobQueue.Enqueue(jobqueue.JobTypeUpdateWeeklyStats, match)
 				if err != nil {
 					return
 				}
