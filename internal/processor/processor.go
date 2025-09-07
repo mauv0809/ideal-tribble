@@ -6,18 +6,20 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
+	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 )
 
 // New creates a new Processor.
-func New(store Store, notifier Notifier, metrics metrics.Metrics, pubsub pubsub.PubSubClient) *Processor {
+func New(store Store, notifier Notifier, metrics metrics.Metrics, pubsub pubsub.PubSubClient, matchmakingService matchmaking.MatchmakingService) *Processor {
 	return &Processor{
-		store:    store,
-		pubsub:   pubsub,
-		notifier: notifier,
-		metrics:  metrics,
+		store:             store,
+		pubsub:            pubsub,
+		notifier:          notifier,
+		metrics:           metrics,
+		matchmakingService: matchmakingService,
 	}
 }
 
@@ -48,6 +50,10 @@ func (p *Processor) ProcessMatches(dryRun bool) {
 		}(match)
 	}
 	wg.Wait()
+	
+	// After processing all matches, check for completed matchmaking requests
+	p.ProcessMatchmakingDetection(matches, dryRun)
+	
 	log.Info("Match processing finished.")
 }
 
@@ -314,5 +320,43 @@ func (p *Processor) updateStatus(match *playtomic.PadelMatch, newStatus playtomi
 		log.Debug("Successfully updated status", "matchID", match.MatchID, "from", match.ProcessingStatus, "to", newStatus)
 		// Crucially, update the in-memory match object even if not in dry run
 		match.ProcessingStatus = newStatus
+	}
+}
+
+// ProcessMatchmakingDetection checks if any club matches match pending matchmaking requests
+func (p *Processor) ProcessMatchmakingDetection(padelMatches []*playtomic.PadelMatch, dryRun bool) {
+	if p.matchmakingService == nil {
+		log.Debug("No matchmaking service available, skipping matchmaking detection")
+		return
+	}
+
+	log.Info("Starting matchmaking detection", "matches", len(padelMatches))
+	
+	// Detect which match requests have been completed
+	completedRequestIDs, err := p.matchmakingService.DetectMatchedRequests(padelMatches)
+	if err != nil {
+		log.Error("Failed to detect matched requests", "error", err)
+		return
+	}
+
+	if len(completedRequestIDs) == 0 {
+		log.Debug("No completed matchmaking requests detected")
+		return
+	}
+
+	log.Info("Found completed matchmaking requests", "count", len(completedRequestIDs))
+
+	// Update the status of completed requests
+	for _, requestID := range completedRequestIDs {
+		if !dryRun {
+			err := p.matchmakingService.UpdateMatchRequestStatus(requestID, matchmaking.StatusCompleted)
+			if err != nil {
+				log.Error("Failed to update match request status", "error", err, "requestID", requestID)
+				continue
+			}
+			log.Info("Successfully marked match request as completed", "requestID", requestID)
+		} else {
+			log.Info("[Dry Run] Would mark match request as completed", "requestID", requestID)
+		}
 	}
 }

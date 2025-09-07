@@ -109,17 +109,30 @@ This branch (`feature/matchmaking-system`) implements a matchmaking feature for 
   - Handle edge cases (partial matches, time variations)
 - **Files to modify**: `internal/http/handlers/scheduled.go`, `internal/matchmaking/store.go`
 
-### 14. Dynamic Team Reassignment (HIGH PRIORITY)
-- **What**: Handle availability changes after match proposal with automatic team reassignment
-- **Requirements**:
-  - Until a match is booked through playtomic and fetched (so until we have set the match request status to StatusCompleted) we need to be ready for new team assignments if we suddenly dont have availability of the 4 propsoed players
+### 14. Dynamic Team Reassignment → DEFERRED FOR V2 🚀
+- **Decision**: Ship current system first, iterate based on real usage feedback
+- **Current State**: System works well without dynamic reassignment - users can create new `/match` requests if availability changes significantly after proposal
+- **V2 Implementation Planned**: Will implement based on actual user behavior and feedback
 
-  - Detect when availability drops below 4 players after proposal
-  - Detect when availability increases to 5+ players after proposal
-  - Automatically reassign teams and update proposal
-  - Send updated proposal notification
-  - Handle edge cases (booking responsible player leaves, etc.)
-- **Files to modify**: `internal/http/handlers/slack_events.go`, `internal/matchmaking/store.go`
+#### **Future Enhancements for Dynamic Team Reassignment** (MEDIUM PRIORITY):
+- **Advanced Team Balancing**: Use player skill levels from database for team assignment
+- **Booking Responsibility Intelligence**: 
+  - Prefer players with lower ball_bringer_count
+  - Consider player booking history/reliability
+- **Smart Notification Strategy**: 
+  - Update original proposal message instead of new thread
+  - Add "Updated proposal" indicators
+- **Rapid Change Handling**: 
+  - Debouncing for multiple quick availability changes
+  - Rate limiting for proposal updates
+- **Advanced Edge Cases**:
+  - Handle partial team changes (only 1-2 players change)
+  - Consider player preferences/partnerships
+  - Handle timezone considerations for proposal timing
+- **User Experience**:
+  - Allow manual team override by admin users  
+  - Player preference system for partnerships
+  - Notification preferences (some users may not want constant updates)
 
 ### 15. Team Assignment Enhancement (MEDIUM PRIORITY)
 - **What**: Improve team balancing algorithm in ProposeMatch

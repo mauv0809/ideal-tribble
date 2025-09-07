@@ -11,6 +11,7 @@ const (
 	StatusCollectingAvailability MatchRequestStatus = "COLLECTING_AVAILABILITY"
 	StatusProposingMatch         MatchRequestStatus = "PROPOSING_MATCH"
 	StatusConfirmed              MatchRequestStatus = "CONFIRMED"
+	StatusCompleted              MatchRequestStatus = "COMPLETED"
 	StatusCancelled              MatchRequestStatus = "CANCELLED"
 )
 

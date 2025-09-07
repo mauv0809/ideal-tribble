@@ -21,7 +21,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
 		psClient := pubsubPkg.NewMock("TEST")
-		p := New(store, notif, metr, psClient)
+		p := New(store, notif, metr, psClient, nil) // nil matchmaking service for tests
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",
@@ -67,7 +67,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
 		psClient := pubsubPkg.NewMock("TEST")
-		p := New(store, notif, metr, psClient)
+		p := New(store, notif, metr, psClient, nil) // nil matchmaking service for tests
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",
@@ -125,7 +125,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
 		psClient := pubsubPkg.NewMock("TEST")
-		p := New(store, notif, metr, psClient)
+		p := New(store, notif, metr, psClient, nil) // nil matchmaking service for tests
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",
@@ -183,7 +183,7 @@ func TestProcessor_ProcessMatches(t *testing.T) {
 		notif := notifier.NewMock()
 		metr := metrics.NewMock()
 		psClient := pubsubPkg.NewMock("TEST")
-		p := New(store, notif, metr, psClient)
+		p := New(store, notif, metr, psClient, nil) // nil matchmaking service for tests
 
 		match := &playtomic.PadelMatch{
 			MatchID:          "m1",

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/google/uuid"
 	"github.com/mauv0809/ideal-tribble/internal/club"
+	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 )
 
 // store handles database operations for matchmaking
@@ -575,4 +576,225 @@ func (s *store) CanProposeMatch(requestID string) (bool, *AvailabilityResult, er
 	}
 
 	return false, nil, nil
+}
+
+// GetMatchRequestsInProposingStatus gets all match requests that are in PROPOSING_MATCH status
+func (s *store) GetMatchRequestsInProposingStatus() ([]MatchRequest, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `
+		SELECT id, requester_id, requester_name, created_at, updated_at, status, channel_id,
+			   thread_ts, availability_message_ts, proposed_date, proposed_start_time, proposed_end_time,
+			   booking_responsible_id, booking_responsible_name, team_assignments_blob
+		FROM match_requests
+		WHERE status = ?
+		ORDER BY created_at DESC
+	`
+
+	rows, err := s.db.Query(query, string(StatusProposingMatch))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query proposing match requests: %w", err)
+	}
+	defer rows.Close()
+
+	var requests []MatchRequest
+	for rows.Next() {
+		var request MatchRequest
+		var createdAt, updatedAt int64
+		var status string
+		var teamAssignmentsBlob []byte
+
+		err := rows.Scan(
+			&request.ID,
+			&request.RequesterID,
+			&request.RequesterName,
+			&createdAt,
+			&updatedAt,
+			&status,
+			&request.ChannelID,
+			&request.ThreadTS,
+			&request.AvailabilityMessageTS,
+			&request.ProposedDate,
+			&request.ProposedStartTime,
+			&request.ProposedEndTime,
+			&request.BookingResponsibleID,
+			&request.BookingResponsibleName,
+			&teamAssignmentsBlob,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan match request row: %w", err)
+		}
+
+		request.CreatedAt = time.Unix(createdAt, 0)
+		request.UpdatedAt = time.Unix(updatedAt, 0)
+		request.Status = MatchRequestStatus(status)
+
+		if teamAssignmentsBlob != nil {
+			var teamAssignments TeamAssignments
+			if err := json.Unmarshal(teamAssignmentsBlob, &teamAssignments); err != nil {
+				log.Warn("Failed to unmarshal team assignments", "error", err)
+			} else {
+				request.TeamAssignments = &teamAssignments
+			}
+		}
+
+		requests = append(requests, request)
+	}
+
+	return requests, nil
+}
+
+// DetectMatchedRequests checks if any proposed match requests have been booked on Playtomic
+func (s *store) DetectMatchedRequests(padelMatches []*playtomic.PadelMatch) ([]string, error) {
+	// Get all match requests in proposing status
+	proposingRequests, err := s.GetMatchRequestsInProposingStatus()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get proposing requests: %w", err)
+	}
+
+	if len(proposingRequests) == 0 {
+		log.Debug("No match requests in proposing status to check")
+		return nil, nil
+	}
+
+	var completedRequestIDs []string
+
+	for _, request := range proposingRequests {
+		// Skip if missing essential proposal data
+		if request.ProposedDate == nil || request.ProposedStartTime == nil || 
+		   request.ProposedEndTime == nil || request.BookingResponsibleID == nil ||
+		   request.TeamAssignments == nil {
+			log.Debug("Skipping request with incomplete proposal data", "requestID", request.ID)
+			continue
+		}
+
+		// Check if any padel match matches this request
+		for _, padelMatch := range padelMatches {
+			if s.isMatchingRequest(&request, padelMatch) {
+				log.Info("Found matching Playtomic match for request", 
+					"requestID", request.ID, 
+					"matchID", padelMatch.MatchID,
+					"date", *request.ProposedDate)
+				
+				completedRequestIDs = append(completedRequestIDs, request.ID)
+				break // Found a match, no need to check other padel matches for this request
+			}
+		}
+	}
+
+	return completedRequestIDs, nil
+}
+
+// isMatchingRequest checks if a Playtomic match corresponds to a proposed match request
+func (s *store) isMatchingRequest(request *MatchRequest, padelMatch *playtomic.PadelMatch) bool {
+	// Parse proposed date
+	proposedDate, err := time.Parse("2006-01-02", *request.ProposedDate)
+	if err != nil {
+		log.Warn("Failed to parse proposed date", "date", *request.ProposedDate, "error", err)
+		return false
+	}
+
+	// Check if match date matches (within same day)
+	matchDate := time.Unix(padelMatch.Start, 0)
+	if !isSameDate(proposedDate, matchDate) {
+		return false
+	}
+
+	// Parse proposed time range
+	proposedStart, err := time.Parse("15:04", *request.ProposedStartTime)
+	if err != nil {
+		log.Warn("Failed to parse proposed start time", "time", *request.ProposedStartTime, "error", err)
+		return false
+	}
+	
+	proposedEnd, err := time.Parse("15:04", *request.ProposedEndTime)
+	if err != nil {
+		log.Warn("Failed to parse proposed end time", "time", *request.ProposedEndTime, "error", err)
+		return false
+	}
+
+	// Check if times overlap (allow 30min tolerance)
+	matchStart := time.Unix(padelMatch.Start, 0)
+	matchEnd := time.Unix(padelMatch.End, 0)
+	
+	proposedStartWithDate := time.Date(matchDate.Year(), matchDate.Month(), matchDate.Day(),
+		proposedStart.Hour(), proposedStart.Minute(), 0, 0, matchDate.Location())
+	proposedEndWithDate := time.Date(matchDate.Year(), matchDate.Month(), matchDate.Day(),
+		proposedEnd.Hour(), proposedEnd.Minute(), 0, 0, matchDate.Location())
+
+	tolerance := 30 * time.Minute
+	if !timesOverlapWithTolerance(proposedStartWithDate, proposedEndWithDate, matchStart, matchEnd, tolerance) {
+		return false
+	}
+
+	// Check if booking responsible player is the owner or ball bringer
+	bookingPlayerID := *request.BookingResponsibleID
+	if padelMatch.OwnerID == bookingPlayerID || padelMatch.BallBringerID == bookingPlayerID {
+		// Require all 4 players to match (same standard as isClubMatch in fetch logic)
+		// This ensures we have the exact same match and maintains consistency with club match detection
+		if s.verifyTeamComposition(request.TeamAssignments, padelMatch.Teams, 4) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isSameDate checks if two times are on the same calendar date
+func isSameDate(date1, date2 time.Time) bool {
+	y1, m1, d1 := date1.Date()
+	y2, m2, d2 := date2.Date()
+	return y1 == y2 && m1 == m2 && d1 == d2
+}
+
+// timesOverlapWithTolerance checks if two time ranges overlap within a tolerance
+func timesOverlapWithTolerance(start1, end1, start2, end2 time.Time, tolerance time.Duration) bool {
+	// Expand the ranges by the tolerance
+	expandedStart1 := start1.Add(-tolerance)
+	expandedEnd1 := end1.Add(tolerance)
+	expandedStart2 := start2.Add(-tolerance) 
+	expandedEnd2 := end2.Add(tolerance)
+	
+	// Check if ranges overlap
+	return expandedStart1.Before(expandedEnd2) && expandedEnd1.After(expandedStart2)
+}
+
+// verifyTeamComposition checks if exactly the required number of players from the proposed teams are in the actual match
+func (s *store) verifyTeamComposition(proposedTeams *TeamAssignments, actualTeams []playtomic.Team, requiredMatches int) bool {
+	// Collect all proposed player IDs
+	var proposedPlayerIDs []string
+	for _, player := range proposedTeams.Team1 {
+		proposedPlayerIDs = append(proposedPlayerIDs, player.ID)
+	}
+	for _, player := range proposedTeams.Team2 {
+		proposedPlayerIDs = append(proposedPlayerIDs, player.ID)
+	}
+
+	// Collect all actual player IDs
+	var actualPlayerIDs []string
+	for _, team := range actualTeams {
+		for _, player := range team.Players {
+			actualPlayerIDs = append(actualPlayerIDs, player.UserID)
+		}
+	}
+
+	// Count matches
+	matches := 0
+	for _, proposedID := range proposedPlayerIDs {
+		for _, actualID := range actualPlayerIDs {
+			if proposedID == actualID {
+				matches++
+				break
+			}
+		}
+	}
+
+	log.Debug("Team composition verification", 
+		"proposedPlayers", len(proposedPlayerIDs), 
+		"actualPlayers", len(actualPlayerIDs), 
+		"matches", matches, 
+		"required", requiredMatches)
+
+	return matches >= requiredMatches
 }

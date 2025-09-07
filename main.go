@@ -56,8 +56,8 @@ func main() {
 	playtomicClient := playtomic.NewClient()
 	notifier := slack.NewNotifier(cfg.Slack.Token, cfg.Slack.ChannelID, metricsSvc)
 	pubsub := pubsub.New(cfg.ProjectID)
-	processor := processor.New(clubStore, notifier, metricsSvc, pubsub)
 	matchmakingService := matchmaking.NewStore(db, clubStore)
+	processor := processor.New(clubStore, notifier, metricsSvc, pubsub, matchmakingService)
 
 	s := server.NewServer(
 		clubStore,
