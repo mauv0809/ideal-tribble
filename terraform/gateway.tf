@@ -38,6 +38,8 @@ resource "google_api_gateway_api_config" "wally_api_config" {
       contents = base64encode(local.openapi_spec_template)
     }
   }
+
+  depends_on = [google_api_gateway_api.wally_api]
 }
 
 resource "google_api_gateway_gateway" "wally_gateway" {
@@ -55,6 +57,8 @@ resource "google_api_gateway_gateway" "wally_gateway" {
 resource "google_compute_security_policy" "wally_security_policy" {
   name        = "wally-security-policy"
   description = "Security policy for Wally API Gateway - DDoS protection and rate limiting"
+
+  depends_on = [google_project_service.compute]
 
   # Default rule - allow all traffic (Slack signature verification handles auth)
   rule {
@@ -172,6 +176,8 @@ resource "google_compute_target_https_proxy" "wally_https_proxy" {
 resource "google_compute_managed_ssl_certificate" "wally_ssl_cert" {
   name = "wally-ssl-cert"
 
+  depends_on = [google_project_service.compute]
+
   managed {
     domains = ["wally-api.${var.domain}"]
   }
@@ -192,6 +198,8 @@ resource "google_compute_global_address" "wally_ip" {
   name         = "wally-external-ip"
   address_type = "EXTERNAL"
   ip_version   = "IPV4"
+
+  depends_on = [google_project_service.compute]
 }
 
 # Output the external IP and gateway URL
