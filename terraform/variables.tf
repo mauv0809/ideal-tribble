@@ -78,3 +78,9 @@ variable "latest_traffic_percent" {
   type    = number
   default = 10  # Start with 10%
 }
+
+variable "domain" {
+  description = "The domain name for the API Gateway (e.g., 'example.com' for 'wally-api.example.com')"
+  type        = string
+  default     = "utiger.dk"  # Update this with your actual domain
+}

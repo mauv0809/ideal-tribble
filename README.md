@@ -21,9 +21,12 @@ The name "Wally" is inspired by the helpful robot and the glass walls of the pad
 - Posts formatted Slack notifications for match bookings and results idempotently, preventing duplicate notifications.
 - Tracks player statistics (win/loss records, sets/games won) and provides a leaderboard.
 - Provides two leaderboards accessible via Slack commands: `/leaderboard` (sorted by win percentage) and `/level-leaderboard` (sorted by player level).
-- Allows looking up individual player stats via the `/padel-stats [name]` command.
+- Allows looking up individual player stats via the `/player-stats [name]` command.
+- Provides automated matchmaking via the `/match` command with intelligent player mapping using fuzzy search.
+- Integrates with Slack Events API to welcome new members automatically.
 - Resiliently processes matches through a state machine, leveraging PubSub for asynchronous processing and ensuring status updates and notifications are handled reliably and idempotently across various stages.
-- Secures Slack command endpoints (e.g., `/command/leaderboard`) by verifying the `X-Slack-Signature` header, ensuring requests originate genuinely from Slack.
+- Secures Slack command endpoints (e.g., `/slack/command/leaderboard`) by verifying the `X-Slack-Signature` header, ensuring requests originate genuinely from Slack.
+- Supports match type separation (singles/doubles) with dedicated statistics and ball-bringing tracking.
 - Infrastructure is managed via Terraform for consistent, repeatable deployments.
 - Includes a simple hot-reloading setup for easy local development.
 
@@ -263,6 +266,7 @@ The tests are also automatically executed by the GitHub Actions workflow on ever
 
 The application exposes the following HTTP endpoints:
 
+### Core API Endpoints
 - `POST /fetch`: Manually triggers a fetch for new matches from Playtomic.
 - `POST /process`: Manually triggers the processing of fetched matches (sending notifications, updating stats, etc.).
 - `GET /health`: A simple health check endpoint that returns `OK!`.
@@ -272,11 +276,19 @@ The application exposes the following HTTP endpoints:
 - `GET /metrics`: Returns a JSON object with operational metrics.
 - `POST /clear`: Clears the internal store. Can accept a `matchID` query param to clear a specific match.
 
-The application also exposes an endpoint to be used with a Slack slash command:
+### Pub/Sub Processing Endpoints
+- `POST /assign-ball-boy`: Assigns ball-bringing responsibilities for matches.
+- `POST /update-player-stats`: Updates player statistics after match completion.
+- `POST /update-weekly-stats`: Processes weekly statistics summaries.
+- `POST /notify-booking`: Sends booking notifications to Slack.
+- `POST /notify-result`: Sends match result notifications to Slack.
 
-- `POST /command/leaderboard`: Responds with the formatted player leaderboard (by win %).
-- `POST /command/level-leaderboard`: Responds with the formatted player leaderboard (by level).
-- `POST /command/player-stats`: Responds with the stats for a specific player.
+### Slack Integration Endpoints
+- `POST /slack/command/leaderboard`: Responds with the formatted player leaderboard (by win %).
+- `POST /slack/command/level-leaderboard`: Responds with the formatted player leaderboard (by level).
+- `POST /slack/command/player-stats`: Responds with the stats for a specific player.
+- `POST /slack/command/match`: Initiates the matchmaking process for the requesting player.
+- `POST /slack/events`: Handles Slack Events API callbacks (member joins, reactions, etc.).
 
 ## Roadmap
 
