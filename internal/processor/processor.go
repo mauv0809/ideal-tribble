@@ -6,18 +6,20 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
+	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/pubsub"
 )
 
 // New creates a new Processor.
-func New(store Store, notifier Notifier, metrics metrics.Metrics, pubsub pubsub.PubSubClient) *Processor {
+func New(store Store, notifier Notifier, metrics metrics.Metrics, pubsub pubsub.PubSubClient, matchmakingService matchmaking.MatchmakingService) *Processor {
 	return &Processor{
-		store:    store,
-		pubsub:   pubsub,
-		notifier: notifier,
-		metrics:  metrics,
+		store:             store,
+		pubsub:            pubsub,
+		notifier:          notifier,
+		metrics:           metrics,
+		matchmakingService: matchmakingService,
 	}
 }
 
@@ -48,6 +50,10 @@ func (p *Processor) ProcessMatches(dryRun bool) {
 		}(match)
 	}
 	wg.Wait()
+	
+	// After processing all matches, check for completed matchmaking requests
+	p.ProcessMatchmakingDetection(matches, dryRun)
+	
 	log.Info("Match processing finished.")
 }
 
@@ -164,10 +170,34 @@ func (p *Processor) ProcessMatch(match *playtomic.PadelMatch, dryRun bool) {
 			} else {
 				log.Info("[Dry Run] Would have updated player stats", "match", match)
 			}
+			p.updateStatus(match, playtomic.StatusUpdatingPlayerStats, dryRun)
 			return // Exit processMatch for now, will be re-processed on PlayerStatsUpdated event.
 
+		case playtomic.StatusUpdatingPlayerStats:
+			// Waiting for player stats update to complete asynchronously
+			log.Debug("Match is in StatusUpdatingPlayerStats. Waiting for update to complete.", "matchID", match.MatchID)
+			return // Exit processMatch for now, will be re-processed on PlayerStatsUpdated event.
+
+		case playtomic.StatusPlayerStatsUpdated:
+			log.Info("Player stats updated. Updating weekly stats.", "matchID", match.MatchID)
+			if !dryRun {
+				err := p.pubsub.SendMessage(pubsub.EventUpdateWeeklyStats, match)
+				if err != nil {
+					return
+				}
+			} else {
+				log.Info("[Dry Run] Would have updated weekly stats", "match", match)
+			}
+			p.updateStatus(match, playtomic.StatusUpdatingWeeklyStats, dryRun)
+			return // Exit processMatch for now, will be re-processed on WeeklyStatsUpdated event.
+
+		case playtomic.StatusUpdatingWeeklyStats:
+			// Waiting for weekly stats update to complete asynchronously
+			log.Debug("Match is in StatusUpdatingWeeklyStats. Waiting for update to complete.", "matchID", match.MatchID)
+			return // Exit processMatch for now, will be re-processed on WeeklyStatsUpdated event.
+
 		case playtomic.StatusStatsUpdated:
-			log.Info("Player stats updated. Marking match as complete.", "matchID", match.MatchID)
+			log.Info("All stats updated. Marking match as complete.", "matchID", match.MatchID)
 			p.updateStatus(match, playtomic.StatusCompleted, dryRun)
 
 		case playtomic.StatusCompleted:
@@ -242,6 +272,12 @@ func (p *Processor) NotifyBooking(match *playtomic.PadelMatch, dryRun bool) erro
 func (p *Processor) UpdatePlayerStats(match *playtomic.PadelMatch, dryRun bool) {
 	log.Debug("Updating player stats for match", "matchID", match.MatchID)
 	p.store.UpdatePlayerStats(match)
+	p.updateStatus(match, playtomic.StatusPlayerStatsUpdated, dryRun)
+}
+
+func (p *Processor) UpdateWeeklyStats(match *playtomic.PadelMatch, dryRun bool) {
+	log.Debug("Updating weekly stats for match", "matchID", match.MatchID)
+	p.store.UpdateWeeklyStats(match)
 	p.updateStatus(match, playtomic.StatusStatsUpdated, dryRun)
 }
 func (p *Processor) AssignBallBringer(match *playtomic.PadelMatch, dryRun bool) {
@@ -287,5 +323,43 @@ func (p *Processor) updateStatus(match *playtomic.PadelMatch, newStatus playtomi
 		log.Debug("Successfully updated status", "matchID", match.MatchID, "from", match.ProcessingStatus, "to", newStatus)
 		// Crucially, update the in-memory match object even if not in dry run
 		match.ProcessingStatus = newStatus
+	}
+}
+
+// ProcessMatchmakingDetection checks if any club matches match pending matchmaking requests
+func (p *Processor) ProcessMatchmakingDetection(padelMatches []*playtomic.PadelMatch, dryRun bool) {
+	if p.matchmakingService == nil {
+		log.Debug("No matchmaking service available, skipping matchmaking detection")
+		return
+	}
+
+	log.Info("Starting matchmaking detection", "matches", len(padelMatches))
+	
+	// Detect which match requests have been completed
+	completedRequestIDs, err := p.matchmakingService.DetectMatchedRequests(padelMatches)
+	if err != nil {
+		log.Error("Failed to detect matched requests", "error", err)
+		return
+	}
+
+	if len(completedRequestIDs) == 0 {
+		log.Debug("No completed matchmaking requests detected")
+		return
+	}
+
+	log.Info("Found completed matchmaking requests", "count", len(completedRequestIDs))
+
+	// Update the status of completed requests
+	for _, requestID := range completedRequestIDs {
+		if !dryRun {
+			err := p.matchmakingService.UpdateMatchRequestStatus(requestID, matchmaking.StatusCompleted)
+			if err != nil {
+				log.Error("Failed to update match request status", "error", err, "requestID", requestID)
+				continue
+			}
+			log.Info("Successfully marked match request as completed", "requestID", requestID)
+		} else {
+			log.Info("[Dry Run] Would mark match request as completed", "requestID", requestID)
+		}
 	}
 }

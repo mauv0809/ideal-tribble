@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+	handlers "github.com/mauv0809/ideal-tribble/internal/http/handlers"
 	"github.com/slack-go/slack"
 )
 
@@ -21,13 +22,6 @@ func Chain(h http.Handler, middlewares ...Middleware) http.Handler {
 	}
 	return h
 }
-
-// contextKey is a custom type to avoid key collisions in context.
-type contextKey string
-
-const (
-	dryRunKey contextKey = "dryRun"
-)
 
 // paramsMiddleware handles common query parameters like 'verbose' and 'dry_run'.
 func paramsMiddleware(next http.Handler) http.Handler {
@@ -45,17 +39,11 @@ func paramsMiddleware(next http.Handler) http.Handler {
 
 		// Handle 'dry_run' and add it to the request context.
 		isDryRun := r.URL.Query().Get("dry_run") == "true"
-		ctx := context.WithValue(r.Context(), dryRunKey, isDryRun)
+		ctx := context.WithValue(r.Context(), handlers.DryRunKey, isDryRun)
 
 		// Call the next handler with the modified context.
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// isDryRunFromContext is a helper to safely retrieve the dry_run flag from the request context.
-func isDryRunFromContext(r *http.Request) bool {
-	dryRun, ok := r.Context().Value(dryRunKey).(bool)
-	return ok && dryRun
 }
 
 // VerifySlackSignature is a middleware that verifies the Slack request signature.
@@ -77,14 +65,31 @@ func (s *Server) VerifySlackSignature(next http.Handler) http.Handler {
 			return
 		}
 
-		r.Body = io.NopCloser(io.TeeReader(r.Body, &verifier))
+		// Read the entire body to verify the signature before proceeding
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("failed to read request body", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 
-		next.ServeHTTP(w, r)
+		// Write the body to the verifier for signature calculation
+		if _, err := verifier.Write(body); err != nil {
+			log.Error("failed to write body to verifier", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 
+		// Verify the signature BEFORE calling the handler
 		if err = verifier.Ensure(); err != nil {
 			log.Error("Slack signature verification failed", "error", err)
 			http.Error(w, "Unauthorized: Slack signature verification failed", http.StatusUnauthorized)
 			return
 		}
+
+		// Restore the body for the handler to read
+		r.Body = io.NopCloser(strings.NewReader(string(body)))
+
+		next.ServeHTTP(w, r)
 	})
 }

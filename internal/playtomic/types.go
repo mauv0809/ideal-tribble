@@ -15,6 +15,18 @@ type MatchSummary struct {
 	OwnerID *string
 }
 
+// MatchTypeEnum represents the format of a padel match (singles vs doubles).
+type MatchTypeEnum string
+
+const (
+	// MatchTypeEnumAll represents all match types combined.
+	MatchTypeEnumAll MatchTypeEnum = "ALL"
+	// MatchTypeEnumSingles represents a singles match.
+	MatchTypeEnumSingles MatchTypeEnum = "SINGLES"
+	// MatchTypeEnumDoubles represents a doubles match.
+	MatchTypeEnumDoubles MatchTypeEnum = "DOUBLES"
+)
+
 // PadelMatch represents a single padel match with all its details.
 type PadelMatch struct {
 	MatchID           string
@@ -34,9 +46,10 @@ type PadelMatch struct {
 	Tenant            Tenant
 	BallBringerID     string
 	BallBringerName   string
-	BookingNotifiedTs *int64 // Unix timestamp when booking notification was sent
-	ResultNotifiedTs  *int64 // Unix timestamp when result notification was sent
-	MatchType         MatchType
+	BookingNotifiedTs *int64        // Unix timestamp when booking notification was sent
+	ResultNotifiedTs  *int64        // Unix timestamp when result notification was sent
+	MatchType         MatchType     // MatchTypeCompetitive mode -> competitive or friendly
+	MatchTypeEnum     MatchTypeEnum // Singles or Doubles
 	ProcessingStatus  ProcessingStatus
 }
 
@@ -50,16 +63,19 @@ const (
 	StatusBookingNotified      ProcessingStatus = "BOOKING_NOTIFIED"
 	StatusResultAvailable      ProcessingStatus = "RESULT_AVAILABLE"
 	StatusResultNotified       ProcessingStatus = "RESULT_NOTIFIED"
+	StatusUpdatingPlayerStats  ProcessingStatus = "UPDATING_PLAYER_STATS"
+	StatusPlayerStatsUpdated   ProcessingStatus = "PLAYER_STATS_UPDATED"
+	StatusUpdatingWeeklyStats  ProcessingStatus = "UPDATING_WEEKLY_STATS"
 	StatusStatsUpdated         ProcessingStatus = "STATS_UPDATED"
 	StatusCompleted            ProcessingStatus = "COMPLETED"
 )
 
-// MatchType defines the type of match.
+// MatchType defines the competition type of match (competitive vs friendly).
 type MatchType string
 
 const (
-	MatchTypeCompetition MatchType = "COMPETITIVE"
-	MatchTypePractice    MatchType = "FRIENDLY"
+	MatchTypeCompetitive MatchType = "COMPETITIVE"
+	MatchTypeFriendly    MatchType = "FRIENDLY"
 )
 
 // GameStatus defines the status of a game.

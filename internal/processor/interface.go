@@ -14,6 +14,7 @@ type Store interface {
 	AssignBallBringerAtomically(matchID string, playerIDs []string) (string, string, error)
 	UpdateNotificationTimestamp(matchID string, notificationType string) error
 	UpdatePlayerStats(match *playtomic.PadelMatch)
+	UpdateWeeklyStats(match *playtomic.PadelMatch)
 }
 
 // Notifier defines the notification operations required by the processor.

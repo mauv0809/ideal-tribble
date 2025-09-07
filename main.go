@@ -13,11 +13,13 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/config"
 	"github.com/mauv0809/ideal-tribble/internal/database"
 	server "github.com/mauv0809/ideal-tribble/internal/http"
+	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier/slack"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
 	"github.com/mauv0809/ideal-tribble/internal/pubsub"
+	"golang.ngrok.com/ngrok/v2"
 )
 
 func main() {
@@ -54,7 +56,8 @@ func main() {
 	playtomicClient := playtomic.NewClient()
 	notifier := slack.NewNotifier(cfg.Slack.Token, cfg.Slack.ChannelID, metricsSvc)
 	pubsub := pubsub.New(cfg.ProjectID)
-	processor := processor.New(clubStore, notifier, metricsSvc, pubsub)
+	matchmakingService := matchmaking.NewStore(db, clubStore)
+	processor := processor.New(clubStore, notifier, metricsSvc, pubsub, matchmakingService)
 
 	s := server.NewServer(
 		clubStore,
@@ -64,6 +67,7 @@ func main() {
 		playtomicClient,
 		notifier,
 		processor,
+		matchmakingService,
 		pubsub,
 		//inngestClient,
 	)
@@ -73,6 +77,30 @@ func main() {
 	startupDuration := time.Since(startTime)
 	metricsSvc.SetStartupTime(startupDuration.Seconds())
 	log.Info("Startup time recorded", "duration_ms", startupDuration.Milliseconds())
+
+	// --- Ngrok setup for local development ---
+	var listener ngrok.EndpointListener
+	if cfg.Ngrok.AuthToken != "" {
+		log.Info("Creating ngrok tunnel")
+		a, err := ngrok.NewAgent(ngrok.WithAuthtoken(cfg.Ngrok.AuthToken))
+		if err != nil {
+			log.Fatal(err)
+		}
+		l, err := a.Listen(context.Background(), ngrok.WithURL("dove-saving-gnu.ngrok-free.app"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Info("Ngrok tunnel created", "url", l.URL())
+		listener = l
+	} else {
+		log.Info("Ngrok tunnel disabled")
+	}
+	defer func() {
+		if listener != nil {
+			log.Info("Closing ngrok tunnel")
+			listener.Close()
+		}
+	}()
 
 	// --- Graceful shutdown setup ---
 	srv := &http.Server{
@@ -88,6 +116,20 @@ func main() {
 		log.Info("Server started", "port", cfg.Port)
 		serverErrors <- srv.ListenAndServe()
 	}()
+
+	// If ngrok is enabled, also serve through the tunnel
+	if listener != nil {
+		log.Info("Server also available via ngrok tunnel", "tunnel_url", listener.URL())
+		go func() {
+			// Create a separate server instance for ngrok to avoid port conflicts
+			ngrokSrv := &http.Server{
+				Handler: s,
+			}
+			if err := ngrokSrv.Serve(listener); err != nil && err != http.ErrServerClosed {
+				log.Error("Ngrok server error", "error", err)
+			}
+		}()
+	}
 
 	// Channel to listen for interrupt signals
 	shutdown := make(chan os.Signal, 1)

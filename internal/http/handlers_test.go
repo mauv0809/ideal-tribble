@@ -15,6 +15,8 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/config"
 	"github.com/mauv0809/ideal-tribble/internal/database"
+	"github.com/mauv0809/ideal-tribble/internal/http/handlers"
+	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
@@ -48,10 +50,10 @@ func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, no
 	metricsSvc := metrics.NewService(reg)
 	metricsHandler := metrics.NewMetricsHandler(reg)
 	pubsub := pubsub.NewMock("TEST")
-	proc := processor.New(clubStore, notifier, metricsSvc, pubsub)
-
+	matchMaking := matchmaking.NewStore(db, clubStore)
+	proc := processor.New(clubStore, notifier, metricsSvc, pubsub, matchMaking)
 	// A real mux is needed to prevent the router from being nil.
-	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, nil)
+	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, matchMaking, pubsub)
 
 	teardown := func() {
 		if dbTeardown != nil {
@@ -124,7 +126,7 @@ func TestListMembersHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
-	handler := server.ListMembersHandler()
+	handler := handlers.ListMembersHandler(server.Store)
 	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
@@ -156,6 +158,7 @@ func TestPlayerStatsCommandHandler(t *testing.T) {
 			{ID: "t1", TeamResult: "WON", Players: []playtomic.Player{{UserID: "p1", Name: "Morten Voss"}, {UserID: "p2", Name: "Player Two"}}},
 			{ID: "t2", Players: []playtomic.Player{{UserID: "p3", Name: "Player Three"}, {UserID: "p4", Name: "Player Four"}}},
 		},
+		MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
 		Results: []playtomic.SetResult{
 			{Name: "Set-1", Scores: map[string]int{"t1": 6, "t2": 4}},
 			{Name: "Set-2", Scores: map[string]int{"t1": 6, "t2": 4}},
@@ -286,6 +289,7 @@ func TestFetchMatchesHandler(t *testing.T) {
 				{Players: []playtomic.Player{{UserID: "p1"}, {UserID: "p2"}}},
 				{Players: []playtomic.Player{{UserID: "p3"}, {UserID: "p4"}}},
 			},
+			MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
 		}, nil
 	}
 
@@ -301,7 +305,7 @@ func TestFetchMatchesHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
-	handler := server.FetchMatchesHandler()
+	handler := handlers.FetchMatchesHandler(server.Store, server.Metrics, server.Cfg, server.PlaytomicClient)
 	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
@@ -325,13 +329,18 @@ func TestProcessMatchesHandler(t *testing.T) {
 			OwnerID:          "p1",
 			ProcessingStatus: playtomic.StatusNew,
 			Start:            time.Now().Unix(),
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
+			Teams: []playtomic.Team{
+				{Players: []playtomic.Player{{UserID: "p1"}}},
+				{Players: []playtomic.Player{{UserID: "p2"}}},
+			},
 		}
 		require.NoError(t, server.Store.UpsertMatch(match))
 
 		req, err := http.NewRequest("GET", "/process", nil)
 		require.NoError(t, err)
 		rr := httptest.NewRecorder()
-		handler := server.ProcessMatchesHandler()
+		handler := handlers.ProcessMatchesHandler(server.Processor)
 		handler.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
@@ -361,19 +370,20 @@ func TestProcessMatchesHandler(t *testing.T) {
 				{Players: []playtomic.Player{{UserID: "p1"}, {UserID: "p2"}}},
 				{Players: []playtomic.Player{{UserID: "p3"}, {UserID: "p4"}}},
 			},
+			MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
 		}
 		require.NoError(t, server.Store.UpsertMatch(match))
 
 		req, err := http.NewRequest("GET", "/process", nil)
 		require.NoError(t, err)
 		rr := httptest.NewRecorder()
-		handler := server.ProcessMatchesHandler()
+		handler := handlers.ProcessMatchesHandler(server.Processor)
 		handler.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
 		matches, err := server.Store.GetAllMatches()
 		require.NoError(t, err)
 		require.Len(t, matches, 1)
-		assert.Equal(t, playtomic.StatusResultNotified, matches[0].ProcessingStatus)
+		assert.Equal(t, playtomic.StatusUpdatingPlayerStats, matches[0].ProcessingStatus)
 	})
 }
