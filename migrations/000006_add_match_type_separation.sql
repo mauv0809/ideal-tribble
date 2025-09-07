@@ -32,7 +32,10 @@ CREATE TABLE IF NOT EXISTS player_stats_doubles (
 ALTER TABLE players ADD COLUMN ball_bringer_count_singles INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE players ADD COLUMN ball_bringer_count_doubles INTEGER NOT NULL DEFAULT 0;
 
--- Drop old coloumn
+-- Drop old index before dropping the column
+DROP INDEX IF EXISTS idx_players_ball_bringer_rank;
+
+-- Drop old column
 ALTER TABLE players DROP COLUMN ball_bringer_count;
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_matches_match_type_enum ON matches (match_type_enum);
