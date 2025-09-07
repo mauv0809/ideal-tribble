@@ -34,9 +34,9 @@ The name "Wally" is inspired by the helpful robot and the glass walls of the pad
 
 - **Language:** Go
 - **Local Development:** Air
-- **Infrastructure as Code:** Terraform
+- **Infrastructure as Code:** Terraform with Spacelift
 - **Platform:** Docker
-- **Deployment:** Google Cloud Run, Google Cloud Scheduler
+- **Deployment:** Hetzner Cloud Server, systemd service with cron scheduling
 - **CI/CD:** GitHub Actions
 - **Testing:** Go standard library, Testify
 - **Database Migrations:** Goose
@@ -68,185 +68,102 @@ A simple hot-reloading environment is configured using [Air](https://github.com/
     ```
     The server will be running on the port specified in your `.env` file (default: `8080`).
 
-## Cloud Deployment with Terraform and GitHub Actions
+## Cloud Deployment with Hetzner and Spacelift
 
-This guide provides a complete walkthrough for deploying the application to Google Cloud Run using Terraform for infrastructure management and GitHub Actions for continuous deployment.
+This guide provides a complete walkthrough for deploying the application to Hetzner Cloud using Terraform managed by Spacelift and GitHub Actions for continuous deployment.
 
 #### Prerequisites
 
-1.  **Google Cloud Project:** You must have a GCP project with billing enabled.
-2.  **`gcloud` CLI:** [Install](https://cloud.google.com/sdk/docs/install) and authenticate the CLI to your account:
-    ```bash
-    gcloud auth login
-    gcloud auth application-default login
-    ```
-3.  **Terraform:** [Install the Terraform CLI](https://learn.hashicorp.com/tutorials/terraform/install-cli).
+1.  **Hetzner Cloud Account:** You must have a Hetzner Cloud account with a project created.
+2.  **Spacelift Account:** Infrastructure is managed through Spacelift for better GitOps workflow.
+3.  **Domain Name:** A domain name pointing to your server (e.g., `wally-api.utiger.dk`).
 4.  **A Fork of This Repository:** You should be working from your own fork of the project.
 
 ---
 
-#### Step 1: Configure Your GCP Project
+#### Step 1: Infrastructure Setup with Spacelift
 
-First, set your project context for the `gcloud` CLI and enable all the necessary APIs.
+**Infrastructure is automatically managed by Spacelift:**
+- Spacelift monitors the `terraform/hetzner/` directory for changes
+- When you push to `main`, Spacelift automatically runs `terraform apply`
+- The infrastructure includes:
+  - Hetzner Cloud server (CPX11: 2 vCPU, 4GB RAM)
+  - Firewall configuration for HTTP/HTTPS/SSH access
+  - Cloud-init setup with nginx reverse proxy
+  - SSL certificate support via Let's Encrypt
+
+---
+
+#### Step 2: Configure Environment Variables
+
+Create a `.env` file on your server with the required secrets:
 
 ```bash
-# Replace "your-gcp-project-id" with your actual project ID
-export GCP_PROJECT_ID="your-gcp-project-id"
-gcloud config set project $GCP_PROJECT_ID
-
-# Enable the required APIs for the project
-gcloud services enable \
-  run.googleapis.com \
-  cloudscheduler.googleapis.com \
-  secretmanager.googleapis.com \
-  iam.googleapis.com \
-  artifactregistry.googleapis.com \
-  cloudresourcemanager.googleapis.com
+# Application secrets (stored securely on server)
+SLACK_BOT_TOKEN=xoxb-your-slack-token
+SLACK_CHANNEL_ID=C1234567890
+SLACK_SIGNING_SECRET=your-signing-secret
+TENANT_ID=your-playtomic-tenant
+TURSO_PRIMARY_URL=your-turso-database-url
+TURSO_AUTH_TOKEN=your-turso-auth-token
+DB_NAME=ideal-tribble
+PORT=8080
 ```
 
 ---
 
-#### Step 2: Create a Bucket for Terraform State
+#### Step 3: Configure Your GitHub Repository
 
-It is a critical best practice to store your Terraform state file remotely.
-
-```bash
-# Replace "your-unique-bucket-name" with a globally unique name
-export TF_STATE_BUCKET="your-unique-bucket-name"
-gcloud storage buckets create gs://$TF_STATE_BUCKET --project=$GCP_PROJECT_ID --location=europe-west3
-```
-
-**Note:** You must update the `ci-cd.yml` workflow later to use this bucket name.
-
----
-
-#### Step 3: Create Secrets in Secret Manager
-
-Our application loads its configuration from secrets. Create a secret for each required environment variable.
-
-**Example for one secret:**
-
-```bash
-# 1. Create the secret container
-gcloud secrets create SLACK_BOT_TOKEN --replication-policy="automatic"
-
-# 2. Add the secret value (this reads from your terminal)
-printf "your-xoxb-slack-token-here" | gcloud secrets versions add SLACK_BOT_TOKEN --data-file=-
-```
-
-**Repeat the process above for all of the following secrets:**
-
-- `DB_NAME`
-- `SLACK_BOT_TOKEN`
-- `SLACK_CHANNEL_ID`
-- `TENANT_ID`
-- `TURSO_PRIMARY_URL`
-- `TURSO_AUTH_TOKEN`
-
----
-
-#### Step 4: Configure Workload Identity Federation
-
-This is the key step to allow GitHub Actions to securely authenticate with GCP.
-
-**4a. Create a GCP Service Account for GitHub Actions**
-This service account is what GitHub will impersonate.
-
-```bash
-export GITHUB_SA="github-actions-runner"
-gcloud iam service-accounts create $GITHUB_SA \
-  --display-name="GitHub Actions Runner SA"
-```
-
-**4b. Grant the Service Account Permissions**
-This service account needs permission to manage the resources defined in our Terraform files.
-
-```bash
-# Get the full email of the service account
-export GITHUB_SA_EMAIL=$(gcloud iam service-accounts list --filter="displayName:GitHub Actions Runner SA" --format="value(email)")
-
-# Grant permissions
-gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
-  --member="serviceAccount:$GITHUB_SA_EMAIL" \
-  --role="roles/run.admin"
-gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
-  --member="serviceAccount:$GITHUB_SA_EMAIL" \
-  --role="roles/iam.serviceAccountUser"
-gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
-  --member="serviceAccount:$GITHUB_SA_EMAIL" \
-  --role="roles/secretmanager.admin"
-```
-
-You also need to grant it permission to write to the Terraform state bucket:
-
-```bash
-gcloud storage buckets add-iam-member gs://$TF_STATE_BUCKET \
-  --member="serviceAccount:$GITHUB_SA_EMAIL" \
-  --role="roles/storage.objectAdmin"
-```
-
-**4c. Create the Workload Identity Pool and Provider**
-This creates the trust relationship between GCP and GitHub.
-
-```bash
-gcloud iam workload-identity-pools create "github-pool" \
-  --location="global" \
-  --display-name="GitHub Actions Pool"
-
-# Get the full ID of the new pool
-export WORKLOAD_POOL_ID=$(gcloud iam workload-identity-pools list --location="global" --filter="displayName:GitHub Actions Pool" --format="value(name)")
-
-# Create the provider, restricting it to your repository
-export GITHUB_REPO="your-github-username/ideal-tribble"
-gcloud iam workload-identity-pools providers create-oidc "github-provider" \
-  --workload-identity-pool-id="$WORKLOAD_POOL_ID" \
-  --location="global" \
-  --issuer-uri="https://token.actions.githubusercontent.com" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository"
-```
-
-**4d. Link the GCP Service Account to the GitHub Identity**
-This is the final step that allows an action running in your repo to impersonate the service account.
-
-```bash
-gcloud iam service-accounts add-iam-policy-binding "$GITHUB_SA_EMAIL" \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/$WORKLOAD_POOL_ID/attribute.repository/$GITHUB_REPO"
-```
-
----
-
-#### Step 5: Configure Your GitHub Repository
-
-1.  **Update the CI/CD Workflow:**
-
-    - Open the `.github/workflows/ci-cd.yml` file.
-    - Find the `TERRAFORM_STATE_BUCKET` environment variable and replace the placeholder with the unique bucket name you created in Step 2.
-
-2.  **Add Secrets to GitHub Actions:**
+1.  **Add Secrets to GitHub Actions:**
     - In your forked GitHub repository, go to `Settings` > `Secrets and variables` > `Actions`.
-    - Create the following three secrets:
+    - Create the following secrets:
 
-| Secret Name                      | Value                                                                                                                                                                                      |
-| :------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GCP_PROJECT_ID`                 | Your GCP Project ID (e.g., `your-gcp-project-id`).                                                                                                                                         |
-| `GCP_SERVICE_ACCOUNT`            | The full email of the service account you created in Step 4a.                                                                                                                              |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | The full name of the provider. Get this by running: <br> `gcloud iam workload-identity-pools providers list --location=global --workload-identity-pool=github-pool --format="value(name)"` |
+| Secret Name        | Value                                                           |
+| :----------------- | :-------------------------------------------------------------- |
+| `SERVER_IP`        | The IP address of your Hetzner server (from Spacelift output) |
+| `SSH_PRIVATE_KEY`  | Private SSH key for server access                              |
 
 ---
 
-#### Step 6: Deploy!
+#### Step 4: Server Setup
+
+Once Spacelift has provisioned your infrastructure:
+
+1.  **SSH into your server:**
+    ```bash
+    ssh root@YOUR_SERVER_IP
+    ```
+
+2.  **Configure DNS:**
+    - Point your domain's A record to your server IP
+    - Example: `wally-api.utiger.dk` → `YOUR_SERVER_IP`
+
+3.  **Setup SSL certificate:**
+    ```bash
+    sudo certbot --nginx -d wally-api.utiger.dk
+    ```
+
+4.  **Configure secrets:**
+    ```bash
+    cd /opt/ideal-tribble
+    ./scripts/setup-secrets.sh
+    ```
+
+---
+
+#### Step 5: Deploy!
 
 With the setup complete, simply **push a commit to the `main` branch** of your forked repository.
 
-The GitHub Actions workflow will automatically trigger. It will:
+The GitHub Actions workflow will automatically:
 
-1.  Authenticate to Google Cloud using Workload Identity Federation.
-2.  Build the application's Docker image.
-3.  Push the image to Google Artifact Registry.
-4.  Run `terraform apply` to provision the Cloud Run service, IAM roles, and Cloud Scheduler jobs with the new image.
+1.  Run tests to ensure code quality
+2.  Build the Go binary for Linux
+3.  Deploy the binary to your Hetzner server via SSH
+4.  Restart the systemd service
+5.  Perform health checks
 
-The URL of your live service will be available in the output of the "Deploy with Terraform" step in the GitHub Actions log.
+Your application will be available at `https://wally-api.utiger.dk`
 
 ## Testing
 
@@ -275,13 +192,8 @@ The application exposes the following HTTP endpoints:
 - `GET /leaderboard`: Returns a JSON object with the current player statistics.
 - `GET /metrics`: Returns a JSON object with operational metrics.
 - `POST /clear`: Clears the internal store. Can accept a `matchID` query param to clear a specific match.
+- `POST /test/react`: Development endpoint for testing emoji reactions (development only).
 
-### Pub/Sub Processing Endpoints
-- `POST /assign-ball-boy`: Assigns ball-bringing responsibilities for matches.
-- `POST /update-player-stats`: Updates player statistics after match completion.
-- `POST /update-weekly-stats`: Processes weekly statistics summaries.
-- `POST /notify-booking`: Sends booking notifications to Slack.
-- `POST /notify-result`: Sends match result notifications to Slack.
 
 ### Slack Integration Endpoints
 - `POST /slack/command/leaderboard`: Responds with the formatted player leaderboard (by win %).
@@ -300,16 +212,16 @@ Here's a look at our future development plans:
   - Based on player availability and skill levels, the system will automatically propose a set of matches for the week, including suggested player pairings.
   - For each proposed match, it will assign one player to be responsible for booking the court and another to be responsible for bringing balls, ensuring fairness.
   - These "proposed" matches will be stored in the database. When a real booking from Playtomic matches a proposed match (based on players, date, and booking owner), the system will automatically link them, tracking the match from proposal to completion.
-- **Endpoint Authentication:** Secure the `/fetch` and `/process` endpoints to prevent unauthorized access, ensuring that only trusted sources like Google Cloud Scheduler or authorized users can trigger them.
+- **Endpoint Authentication:** Secure the `/fetch` and `/process` endpoints to prevent unauthorized access, ensuring that only trusted sources like cron jobs or authorized users can trigger them.
 
-  - **Strategy 1: OIDC for Service-to-Service (Recommended for Prod):**
-    - Secure the `/fetch` and `/process` endpoints so they can only be invoked by Google Cloud Scheduler.
-    - Configure the Cloud Run service to only accept requests with a valid OIDC token from a specific service account.
-    - Configure the Cloud Scheduler job to use this service account to authenticate its requests.
+  - **Strategy 1: API Key for Service-to-Service (Recommended for Prod):**
+    - Secure the `/fetch` and `/process` endpoints so they can only be invoked by authorized sources.
+    - Implement middleware that checks for a secret `X-API-Key` header.
+    - Store the API key securely in environment variables on the server.
   - **Strategy 2: API Key for Manual/Admin Access:**
     - Secure administrative endpoints like `/clear`, `/matches`, and `/members`.
     - Implement a middleware that checks for a secret `X-API-Key` header.
-    - The API key will be stored securely in Google Secret Manager.
+    - The API key will be stored securely in server environment variables.
   - **Strategy 3: Slack Request Signing for Commands:**
     - Secure the `/command/leaderboard` endpoint by verifying the `X-Slack-Signature` header.
     - This is a standard security practice to ensure that incoming webhook requests are genuinely from Slack.
@@ -320,7 +232,7 @@ Here's a look at our future development plans:
   - Introduce slash command `/upcoming-matches` for access to upcoming matches.
 - **Remote Metrics & Monitoring:**
   - Export the application's operational metrics to a dedicated monitoring system for advanced visualization, alerting, and long-term storage.
-  - Potential tools for this include Google Cloud Monitoring, Prometheus with Grafana, or Datadog.
+  - Potential tools for this include Prometheus with Grafana, Datadog, or other self-hosted monitoring solutions.
 - **Guest Player Management:**
   - Add a way to include guest players in a match without permanently adding them to the club's member list.
 - **Weekly Stats Notification:**

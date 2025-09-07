@@ -1,76 +1,154 @@
-# Guide: Instrumenting `ideal-tribble` with OpenTelemetry and Google Cloud
+Of course. Here is the updated observability plan, revised to reflect the new self-hosted strategy using the Grafana stack. You can give this directly to another AI for implementation.
 
-## **Objective**
-
-This guide details the process for integrating a comprehensive telemetry solution into the `ideal-tribble` Go application using OpenTelemetry. The goal is to gain deep insights into application performance and trace requests across services.
+Guide: Instrumenting ideal-tribble with OpenTelemetry and a Self-Hosted Grafana Stack
+Objective
+This guide details the process for integrating a comprehensive telemetry solution into the ideal-tribble Go application running on a Hetzner VPS. The goal is to gain deep insights into application performance and correlate traces with logs using a free, open-source, and self-hosted stack.
 
 We will use the following technology stack for this task:
-1.  **Instrumentation Standard:** OpenTelemetry (OTel) for vendor-neutral collection of traces and logs.
-2.  **Telemetry Backend:** Google Cloud's Operations Suite (Cloud Trace, Cloud Monitoring, Cloud Logging).
 
----
+Instrumentation Standard: OpenTelemetry (OTel) for vendor-neutral collection of traces and logs.
 
-## **Step 1: Add Necessary Go Dependencies**
+Telemetry Backend:
 
-First, update the project's dependencies by running the appropriate `go get` command. You will need to add the modules for OpenTelemetry (base SDK, trace, contrib http instrumentation), the Google Cloud Exporter for OpenTelemetry, and semantic conventions.
+Collection: OpenTelemetry Collector
 
----
+Traces: Grafana Tempo
 
-## **Step 2: Create a Centralized Telemetry Package**
+Logs: Grafana Loki
 
-To keep the code organized, create a new package `internal/telemetry`. Inside this package, create the file `otel.go`.
+Visualization: Grafana
 
-### **File: `internal/telemetry/otel.go`**
+Step 0: Set Up the Observability Backend on the VPS
+Before instrumenting the application, set up the backend services that will receive and store telemetry data. The easiest method is using Docker Compose on the Hetzner VPS.
 
-In this file, implement the initialization logic for OpenTelemetry and its connection to Google Cloud Trace.
+Create a docker-compose.yml file to define the Grafana, Tempo, Loki, and OTel Collector services with the following specifications:
+- **Resource Limits**: Set memory limits (Grafana: 256MB, Tempo: 512MB, Loki: 256MB, OTel Collector: 128MB)
+- **Storage**: Use bind mounts to `/var/lib/observability/` for persistence
+- **Networking**: Internal network, only Grafana exposed to nginx proxy
 
-1.  Create a function named `InitOtel` that accepts a `context.Context` and returns a shutdown function (`func()`) and an error.
-2.  Inside this function, retrieve the `GCP_PROJECT_ID` from the environment. If it's not set, log a message and return a no-op shutdown function.
-3.  Initialize the Google Cloud Trace exporter using the project ID.
-4.  Define an OpenTelemetry `Resource` that identifies the service with the name `ideal-tribble`.
-5.  Create and set the global `TracerProvider` using the exporter and the resource.
-6.  Return a shutdown function that calls the `TracerProvider.Shutdown` method to ensure telemetry is flushed before the app exits.
-7.  Also, create a helper function `SlogWithTrace` that accepts a `context.Context`. This function should extract the trace and span ID from the context and return a `slog.Logger` instance enriched with these fields for correlated logging.
+Create the necessary configuration files for each service:
 
----
+otel-collector-config.yaml: To configure the collector's receivers (OTLP) and exporters (to Tempo and Loki).
 
-## **Step 3: Integrate Telemetry into the Application Entrypoint (`main.go`)**
+tempo.yaml: To configure Tempo for local storage with 7-day retention.
 
-Modify your main application entrypoint, **`main.go`**, to use the new telemetry package.
+loki.yaml: To configure Loki with 7-day retention and automatic cleanup.
 
-1.  At the start of your `main` function, set up a structured JSON logger (`slog`) as the application default.
-2.  Call your `telemetry.InitOtel()` function at the start of `main`, handling any potential error. Defer the returned shutdown function.
-3.  After setting up your main HTTP router (e.g., `mux`), wrap it with the OpenTelemetry middleware (`otelhttp.NewHandler`) to enable tracing on all incoming requests.
-4.  Use this final, wrapped handler when you call `http.ListenAndServe`.
-5.  Inside one of your existing HTTP handlers (like `/health`), add an example of using your new `telemetry.SlogWithTrace(r.Context())` helper to demonstrate correlated logging.
+grafana-datasources.yaml: To automatically provision Grafana with datasources for Tempo and Loki.
 
----
+grafana.ini: Configure Grafana to run at `/grafana` path and set custom admin password.
 
-## **Step 4: Update Environment and Verification Steps**
+Create observability.service systemd unit file to manage docker-compose.
 
+Update nginx configuration to proxy `/grafana/*` to `http://localhost:3000`.
+
+Launch the entire stack using systemctl start observability.
+
+Step 1: Add Necessary Go Dependencies
+First, update the project's dependencies to include the standard OTLP exporter, which will send data to the OTel Collector. Remove any Google Cloud-specific exporters.
+
+Run the appropriate go get command to add the modules for the OpenTelemetry base SDK, trace, contrib http instrumentation, the OTLP gRPC trace exporter, and semantic conventions.
+
+Step 2: Create a Centralized Telemetry Package
+To keep the code organized, create a new package internal/telemetry. Inside this package, create the file otel.go.
+
+File: internal/telemetry/otel.go
+In this file, implement the initialization logic for OpenTelemetry.
+
+Create a function named InitOtel that accepts a context.Context and returns a shutdown function (func()) and an error.
+
+Inside this function, retrieve the OTel Collector endpoint from the OTEL_EXPORTER_OTLP_ENDPOINT environment variable. Default to localhost:4317 if it is not set.
+
+Initialize the OTLP gRPC trace exporter, configuring it to connect to the collector's endpoint. For a simple VPS setup, this connection can be insecure (no TLS).
+
+Define an OpenTelemetry Resource that identifies the service with the name ideal-tribble and includes other relevant attributes like service.version and deployment.environment from environment variables.
+
+Create and set the global TracerProvider using the OTLP exporter and the defined resource. Configure with 100% sampling rate (no sampling) to trace every request.
+
+Return a shutdown function that calls the TracerProvider.Shutdown method to ensure telemetry is flushed before the app exits.
+
+Also, create a helper function SlogWithTrace that accepts a context.Context. This function should extract the trace and span ID from the context and return a slog.Logger instance enriched with these fields for correlated logging. This function remains unchanged from the previous plan.
+
+Step 3: Integrate Telemetry into the Application Entrypoint (main.go)
+Modify your main application entrypoint, main.go, to use the new telemetry package. No changes are required here from the original plan, as the application code is decoupled from the backend.
+
+At the start of your main function, set up a structured JSON logger (slog) as the application default.
+
+Call your telemetry.InitOtel() function at the start of main, handling any potential error. Defer the returned shutdown function.
+
+After setting up your main HTTP router (e.g., mux), wrap it with the OpenTelemetry middleware (otelhttp.NewHandler) to enable tracing on all incoming requests.
+
+Use this final, wrapped handler when you call http.ListenAndServe.
+
+Inside one of your existing HTTP handlers (like /health), add an example of using your new telemetry.SlogWithTrace(r.Context()) helper to demonstrate correlated logging.
+
+Step 4: Update Environment and Verification Steps
 To complete the task, you must update the configuration and verify that the integration is working.
 
-### **1. Update Environment Variables**
+1. Update Environment Variables
+Add the following new variables to your .env.example file. The Google Cloud-specific variables are no longer needed.
 
-Add the following new variables to your **`.env.example`** file. These will be required for local development and production.
+OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
+APP_ENV=production
+APP_VERSION=v1.0.2
+GRAFANA_ADMIN_PASSWORD=your-secure-password-here
 
--   `GCP_PROJECT_ID`
--   `APP_ENV`
--   `APP_VERSION`
+2. Update Production Secrets
+This step is no longer necessary as we are not connecting to a cloud provider's services that require authentication.
 
-### **2. Update Production Secrets**
-
-The secret `GCP_PROJECT_ID` must be added to Google Secret Manager, and the Cloud Run service must be configured to load it as an environment variable.
-
-### **3. Verification Plan**
-
+3. Verification Plan
 After deploying these changes, follow these steps to verify that everything is working:
 
--   **Trigger an Endpoint:** Make a request to one of the application's endpoints (e.g., `/health`).
--   **Check Google Cloud Trace:**
-    -   Navigate to the Google Cloud Console -> Trace -> Trace list.
-    -   You should see a new trace for the request you just made, with the service name `ideal-tribble`.
-    -   Clicking on it should show the full span of the HTTP request.
--   **Check Google Cloud Logging:**
-    -   Navigate to the Logs Explorer.
-    -   You should see your `slog` JSON output. For any request that is traced, the log entry must contain `trace_id` and `span_id` fields, linking it directly to the trace you saw in the previous step.
+Trigger an Endpoint: Make a request to one of the application's endpoints (e.g., /health).
+
+Check Grafana for Traces:
+
+Navigate to your Grafana instance (https://wally-api.utiger.dk/grafana).
+
+Go to Explore and select the Tempo data source.
+
+You should be able to search for and find a new trace for the request you just made, tagged with the service name ideal-tribble.
+
+Check Grafana for Logs and Correlation:
+
+In the Explore view, switch the data source to Loki.
+
+You should see your slog JSON output. The log entry must contain trace_id and span_id fields.
+
+Verify that you can click the trace_id in the log entry to pivot directly to the corresponding trace in Tempo.
+
+## Detailed Implementation Specifications
+
+### Docker Compose Configuration
+- Use `/var/lib/observability/` for all persistent data
+- Set restart policies to `unless-stopped` for all services
+- Configure internal docker network `observability` 
+- Only Grafana container exposes ports (3000 internal only)
+
+### Systemd Service Configuration
+Create `/etc/systemd/system/observability.service`:
+- Runs docker-compose up/down
+- Starts before ideal-tribble.service (ordering only, no dependency)
+- Independent restart behavior
+- Includes ExecStop for graceful shutdown
+
+### Nginx Configuration Updates
+Add to existing `/etc/nginx/sites-available/ideal-tribble`:
+```
+location /grafana/ {
+    proxy_pass http://localhost:3000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+### Resource Monitoring
+- Total observability stack memory: ~1.2GB of 4GB available
+- Expected disk usage: <1GB for 7-day retention
+- No CPU limits needed for low-traffic application
+
+### Security Configuration
+- Grafana admin password via GRAFANA_ADMIN_PASSWORD env var
+- No additional authentication initially (handled by nginx SSL)
+- All services on internal docker network only
+- No additional firewall rules needed (everything via nginx)

@@ -9,8 +9,7 @@ type Config struct {
 	TenantID      string
 	Turso         TursoConfig
 	//Inngest        InngestConfig
-	ProjectID string
-	Ngrok     NgrokConfig
+	Ngrok NgrokConfig
 }
 type SlackConfig struct {
 	Token         string

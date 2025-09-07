@@ -38,11 +38,6 @@ TENANT_ID=your-tenant-id-here
 # Server Configuration
 PORT=8080
 
-# Ngrok (optional for development)
-NGROK_AUTH_TOKEN=
-
-# GCP Configuration (will be removed)
-PROJECT_ID=
 EOF
 
 # Set secure permissions (only app user can read)

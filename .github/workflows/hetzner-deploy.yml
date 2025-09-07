@@ -96,31 +96,11 @@ jobs:
           scp -o StrictHostKeyChecking=no -r scripts/ root@$SERVER_IP:/opt/ideal-tribble/
           scp -o StrictHostKeyChecking=no -r migrations/ root@$SERVER_IP:/opt/ideal-tribble/
           
-          # Deploy and restart service
+          # Deploy and restart service using centralized script
           ssh -o StrictHostKeyChecking=no root@$SERVER_IP << 'EOF'
             set -e
             cd /opt/ideal-tribble
-            
-            # Set permissions
-            chown -R tribble:tribble /opt/ideal-tribble
-            chmod +x ideal-tribble scripts/*.sh
-            
-            # Run database migrations if needed
-            sudo -u tribble ./ideal-tribble -migrate 2>/dev/null || true
-            
-            # Restart service
-            systemctl daemon-reload
-            systemctl restart ideal-tribble
-            
-            # Verify service is running
-            sleep 5
-            if systemctl is-active --quiet ideal-tribble; then
-              echo "✅ Service restarted successfully"
-            else
-              echo "❌ Service failed to start"
-              journalctl -u ideal-tribble --no-pager -n 20
-              exit 1
-            fi
+            ./scripts/deploy-server-setup.sh
           EOF
 
       - name: Health Check
@@ -139,16 +119,4 @@ jobs:
             # Still try to get some info
             ssh -o StrictHostKeyChecking=no root@$SERVER_IP "systemctl status ideal-tribble --no-pager || true"
             exit 1
-          fi
-          
-      - name: Test Slack Endpoints
-        run: |
-          SERVER_IP="${{ secrets.SERVER_IP }}"
-          echo "Testing key endpoints..."
-          
-          # Test metrics endpoint  
-          if curl -sf "http://$SERVER_IP:8080/metrics" > /dev/null; then
-            echo "✅ Metrics endpoint responding"
-          else
-            echo "⚠️ Metrics endpoint not responding"
           fi
