@@ -38,6 +38,14 @@ TENANT_ID=your-tenant-id-here
 # Server Configuration
 PORT=8080
 
+# OpenTelemetry Configuration
+OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
+APP_ENV=production
+APP_VERSION=v1.0.2
+
+# Observability Backend Configuration
+GRAFANA_ADMIN_PASSWORD=your-secure-grafana-password-here
+
 EOF
 
 # Set secure permissions (only app user can read)
@@ -47,6 +55,9 @@ sudo chmod 600 "$ENV_FILE"
 echo "Environment file created at $ENV_FILE"
 echo "Please edit this file with your actual credentials:"
 echo "  sudo nano $ENV_FILE"
+echo ""
+echo "After editing, validate your configuration:"
+echo "  ./scripts/validate-env.sh $ENV_FILE"
 echo ""
 echo "Security notes:"
 echo "  - File is owned by $APP_USER user"
