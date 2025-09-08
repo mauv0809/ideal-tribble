@@ -1,0 +1,33 @@
+[Unit]
+Description=Observability Stack (Grafana, Tempo, Loki, OpenTelemetry Collector)
+Documentation=https://grafana.com/
+After=docker.service
+Requires=docker.service
+Before=ideal-tribble.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/ideal-tribble/observability
+Environment=GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+EnvironmentFile=-/opt/ideal-tribble/.env
+
+# Create necessary directories
+ExecStartPre=/bin/bash -c 'mkdir -p /var/lib/observability/{grafana,tempo,loki}'
+ExecStartPre=/bin/bash -c 'chown -R 472:472 /var/lib/observability/grafana'
+ExecStartPre=/bin/bash -c 'chown -R 10001:10001 /var/lib/observability/tempo'
+ExecStartPre=/bin/bash -c 'chown -R 10001:10001 /var/lib/observability/loki'
+
+# Start the observability stack
+ExecStart=/usr/bin/docker-compose up -d
+
+# Stop the observability stack
+ExecStop=/usr/bin/docker-compose down
+
+# Restart policy
+Restart=no
+TimeoutStartSec=300
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

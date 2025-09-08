@@ -1,0 +1,58 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Collect systemd journal logs
+  - job_name: journal
+    journal:
+      max_age: 12h
+      labels:
+        job: systemd-journal
+        host: hetzner-vps
+    relabel_configs:
+      # Extract systemd unit name
+      - source_labels: ['__journal__systemd_unit']
+        target_label: 'unit'
+      # Extract log level from priority
+      - source_labels: ['__journal_priority']
+        target_label: 'level'
+        regex: '([0-3])'
+        replacement: 'error'
+      - source_labels: ['__journal_priority']
+        target_label: 'level'
+        regex: '4'
+        replacement: 'warning'
+      - source_labels: ['__journal_priority']
+        target_label: 'level'
+        regex: '([5-6])'
+        replacement: 'info'
+      - source_labels: ['__journal_priority']
+        target_label: 'level'
+        regex: '7'
+        replacement: 'debug'
+    pipeline_stages:
+      # Parse JSON logs from ideal-tribble (since it uses JSON formatter)
+      - json:
+          expressions:
+            timestamp: time
+            level: level
+            message: msg
+            trace_id: trace_id
+            span_id: span_id
+      # Add timestamp if available
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+      # Extract trace information for correlation
+      - regex:
+          expression: 'trace_id=(?P<trace_id>\w+)'
+      - labels:
+          trace_id:
+          span_id:
