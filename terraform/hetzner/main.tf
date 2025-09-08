@@ -25,7 +25,7 @@ resource "hcloud_ssh_key" "default" {
 resource "hcloud_server" "tribble" {
   name        = var.server_name
   image       = "ubuntu-22.04"
-  server_type = "cpx11"  # 2 vCPU, 4GB RAM, €3.29/month
+  server_type = "cpx22"  # 2 vCPU, 4GB RAM, €3.29/month
   location    = "fsn1"   # Falkenstein, Germany (closest to Denmark)
 
   ssh_keys = [hcloud_ssh_key.default.id]
