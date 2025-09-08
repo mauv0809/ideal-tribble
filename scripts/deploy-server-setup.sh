@@ -26,6 +26,12 @@ if [ ! -f "/etc/systemd/system/ideal-tribble.service" ]; then
     ./scripts/install-systemd-service.sh
 fi
 
+# Setup observability stack
+if [ ! -f "/etc/systemd/system/observability.service" ]; then
+    echo "Setting up observability stack..."
+    ./scripts/setup-observability.sh
+fi
+
 # Setup cron jobs
 ./scripts/setup-cron.sh
 
@@ -37,6 +43,25 @@ fi
 
 # Run database migrations if needed
 sudo -u tribble ./ideal-tribble -migrate 2>/dev/null || true
+
+# Validate environment configuration before starting service
+echo "Validating environment configuration..."
+if [ -f "$APP_DIR/.env" ]; then
+    ./scripts/validate-env.sh "$APP_DIR/.env"
+    VALIDATION_EXIT_CODE=$?
+    if [ $VALIDATION_EXIT_CODE -eq 1 ]; then
+        echo "❌ Environment validation failed - missing required variables"
+        echo "Please edit $APP_DIR/.env and run this script again"
+        exit 1
+    elif [ $VALIDATION_EXIT_CODE -eq 2 ]; then
+        echo "⚠️ Environment validation warning - some variables have placeholder values"
+        echo "Service will start but may not function correctly until these are updated"
+    else
+        echo "✅ Environment validation passed"
+    fi
+else
+    echo "⚠️ No .env file found - service may fail to start"
+fi
 
 # Restart the service
 systemctl daemon-reload
