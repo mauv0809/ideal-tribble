@@ -20,6 +20,8 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
 	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
+	"github.com/mauv0809/ideal-tribble/internal/telemetry"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.ngrok.com/ngrok/v2"
 )
 
@@ -27,6 +29,15 @@ func main() {
 	// Start profiling timer
 	startTime := time.Now()
 	log.SetFormatter(log.JSONFormatter)
+	
+	// Initialize OpenTelemetry
+	otelShutdown, err := telemetry.InitOtel(context.Background())
+	if err != nil {
+		log.Error("Failed to initialize OpenTelemetry", "error", err)
+		os.Exit(1)
+	}
+	defer otelShutdown()
+	
 	cfg := config.Load()
 	db, dbTeardown, err := database.InitDB(cfg.DBName, cfg.Turso.PrimaryURL, cfg.Turso.AuthToken, cfg.MigrationsDir)
 	dbInitDuration := time.Since(startTime)
@@ -129,9 +140,12 @@ func main() {
 	}()
 
 	// --- Graceful shutdown setup ---
+	// Wrap the server handler with OpenTelemetry middleware
+	wrappedHandler := otelhttp.NewHandler(s, "ideal-tribble")
+	
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: s,
+		Handler: wrappedHandler,
 	}
 
 	// Channel to listen for errors coming from the server
@@ -159,7 +173,7 @@ func main() {
 		go func() {
 			// Create a separate server instance for ngrok to avoid port conflicts
 			ngrokSrv := &http.Server{
-				Handler: s,
+				Handler: wrappedHandler,
 			}
 			if err := ngrokSrv.Serve(listener); err != nil && err != http.ErrServerClosed {
 				log.Error("Ngrok server error", "error", err)

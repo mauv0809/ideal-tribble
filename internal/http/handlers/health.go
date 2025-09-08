@@ -6,10 +6,15 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
+	"github.com/mauv0809/ideal-tribble/internal/telemetry"
 )
 
 func HealthCheckHandler(store club.ClubStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Use LogWithTrace to demonstrate correlated logging with existing charm log
+		logger := telemetry.LogWithTrace(r.Context())
+		logger.Info("Health check request received with trace correlation")
+		
 		log.Debug("Received health check request")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "OK!")
