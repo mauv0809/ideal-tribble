@@ -180,6 +180,9 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
+          
+          # Ensure tribble user has SSH access by copying authorized_keys
+          ssh -o StrictHostKeyChecking=no root@$SERVER_IP "mkdir -p /home/tribble/.ssh && cp /root/.ssh/authorized_keys /home/tribble/.ssh/ && chown -R tribble:tribble /home/tribble/.ssh && chmod 700 /home/tribble/.ssh && chmod 600 /home/tribble/.ssh/authorized_keys"
 
       - name: Create Environment File
         run: |
@@ -222,12 +225,12 @@ jobs:
           
           chmod +x ${{ env.BINARY_NAME }}
           
-          # Copy files to server
-          scp -o StrictHostKeyChecking=no ${{ env.BINARY_NAME }} root@$SERVER_IP:/opt/ideal-tribble/
-          scp -o StrictHostKeyChecking=no .env root@$SERVER_IP:/opt/ideal-tribble/
-          scp -o StrictHostKeyChecking=no -r scripts/ root@$SERVER_IP:/opt/ideal-tribble/ || true
-          scp -o StrictHostKeyChecking=no -r migrations/ root@$SERVER_IP:/opt/ideal-tribble/ || true
-          scp -o StrictHostKeyChecking=no -r observability/ root@$SERVER_IP:/opt/ideal-tribble/ || true
+          # Copy files to server as tribble user
+          scp -o StrictHostKeyChecking=no ${{ env.BINARY_NAME }} tribble@$SERVER_IP:/opt/ideal-tribble/
+          scp -o StrictHostKeyChecking=no .env tribble@$SERVER_IP:/opt/ideal-tribble/
+          scp -o StrictHostKeyChecking=no -r scripts/ tribble@$SERVER_IP:/opt/ideal-tribble/ || true
+          scp -o StrictHostKeyChecking=no -r migrations/ tribble@$SERVER_IP:/opt/ideal-tribble/ || true
+          scp -o StrictHostKeyChecking=no -r observability/ tribble@$SERVER_IP:/opt/ideal-tribble/ || true
           
           # Fix script permissions and run deployment script
           ssh -o StrictHostKeyChecking=no root@$SERVER_IP << 'EOF'
