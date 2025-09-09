@@ -49,6 +49,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Run Tests
         run: go test -v -race ./...
@@ -95,13 +96,21 @@ jobs:
           SERVER_IP=${{ steps.tf-output.outputs.server_ip }}
           echo "Waiting for server $SERVER_IP to be ready..."
           
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa_temp
+          chmod 600 ~/.ssh/id_rsa_temp
+          
           # Wait up to 5 minutes for SSH to be available
           timeout 300 bash -c "
-            until ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i <(echo '${{ secrets.SSH_PRIVATE_KEY }}' | base64 -d) root@$SERVER_IP 'echo SSH_READY'; do
+            until ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa_temp root@$SERVER_IP 'echo SSH_READY'; do
               echo 'Waiting for SSH...'
               sleep 10
             done
           "
+          
+          # Clean up temporary key
+          rm -f ~/.ssh/id_rsa_temp
 
   # Build application
   build:
@@ -118,6 +127,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Build Linux Binary
         run: |
