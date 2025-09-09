@@ -238,6 +238,9 @@ jobs:
           fi
           chmod +x ${{ env.BINARY_NAME }}
           
+          # Stop service before copying new binary to avoid file-in-use error
+          ssh -o StrictHostKeyChecking=no root@$SERVER_IP "systemctl stop ideal-tribble || true"
+          
           # Copy files to server as tribble user
           scp -o StrictHostKeyChecking=no ${{ env.BINARY_NAME }} tribble@$SERVER_IP:/opt/ideal-tribble/
           scp -o StrictHostKeyChecking=no .env tribble@$SERVER_IP:/opt/ideal-tribble/
