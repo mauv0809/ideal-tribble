@@ -90,23 +90,41 @@ func main() {
 	
 	// Register job handlers
 	worker.RegisterHandler(jobqueue.JobTypeAssignBallBoy, func(payload json.RawMessage) error {
-		// TODO: Implement ball boy assignment logic
+		var match playtomic.PadelMatch
+		if err := json.Unmarshal(payload, &match); err != nil {
+			return err
+		}
+		processor.AssignBallBringer(&match, false)
 		return nil
 	})
 	worker.RegisterHandler(jobqueue.JobTypeNotifyBooking, func(payload json.RawMessage) error {
-		// TODO: Implement booking notification logic
-		return nil
+		var match playtomic.PadelMatch
+		if err := json.Unmarshal(payload, &match); err != nil {
+			return err
+		}
+		return processor.NotifyBooking(&match, false)
 	})
 	worker.RegisterHandler(jobqueue.JobTypeNotifyResult, func(payload json.RawMessage) error {
-		// TODO: Implement result notification logic
-		return nil
+		var match playtomic.PadelMatch
+		if err := json.Unmarshal(payload, &match); err != nil {
+			return err
+		}
+		return processor.NotifyResult(&match, false)
 	})
 	worker.RegisterHandler(jobqueue.JobTypeUpdatePlayerStats, func(payload json.RawMessage) error {
-		// TODO: Implement player stats update logic
+		var match playtomic.PadelMatch
+		if err := json.Unmarshal(payload, &match); err != nil {
+			return err
+		}
+		processor.UpdatePlayerStats(&match, false)
 		return nil
 	})
 	worker.RegisterHandler(jobqueue.JobTypeUpdateWeeklyStats, func(payload json.RawMessage) error {
-		// TODO: Implement weekly stats update logic
+		var match playtomic.PadelMatch
+		if err := json.Unmarshal(payload, &match); err != nil {
+			return err
+		}
+		processor.UpdateWeeklyStats(&match, false)
 		return nil
 	})
 
