@@ -53,60 +53,12 @@ jobs:
       - name: Run Tests
         run: go test -v -race ./...
 
-  # Plan infrastructure changes
-  terraform-plan:
-    name: Terraform Plan
-    runs-on: ubuntu-latest
-    needs: test
-    defaults:
-      run:
-        working-directory: terraform/hetzner
-    outputs:
-      tfplanExitCode: ${{ steps.tf-plan.outputs.exitcode }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Plan
-        id: tf-plan
-        run: |
-          export TF_VAR_hcloud_token="${{ secrets.HCLOUD_TOKEN }}"
-          export TF_VAR_ssh_public_key="${{ secrets.SSH_PUBLIC_KEY }}"
-          export exitcode=0
-          terraform plan -detailed-exitcode -no-color -out tfplan || export exitcode=$?
-          echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
-          
-          if [ $exitcode -eq 1 ]; then
-            echo Terraform Plan Failed
-            exit 1
-          elif [ $exitcode -eq 0 ]; then
-            echo No changes detected
-          elif [ $exitcode -eq 2 ]; then
-            echo Changes detected
-          fi
-
-      - name: Upload Terraform Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan
-          path: terraform/hetzner/tfplan
-          retention-days: 1
-
-  # Apply infrastructure changes (always run to get server IP)
+  # Deploy infrastructure (runs in parallel with build)
   terraform-apply:
     name: Deploy Infrastructure
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    needs: [terraform-plan]
+    needs: test
     defaults:
       run:
         working-directory: terraform/hetzner
@@ -122,12 +74,6 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
-      - name: Download Terraform Plan
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan
-          path: terraform/hetzner/
-
       - name: Terraform Init
         run: terraform init
 
@@ -135,7 +81,7 @@ jobs:
         run: |
           export TF_VAR_hcloud_token="${{ secrets.HCLOUD_TOKEN }}"
           export TF_VAR_ssh_public_key="${{ secrets.SSH_PUBLIC_KEY }}"
-          terraform apply -auto-approve tfplan
+          terraform apply -auto-approve
 
       - name: Get Server IP
         id: tf-output
@@ -185,13 +131,12 @@ jobs:
           path: ${{ env.BINARY_NAME }}
           retention-days: 1
 
-  # Deploy application (runs regardless of infrastructure changes)
+  # Deploy application (waits for both build and infrastructure)
   deploy-application:
     name: Deploy Application
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: [build, terraform-apply]
-    # If infrastructure was deployed, wait for it. Otherwise proceed with existing server.
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
