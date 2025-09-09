@@ -265,51 +265,11 @@ jobs:
           scp -o StrictHostKeyChecking=no -r migrations/ root@$SERVER_IP:/opt/ideal-tribble/ || true
           scp -o StrictHostKeyChecking=no -r observability/ root@$SERVER_IP:/opt/ideal-tribble/ || true
           
-          # Deploy and restart service
+          # Use centralized deployment script
           ssh -o StrictHostKeyChecking=no root@$SERVER_IP << 'EOF'
             set -e
             cd /opt/ideal-tribble
-            
-            # Stop existing service if running
-            systemctl stop ideal-tribble || true
-            
-            # Set proper permissions
-            chmod +x ideal-tribble
-            chmod 600 .env
-            
-            # Validate environment on server
-            chmod +x scripts/validate-env.sh
-            ./scripts/validate-env.sh
-            
-            # Create systemd service if it doesn't exist
-            if [ ! -f /etc/systemd/system/ideal-tribble.service ]; then
-              cat > /etc/systemd/system/ideal-tribble.service << 'SERVICE'
-          [Unit]
-          Description=Ideal Tribble Backend Service
-          After=network.target
-
-          [Service]
-          Type=simple
-          User=root
-          WorkingDirectory=/opt/ideal-tribble
-          ExecStart=/opt/ideal-tribble/ideal-tribble
-          Restart=always
-          RestartSec=5
-          Environment=PATH=/usr/local/bin:/usr/bin:/bin
-          EnvironmentFile=/opt/ideal-tribble/.env
-
-          [Install]
-          WantedBy=multi-user.target
-          SERVICE
-              
-              systemctl daemon-reload
-              systemctl enable ideal-tribble
-            fi
-            
-            # Start the service
-            systemctl start ideal-tribble
-            sleep 5
-            systemctl status ideal-tribble --no-pager
+            ./scripts/deploy-server-setup.sh
           EOF
 
       - name: Health Check

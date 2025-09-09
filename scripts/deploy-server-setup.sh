@@ -17,14 +17,12 @@ chown -R $APP_USER:$APP_USER $APP_DIR
 chmod +x ideal-tribble scripts/*.sh
 echo "✅ Permissions set"
 
-# Run setup scripts if not already done
-if [ ! -f "$APP_DIR/.env" ]; then
-    echo "📝 Running initial secrets setup..."
-    ./scripts/setup-secrets.sh
-    echo "✅ Secrets template created"
-    echo "Please edit $APP_DIR/.env with your actual credentials"
+# Environment file should be provided by deployment process
+if [ -f "$APP_DIR/.env" ]; then
+    echo "✅ .env file found"
 else
-    echo "✅ .env file already exists"
+    echo "❌ .env file missing - should be provided by deployment"
+    exit 1
 fi
 
 if [ ! -f "/etc/systemd/system/ideal-tribble.service" ]; then
