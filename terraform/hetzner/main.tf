@@ -7,8 +7,12 @@ terraform {
   }
   required_version = ">= 1.0"
   
-  # Spacelift manages the backend automatically
-  # No backend configuration needed
+  cloud {
+    organization = "ideal-tribble"
+    workspaces {
+      name = "hetzner-infrastructure"
+    }
+  }
 }
 
 provider "hcloud" {

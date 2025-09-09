@@ -1,0 +1,329 @@
+name: Unified Infrastructure & Application Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  # ------------------------------------------------------------------------------------
+  # REQUIRED GITHUB SECRETS
+  # ------------------------------------------------------------------------------------
+  # Infrastructure:
+  # TF_API_TOKEN: Terraform Cloud API token
+  # HCLOUD_TOKEN: Hetzner Cloud API token  
+  # SSH_PRIVATE_KEY: Private SSH key for server access
+  # SSH_PUBLIC_KEY: Public SSH key for server access
+  # 
+  # Application Environment Variables (Secrets):
+  # DB_NAME: Database name
+  # TURSO_PRIMARY_URL: Primary database URL (libsql://...)
+  # TURSO_AUTH_TOKEN: Database auth token
+  # SLACK_BOT_TOKEN: Slack bot token (xoxb-...)
+  # SLACK_CHANNEL_ID: Slack channel ID
+  # SLACK_SIGNING_SECRET: Slack signing secret
+  # TENANT_ID: Playtomic tenant ID
+  # OTEL_EXPORTER_OTLP_ENDPOINT: OpenTelemetry endpoint (e.g., localhost:4317)
+  # GRAFANA_ADMIN_PASSWORD: Grafana admin password
+  # ------------------------------------------------------------------------------------
+  
+  # Application Configuration (easily changeable)
+  APP_ENV: "production"
+  APP_VERSION: ${{ github.sha }}
+  
+  # Build Configuration
+  GO_VERSION: "1.21"
+  BINARY_NAME: "ideal-tribble"
+  TF_VERSION: "1.6.0"
+
+jobs:
+  # Run tests first - fast feedback
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run Tests
+        run: go test -v -race ./...
+
+  # Plan infrastructure changes
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: test
+    defaults:
+      run:
+        working-directory: terraform/hetzner
+    outputs:
+      tfplanExitCode: ${{ steps.tf-plan.outputs.exitcode }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: tf-plan
+        run: |
+          export TF_VAR_hcloud_token="${{ secrets.HCLOUD_TOKEN }}"
+          export TF_VAR_ssh_public_key="${{ secrets.SSH_PUBLIC_KEY }}"
+          export exitcode=0
+          terraform plan -detailed-exitcode -no-color -out tfplan || export exitcode=$?
+          echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
+          
+          if [ $exitcode -eq 1 ]; then
+            echo Terraform Plan Failed
+            exit 1
+          elif [ $exitcode -eq 0 ]; then
+            echo No changes detected
+          elif [ $exitcode -eq 2 ]; then
+            echo Changes detected
+          fi
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/hetzner/tfplan
+          retention-days: 1
+
+  # Apply infrastructure changes (only on main branch with changes)
+  terraform-apply:
+    name: Deploy Infrastructure
+    if: github.ref == 'refs/heads/main' && needs.terraform-plan.outputs.tfplanExitCode == '2'
+    runs-on: ubuntu-latest
+    needs: [terraform-plan]
+    defaults:
+      run:
+        working-directory: terraform/hetzner
+    outputs:
+      server_ip: ${{ steps.tf-output.outputs.server_ip }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/hetzner/
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: |
+          export TF_VAR_hcloud_token="${{ secrets.HCLOUD_TOKEN }}"
+          export TF_VAR_ssh_public_key="${{ secrets.SSH_PUBLIC_KEY }}"
+          terraform apply -auto-approve tfplan
+
+      - name: Get Server IP
+        id: tf-output
+        run: |
+          SERVER_IP=$(terraform output -raw server_ip)
+          echo "server_ip=$SERVER_IP" >> $GITHUB_OUTPUT
+          echo "Server IP: $SERVER_IP"
+
+      - name: Wait for Server to be Ready
+        run: |
+          SERVER_IP=${{ steps.tf-output.outputs.server_ip }}
+          echo "Waiting for server $SERVER_IP to be ready..."
+          
+          # Wait up to 5 minutes for SSH to be available
+          timeout 300 bash -c "
+            until ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i <(echo '${{ secrets.SSH_PRIVATE_KEY }}' | base64 -d) root@$SERVER_IP 'echo SSH_READY'; do
+              echo 'Waiting for SSH...'
+              sleep 10
+            done
+          "
+
+  # Build application
+  build:
+    name: Build Application
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Linux Binary
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ${{ env.BINARY_NAME }} .
+          chmod +x ${{ env.BINARY_NAME }}
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}
+          path: ${{ env.BINARY_NAME }}
+          retention-days: 1
+
+  # Deploy application (runs regardless of infrastructure changes)
+  deploy-application:
+    name: Deploy Application
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [build, terraform-plan]
+    # If infrastructure was deployed, wait for it. Otherwise proceed with existing server.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}
+
+      - name: Get Server IP
+        id: server-ip
+        run: |
+          if [ "${{ needs.terraform-apply.result }}" != "skipped" ]; then
+            # Use IP from terraform output
+            echo "server_ip=${{ needs.terraform-apply.outputs.server_ip }}" >> $GITHUB_OUTPUT
+          else
+            # Use existing server IP from secrets (fallback)
+            echo "server_ip=${{ secrets.SERVER_IP }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ steps.server-ip.outputs.server_ip }} >> ~/.ssh/known_hosts
+
+      - name: Create Environment File
+        run: |
+          cat > .env << EOF
+          # Database
+          DB_NAME=${{ secrets.DB_NAME }}
+          TURSO_PRIMARY_URL=${{ secrets.TURSO_PRIMARY_URL }}
+          TURSO_AUTH_TOKEN=${{ secrets.TURSO_AUTH_TOKEN }}
+          
+          # Slack
+          SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID=${{ secrets.SLACK_CHANNEL_ID }}
+          SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }}
+          
+          # Playtomic
+          TENANT_ID=${{ secrets.TENANT_ID }}
+          
+          # Server
+          PORT=8080
+          
+          # OpenTelemetry
+          OTEL_EXPORTER_OTLP_ENDPOINT=${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          APP_ENV=${{ env.APP_ENV }}
+          APP_VERSION=${{ env.APP_VERSION }}
+          
+          # Observability
+          GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          EOF
+
+      - name: Validate Environment File
+        run: |
+          echo "Validating environment variables..."
+          chmod +x scripts/validate-env.sh
+          ./scripts/validate-env.sh .env
+
+      - name: Deploy to Server
+        run: |
+          SERVER_IP="${{ steps.server-ip.outputs.server_ip }}"
+          echo "Deploying to server: $SERVER_IP"
+          
+          chmod +x ${{ env.BINARY_NAME }}
+          
+          # Copy files to server
+          scp -o StrictHostKeyChecking=no ${{ env.BINARY_NAME }} root@$SERVER_IP:/opt/ideal-tribble/
+          scp -o StrictHostKeyChecking=no .env root@$SERVER_IP:/opt/ideal-tribble/
+          scp -o StrictHostKeyChecking=no -r scripts/ root@$SERVER_IP:/opt/ideal-tribble/ || true
+          scp -o StrictHostKeyChecking=no -r migrations/ root@$SERVER_IP:/opt/ideal-tribble/ || true
+          scp -o StrictHostKeyChecking=no -r observability/ root@$SERVER_IP:/opt/ideal-tribble/ || true
+          
+          # Deploy and restart service
+          ssh -o StrictHostKeyChecking=no root@$SERVER_IP << 'EOF'
+            set -e
+            cd /opt/ideal-tribble
+            
+            # Stop existing service if running
+            systemctl stop ideal-tribble || true
+            
+            # Set proper permissions
+            chmod +x ideal-tribble
+            chmod 600 .env
+            
+            # Validate environment on server
+            chmod +x scripts/validate-env.sh
+            ./scripts/validate-env.sh
+            
+            # Create systemd service if it doesn't exist
+            if [ ! -f /etc/systemd/system/ideal-tribble.service ]; then
+              cat > /etc/systemd/system/ideal-tribble.service << 'SERVICE'
+          [Unit]
+          Description=Ideal Tribble Backend Service
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=/opt/ideal-tribble
+          ExecStart=/opt/ideal-tribble/ideal-tribble
+          Restart=always
+          RestartSec=5
+          Environment=PATH=/usr/local/bin:/usr/bin:/bin
+          EnvironmentFile=/opt/ideal-tribble/.env
+
+          [Install]
+          WantedBy=multi-user.target
+          SERVICE
+              
+              systemctl daemon-reload
+              systemctl enable ideal-tribble
+            fi
+            
+            # Start the service
+            systemctl start ideal-tribble
+            sleep 5
+            systemctl status ideal-tribble --no-pager
+          EOF
+
+      - name: Health Check
+        run: |
+          SERVER_IP="${{ steps.server-ip.outputs.server_ip }}"
+          
+          echo "Waiting for service to start..."
+          sleep 15
+          
+          # Check health endpoint
+          if curl -sf "http://$SERVER_IP:8080/health" > /dev/null; then
+            echo "✅ Health check passed - Application is running"
+          else
+            echo "❌ Health check failed - Application may not be responding"
+            ssh -o StrictHostKeyChecking=no root@$SERVER_IP "systemctl status ideal-tribble --no-pager || true"
+            exit 1
+          fi
