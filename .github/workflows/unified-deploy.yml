@@ -223,6 +223,12 @@ jobs:
           SERVER_IP="${{ steps.server-ip.outputs.server_ip }}"
           echo "Deploying to server: $SERVER_IP"
           
+          # Verify binary exists and make it executable
+          if [ ! -f "${{ env.BINARY_NAME }}" ]; then
+            echo "❌ Binary file ${{ env.BINARY_NAME }} not found!"
+            ls -la
+            exit 1
+          fi
           chmod +x ${{ env.BINARY_NAME }}
           
           # Copy files to server as tribble user
