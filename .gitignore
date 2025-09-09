@@ -41,6 +41,10 @@ go.work.sum
 *.so
 *.dylib
 
+# Project-specific binaries
+ideal-tribble
+tribble-cli
+
 # Air log
 air.log
 /tmp
