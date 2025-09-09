@@ -223,10 +223,11 @@ jobs:
           scp -o StrictHostKeyChecking=no -r migrations/ root@$SERVER_IP:/opt/ideal-tribble/ || true
           scp -o StrictHostKeyChecking=no -r observability/ root@$SERVER_IP:/opt/ideal-tribble/ || true
           
-          # Use centralized deployment script
+          # Fix script permissions and run deployment script
           ssh -o StrictHostKeyChecking=no root@$SERVER_IP << 'EOF'
             set -e
             cd /opt/ideal-tribble
+            chmod +x scripts/*.sh
             ./scripts/deploy-server-setup.sh
           EOF
 
