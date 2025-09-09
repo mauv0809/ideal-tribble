@@ -101,10 +101,10 @@ jobs:
           path: terraform/hetzner/tfplan
           retention-days: 1
 
-  # Apply infrastructure changes (only on main branch with changes)
+  # Apply infrastructure changes (always run to get server IP)
   terraform-apply:
     name: Deploy Infrastructure
-    if: github.ref == 'refs/heads/main' && needs.terraform-plan.outputs.tfplanExitCode == '2'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: [terraform-plan]
     defaults:
@@ -190,7 +190,7 @@ jobs:
     name: Deploy Application
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    needs: [build, terraform-plan]
+    needs: [build, terraform-apply]
     # If infrastructure was deployed, wait for it. Otherwise proceed with existing server.
     steps:
       - name: Checkout code
@@ -204,20 +204,21 @@ jobs:
       - name: Get Server IP
         id: server-ip
         run: |
-          if [ "${{ needs.terraform-apply.result }}" != "skipped" ]; then
-            # Use IP from terraform output
-            echo "server_ip=${{ needs.terraform-apply.outputs.server_ip }}" >> $GITHUB_OUTPUT
-          else
-            # Use existing server IP from secrets (fallback)
-            echo "server_ip=${{ secrets.SERVER_IP }}" >> $GITHUB_OUTPUT
-          fi
+          # Use IP from terraform output (terraform-apply always runs now)
+          echo "server_ip=${{ needs.terraform-apply.outputs.server_ip }}" >> $GITHUB_OUTPUT
 
       - name: Setup SSH
         run: |
+          SERVER_IP="${{ steps.server-ip.outputs.server_ip }}"
+          if [ -z "$SERVER_IP" ]; then
+            echo "Error: No server IP found"
+            exit 1
+          fi
+          
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ steps.server-ip.outputs.server_ip }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
 
       - name: Create Environment File
         run: |
