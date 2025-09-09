@@ -285,6 +285,53 @@ func TestUpdatePlayerStats(t *testing.T) {
 		assert.Equal(t, 13, stats.GamesLost)
 		assert.InDelta(t, 0.0, stats.WinPercentage, 0.01)
 	})
+
+	t.Run("correctly ignores unplayed sets (0-0 scores)", func(t *testing.T) {
+		store.AddPlayer("p5", "Player Five", 1.0)
+		store.AddPlayer("p6", "Player Six", 1.0)
+		store.AddPlayer("p7", "Player Seven", 1.0)
+		store.AddPlayer("p8", "Player Eight", 1.0)
+
+		// Match with 6-1, 6-1 (2 sets played) and 0-0 (unplayed set)
+		match := &playtomic.PadelMatch{
+			MatchID: "match_incomplete",
+			OwnerID: "p5",
+			Teams: []playtomic.Team{
+				{ID: "t3", TeamResult: "WON", Players: []playtomic.Player{{UserID: "p5", Name: "Player Five"}, {UserID: "p6", Name: "Player Six"}}},
+				{ID: "t4", TeamResult: "LOST", Players: []playtomic.Player{{UserID: "p7", Name: "Player Seven"}, {UserID: "p8", Name: "Player Eight"}}},
+			},
+			MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
+			Results: []playtomic.SetResult{
+				{Name: "Set-1", Scores: map[string]int{"t3": 6, "t4": 1}}, // Played
+				{Name: "Set-2", Scores: map[string]int{"t3": 6, "t4": 1}}, // Played
+				{Name: "Set-3", Scores: map[string]int{"t3": 0, "t4": 0}}, // Unplayed (should be ignored)
+			},
+		}
+
+		store.UpdatePlayerStats(match)
+
+		// Check winner stats - should show 2 sets won, not 3
+		stats, err := store.GetPlayerStatsByName("Player Five", playtomic.MatchTypeEnumDoubles)
+		require.NoError(t, err)
+		assert.Equal(t, 1, stats.MatchesPlayed)
+		assert.Equal(t, 1, stats.MatchesWon)
+		assert.Equal(t, 0, stats.MatchesLost)
+		assert.Equal(t, 2, stats.SetsWon, "Should count only 2 played sets, not the unplayed 0-0 set")
+		assert.Equal(t, 0, stats.SetsLost)
+		assert.Equal(t, 12, stats.GamesWon) // 6+6=12 games won
+		assert.Equal(t, 2, stats.GamesLost)  // 1+1=2 games lost
+
+		// Check loser stats - should show 2 sets lost, not 3
+		stats, err = store.GetPlayerStatsByName("Player Seven", playtomic.MatchTypeEnumDoubles)
+		require.NoError(t, err)
+		assert.Equal(t, 1, stats.MatchesPlayed)
+		assert.Equal(t, 0, stats.MatchesWon)
+		assert.Equal(t, 1, stats.MatchesLost)
+		assert.Equal(t, 0, stats.SetsWon)
+		assert.Equal(t, 2, stats.SetsLost, "Should count only 2 played sets, not the unplayed 0-0 set")
+		assert.Equal(t, 2, stats.GamesWon)  // 1+1=2 games won
+		assert.Equal(t, 12, stats.GamesLost) // 6+6=12 games lost
+	})
 }
 
 func TestUpdateNotificationTimestamp(t *testing.T) {

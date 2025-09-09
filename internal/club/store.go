@@ -438,6 +438,11 @@ func aggregateMatchStats(match *playtomic.PadelMatch) map[string]map[string]int 
 			continue // Skip this set
 		}
 
+		// Skip unplayed sets (both scores are 0)
+		if set.Scores[teamIDs[0]] == 0 && set.Scores[teamIDs[1]] == 0 {
+			continue // This set was not played
+		}
+
 		var setWinnerID, setLoserID string
 		var maxScore, minScore int
 
