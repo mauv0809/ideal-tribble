@@ -263,8 +263,8 @@ jobs:
           echo "Waiting for service to start..."
           sleep 15
           
-          # Check health endpoint
-          if curl -sf "http://$SERVER_IP:8080/health" > /dev/null; then
+          # Check health endpoint through nginx proxy
+          if curl -sf "https://wally-api.utiger.dk/health" > /dev/null; then
             echo "✅ Health check passed - Application is running"
           else
             echo "❌ Health check failed - Application may not be responding"
