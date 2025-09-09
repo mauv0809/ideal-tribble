@@ -58,8 +58,15 @@ else
     echo "✅ SSL auto-renewal already configured"
 fi
 
-# Skip nginx security update - already handled by main deploy script
-echo "✅ Nginx configuration managed by deployment script"
+# Setup nginx configuration and SSL
+if [ ! -f "/etc/nginx/sites-enabled/ideal-tribble" ]; then
+    echo "🌐 Setting up nginx configuration..."
+    ./scripts/setup-nginx.sh
+    echo "✅ Nginx configuration completed"
+else
+    echo "✅ Nginx configuration already enabled, checking for updates..."
+    ./scripts/setup-nginx.sh
+fi
 
 # Note: Database migrations run automatically when the application starts
 
