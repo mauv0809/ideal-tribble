@@ -12,37 +12,58 @@ echo "🚀 Starting server-side deployment setup..."
 cd $APP_DIR
 
 # Set ownership and permissions
+echo "Setting file ownership and permissions..."
 chown -R $APP_USER:$APP_USER $APP_DIR
 chmod +x ideal-tribble scripts/*.sh
+echo "✅ Permissions set"
 
 # Run setup scripts if not already done
 if [ ! -f "$APP_DIR/.env" ]; then
-    echo "Running initial setup..."
+    echo "📝 Running initial secrets setup..."
     ./scripts/setup-secrets.sh
+    echo "✅ Secrets template created"
     echo "Please edit $APP_DIR/.env with your actual credentials"
+else
+    echo "✅ .env file already exists"
 fi
 
 if [ ! -f "/etc/systemd/system/ideal-tribble.service" ]; then
+    echo "⚙️ Installing systemd service..."
     ./scripts/install-systemd-service.sh
+    echo "✅ Systemd service installed"
+else
+    echo "✅ Systemd service already installed"
 fi
 
 # Setup observability stack
 if [ ! -f "/etc/systemd/system/observability.service" ]; then
-    echo "Setting up observability stack..."
+    echo "📊 Setting up observability stack (this may take a few minutes)..."
     ./scripts/setup-observability.sh
+    echo "✅ Observability stack configured"
+else
+    echo "✅ Observability stack already configured"
 fi
 
-# Setup cron jobs
-./scripts/setup-cron.sh
+# Setup cron jobs (only if not already configured)
+if ! crontab -l 2>/dev/null | grep -q "ideal-tribble"; then
+    echo "⏰ Setting up cron jobs..."
+    ./scripts/setup-cron.sh
+else
+    echo "✅ Cron jobs already configured"
+fi
 
-# Setup SSL certificate auto-renewal
-./scripts/setup-ssl-renewal.sh
+# Setup SSL certificate auto-renewal (only if not configured)
+if ! systemctl list-timers | grep -q "certbot.timer"; then
+    echo "🔒 Setting up SSL auto-renewal..."
+    ./scripts/setup-ssl-renewal.sh
+else
+    echo "✅ SSL auto-renewal already configured"
+fi
 
-# Update nginx security configuration
-./scripts/update-nginx-security.sh
+# Skip nginx security update - already handled by main deploy script
+echo "✅ Nginx configuration managed by deployment script"
 
-# Run database migrations if needed
-sudo -u tribble ./ideal-tribble -migrate 2>/dev/null || true
+# Note: Database migrations run automatically when the application starts
 
 # Validate environment configuration before starting service
 echo "Validating environment configuration..."
@@ -64,11 +85,15 @@ else
 fi
 
 # Restart the service
+echo "🔄 Restarting application service..."
 systemctl daemon-reload
 systemctl restart ideal-tribble
+echo "✅ Service restart initiated"
 
 # Verify service is running
+echo "⏳ Waiting for service to start (5 seconds)..."
 sleep 5
+echo "🔍 Checking service status..."
 if systemctl is-active --quiet ideal-tribble; then
   echo "✅ Service restarted successfully"
 else

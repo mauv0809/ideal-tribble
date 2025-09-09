@@ -15,8 +15,8 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker Compose is not installed. Please install Docker Compose first."
+if ! docker compose version &> /dev/null; then
+    echo "❌ Docker Compose is not available. Please ensure Docker with Compose plugin is installed."
     exit 1
 fi
 
@@ -40,7 +40,7 @@ systemctl enable observability
 # Test Docker Compose configuration
 echo "Testing Docker Compose configuration..."
 cd "$OBSERVABILITY_DIR"
-if ! docker-compose config > /dev/null; then
+if ! docker compose -f docker-compose.yml config > /dev/null; then
     echo "❌ Docker Compose configuration is invalid"
     exit 1
 fi
@@ -117,5 +117,5 @@ if [ $HEALTH_CHECKS -eq 5 ]; then
     echo "  systemctl restart observability   # Restart services"
 else
     echo "⚠️ Some services failed health checks. Check logs:"
-    echo "  docker-compose -f $OBSERVABILITY_DIR/docker-compose.yml logs"
+    echo "  docker compose -f $OBSERVABILITY_DIR/docker-compose.yml logs"
 fi

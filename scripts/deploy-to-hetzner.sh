@@ -20,14 +20,16 @@ echo "Deploying ideal-tribble to Hetzner server: $SERVER_IP"
 echo "Building application..."
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$BINARY_NAME" .
 
-# Copy files to server (zero-downtime deployment)
+# Copy files to server (parallel upload for speed)
 echo "Copying files to server..."
 scp -o ControlMaster=auto -o ControlPath=/tmp/ssh-%r@%h:%p -o ControlPersist=10m \
-    "$BINARY_NAME" "root@$SERVER_IP:$APP_DIR/$BINARY_NAME.new"
+    "$BINARY_NAME" "root@$SERVER_IP:$APP_DIR/$BINARY_NAME.new" &
 scp -o ControlMaster=auto -o ControlPath=/tmp/ssh-%r@%h:%p -o ControlPersist=10m \
-    -r scripts/ "root@$SERVER_IP:$APP_DIR/"
+    -r scripts/ migrations/ observability/ "root@$SERVER_IP:$APP_DIR/" &
 scp -o ControlMaster=auto -o ControlPath=/tmp/ssh-%r@%h:%p -o ControlPersist=10m \
-    -r migrations/ "root@$SERVER_IP:$APP_DIR/"
+    nginx/ideal-tribble.conf "root@$SERVER_IP:/etc/nginx/sites-available/ideal-tribble" &
+wait  # Wait for all uploads to complete
+echo "✅ All files copied"
 
 # Atomically replace the binary and fix permissions
 echo "Performing atomic binary replacement..."
@@ -40,6 +42,32 @@ ssh -o ControlMaster=auto -o ControlPath=/tmp/ssh-%r@%h:%p -o ControlPersist=10m
     # Atomically replace the binary and set permissions
     mv "$BINARY_NAME.new" "$BINARY_NAME"
     chmod +x "$BINARY_NAME" scripts/*.sh
+EOF
+
+# Stop existing service to prevent port conflicts
+echo "Stopping existing service..."
+ssh -o ControlMaster=auto -o ControlPath=/tmp/ssh-%r@%h:%p -o ControlPersist=10m \
+    -T "root@$SERVER_IP" << EOF
+    systemctl stop ideal-tribble || true
+EOF
+
+# Update nginx configuration
+echo "Updating nginx configuration..."
+ssh -o ControlMaster=auto -o ControlPath=/tmp/ssh-%r@%h:%p -o ControlPersist=10m \
+    -T "root@$SERVER_IP" << EOF
+    set -e
+    # Enable the site
+    ln -sf /etc/nginx/sites-available/ideal-tribble /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default
+    # Test and reload nginx
+    nginx -t && systemctl reload nginx
+    # Auto-configure SSL (non-interactive)
+    if ! certbot --nginx -d wally-api.utiger.dk --non-interactive --agree-tos --email admin@utiger.dk; then
+        echo "⚠️ SSL configuration failed - check certbot logs"
+        echo "Manual command: certbot --nginx -d wally-api.utiger.dk"
+    else
+        echo "✅ SSL successfully configured"
+    fi
 EOF
 
 # Run deployment setup on server
