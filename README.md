@@ -68,29 +68,30 @@ A simple hot-reloading environment is configured using [Air](https://github.com/
     ```
     The server will be running on the port specified in your `.env` file (default: `8080`).
 
-## Cloud Deployment with Hetzner and Spacelift
+## Cloud Deployment with Hetzner and GitHub Actions
 
-This guide provides a complete walkthrough for deploying the application to Hetzner Cloud using Terraform managed by Spacelift and GitHub Actions for continuous deployment.
+This guide provides a complete walkthrough for deploying the application to Hetzner Cloud using Terraform Cloud and GitHub Actions for automated continuous deployment.
 
 #### Prerequisites
 
 1.  **Hetzner Cloud Account:** You must have a Hetzner Cloud account with a project created.
-2.  **Spacelift Account:** Infrastructure is managed through Spacelift for better GitOps workflow.
+2.  **Terraform Cloud Account:** Infrastructure state is managed through Terraform Cloud.
 3.  **Domain Name:** A domain name pointing to your server (e.g., `wally-api.utiger.dk`).
 4.  **A Fork of This Repository:** You should be working from your own fork of the project.
 
 ---
 
-#### Step 1: Infrastructure Setup with Spacelift
+#### Step 1: Automated Infrastructure & Application Deployment
 
-**Infrastructure is automatically managed by Spacelift:**
-- Spacelift monitors the `terraform/hetzner/` directory for changes
-- When you push to `main`, Spacelift automatically runs `terraform apply`
+**Everything is automatically managed by GitHub Actions:**
+- The unified deployment pipeline runs when you push to `main`
+- Tests run first, then infrastructure and application build happen in parallel
+- Once infrastructure is ready, the application is deployed automatically
 - The infrastructure includes:
-  - Hetzner Cloud server (CPX11: 2 vCPU, 4GB RAM)
+  - Hetzner Cloud server (CX22: 2 vCPU, 4GB RAM)
   - Firewall configuration for HTTP/HTTPS/SSH access
   - Cloud-init setup with nginx reverse proxy
-  - SSL certificate support via Let's Encrypt
+  - Automated observability stack setup
 
 ---
 
@@ -118,36 +119,30 @@ PORT=8080
     - In your forked GitHub repository, go to `Settings` > `Secrets and variables` > `Actions`.
     - Create the following secrets:
 
-| Secret Name        | Value                                                           |
-| :----------------- | :-------------------------------------------------------------- |
-| `SERVER_IP`        | The IP address of your Hetzner server (from Spacelift output) |
-| `SSH_PRIVATE_KEY`  | Private SSH key for server access                              |
+| Secret Name | Value |
+| :---------- | :---- |
+| `TF_API_TOKEN` | Terraform Cloud API token |
+| `HCLOUD_TOKEN` | Hetzner Cloud API token |
+| `SSH_PRIVATE_KEY` | Private SSH key for server access |
+| `SSH_PUBLIC_KEY` | Public SSH key for server configuration |
+| `DB_NAME` | Database name |
+| `TURSO_PRIMARY_URL` | Turso database URL |
+| `TURSO_AUTH_TOKEN` | Turso database auth token |
+| `SLACK_BOT_TOKEN` | Slack bot token (xoxb-*) |
+| `SLACK_CHANNEL_ID` | Slack channel ID |
+| `SLACK_SIGNING_SECRET` | Slack webhook signing secret |
+| `TENANT_ID` | Playtomic tenant ID |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry endpoint (e.g., localhost:4317) |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password |
 
 ---
 
-#### Step 4: Server Setup
+#### Step 4: Configure DNS
 
-Once Spacelift has provisioned your infrastructure:
-
-1.  **SSH into your server:**
-    ```bash
-    ssh root@YOUR_SERVER_IP
-    ```
-
-2.  **Configure DNS:**
-    - Point your domain's A record to your server IP
+1.  **Point your domain to the server:**
+    - Configure your domain's A record to point to your server IP
     - Example: `wally-api.utiger.dk` → `YOUR_SERVER_IP`
-
-3.  **Setup SSL certificate:**
-    ```bash
-    sudo certbot --nginx -d wally-api.utiger.dk
-    ```
-
-4.  **Configure secrets:**
-    ```bash
-    cd /opt/ideal-tribble
-    ./scripts/setup-secrets.sh
-    ```
+    - The server IP will be output by the deployment workflow
 
 ---
 
@@ -155,15 +150,33 @@ Once Spacelift has provisioned your infrastructure:
 
 With the setup complete, simply **push a commit to the `main` branch** of your forked repository.
 
-The GitHub Actions workflow will automatically:
+The unified GitHub Actions workflow will automatically:
 
-1.  Run tests to ensure code quality
-2.  Build the Go binary for Linux
-3.  Deploy the binary to your Hetzner server via SSH
-4.  Restart the systemd service
-5.  Perform health checks
+1.  **Test**: Run the full test suite with race condition detection
+2.  **Infrastructure**: Deploy/update Hetzner Cloud server via Terraform Cloud
+3.  **Build**: Compile the Go binary for Linux deployment
+4.  **Deploy**: Copy application, scripts, and configuration to the server
+5.  **Setup**: Install systemd service, observability stack, and cron jobs
+6.  **Health Check**: Verify the application is running correctly
 
-Your application will be available at `https://wally-api.utiger.dk`
+Your application will be available at:
+- **HTTP**: `http://YOUR_SERVER_IP:8080` (direct access)
+- **HTTPS**: `https://wally-api.utiger.dk` (after SSL setup)
+
+#### Post-Deployment Setup
+
+After the first successful deployment:
+
+1.  **Setup SSL certificate:**
+    ```bash
+    ssh root@YOUR_SERVER_IP
+    sudo certbot --nginx -d wally-api.utiger.dk
+    ```
+
+2.  **Access observability:**
+    - Grafana: `https://wally-api.utiger.dk/grafana`
+    - Username: `admin`
+    - Password: Set via `GRAFANA_ADMIN_PASSWORD` secret
 
 ## Testing
 

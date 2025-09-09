@@ -53,48 +53,83 @@ systemctl start observability
 echo "Waiting for services to be ready..."
 sleep 15
 
-# Health checks
+# Show container status for debugging
+echo "Current container status:"
+docker compose ps
+
+# Health checks with detailed debugging
 echo "Performing health checks..."
 HEALTH_CHECKS=0
 
 # Check OTel Collector
-if curl -s http://localhost:4318/v1/health > /dev/null; then
+echo "Checking OpenTelemetry Collector..."
+if curl -sf http://localhost:4318/v1/health > /dev/null 2>&1; then
     echo "✅ OpenTelemetry Collector is healthy"
     ((HEALTH_CHECKS++))
 else
     echo "❌ OpenTelemetry Collector health check failed"
+    echo "Debug: curl response:"
+    curl -s http://localhost:4318/v1/health || echo "Connection failed"
+    echo "Container logs:"
+    docker compose logs --tail=10 otel-collector
 fi
 
 # Check Tempo
-if curl -s http://localhost:3200/ready > /dev/null; then
+echo "Checking Tempo..."
+if curl -sf http://localhost:3200/ready > /dev/null 2>&1; then
     echo "✅ Tempo is healthy"
     ((HEALTH_CHECKS++))
 else
     echo "❌ Tempo health check failed"
+    echo "Debug: curl response:"
+    curl -s http://localhost:3200/ready || echo "Connection failed"
+    echo "Container logs:"
+    docker compose logs --tail=10 tempo
 fi
 
 # Check Loki
-if curl -s http://localhost:3100/ready > /dev/null; then
+echo "Checking Loki..."
+if curl -sf http://localhost:3100/ready > /dev/null 2>&1; then
     echo "✅ Loki is healthy"
     ((HEALTH_CHECKS++))
 else
     echo "❌ Loki health check failed"
+    echo "Debug: curl response:"
+    curl -s http://localhost:3100/ready || echo "Connection failed"
+    echo "Container logs:"
+    docker compose logs --tail=10 loki
 fi
 
 # Check Grafana
-if curl -s http://localhost:3000/api/health > /dev/null; then
+echo "Checking Grafana..."
+if curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
     echo "✅ Grafana is healthy"
     ((HEALTH_CHECKS++))
 else
     echo "❌ Grafana health check failed"
+    echo "Debug: curl response:"
+    curl -s http://localhost:3000/api/health || echo "Connection failed"
+    echo "Container logs:"
+    docker compose logs --tail=10 grafana
 fi
 
-# Check Promtail
-if curl -s http://localhost:9080/ready > /dev/null; then
+# Check Promtail (use HTTP endpoint for health check)
+echo "Checking Promtail..."
+if curl -sf http://localhost:9080/ready > /dev/null 2>&1; then
     echo "✅ Promtail is healthy"
     ((HEALTH_CHECKS++))
 else
     echo "❌ Promtail health check failed"
+    echo "Debug: curl response:"
+    curl -s http://localhost:9080/ready || echo "Connection failed"
+    echo "Checking if container is at least running..."
+    if docker compose ps promtail | grep -q "Up"; then
+        echo "Container is running but health endpoint not responding"
+    else
+        echo "Container is not running"
+    fi
+    echo "Container logs:"
+    docker compose logs --tail=10 promtail
 fi
 
 echo ""
@@ -115,7 +150,22 @@ if [ $HEALTH_CHECKS -eq 5 ]; then
     echo "  systemctl start observability     # Start services"
     echo "  systemctl stop observability      # Stop services"
     echo "  systemctl restart observability   # Restart services"
+    exit 0
 else
-    echo "⚠️ Some services failed health checks. Check logs:"
-    echo "  docker compose -f $OBSERVABILITY_DIR/docker-compose.yml logs"
+    echo "❌ Observability stack deployment failed ($HEALTH_CHECKS/5 services healthy)"
+    echo ""
+    echo "🔧 System information for debugging:"
+    echo "Docker status: $(systemctl is-active docker)"
+    echo "Available disk space:"
+    df -h /var/lib/observability 2>/dev/null || df -h /
+    echo "Available memory:"
+    free -h
+    echo ""
+    echo "🔍 Debug commands to run manually:"
+    echo "  cd $OBSERVABILITY_DIR && docker compose logs"
+    echo "  systemctl status observability"
+    echo "  docker compose ps"
+    echo ""
+    echo "All 5 services must be healthy for deployment to proceed."
+    exit 1
 fi
