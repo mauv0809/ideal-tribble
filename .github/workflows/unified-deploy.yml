@@ -146,6 +146,8 @@ jobs:
     name: Deploy Application
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [build, terraform-apply]
     steps:
       - name: Checkout code
