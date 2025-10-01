@@ -162,13 +162,6 @@ jobs:
         with:
           name: ${{ env.BINARY_NAME }}
 
-      - name: Debug Downloaded Files
-        run: |
-          echo "📁 Current directory contents:"
-          ls -la
-          echo "🔍 Looking for binary file ${{ env.BINARY_NAME }}:"
-          find . -name "${{ env.BINARY_NAME }}" -type f || echo "Binary not found"
-
       - name: Get Server IP
         id: server-ip
         run: |
@@ -261,7 +254,7 @@ jobs:
           SERVER_IP="${{ steps.server-ip.outputs.server_ip }}"
           
           echo "Waiting for service to start..."
-          sleep 15
+          sleep 5
           
           # Check health endpoint through nginx proxy
           if curl -sf "https://wally-api.utiger.dk/health" > /dev/null; then
