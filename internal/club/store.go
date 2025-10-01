@@ -733,7 +733,7 @@ func (s *store) ClearMatch(matchID string) {
 func (s *store) GetAllPlayers() ([]PlayerInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, level FROM players ORDER BY name")
+	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, last_ball_boy_date_singles, last_ball_boy_date_doubles, booking_count_singles, booking_count_doubles, level FROM players ORDER BY name")
 	if err != nil {
 		log.Error("Failed to query all players", "error", err)
 		return nil, err
@@ -745,12 +745,19 @@ func (s *store) GetAllPlayers() ([]PlayerInfo, error) {
 		var p PlayerInfo
 		var name sql.NullString
 		var level sql.NullFloat64
-		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &p.BookingCountSingles, &p.BookingCountDoubles, &level); err != nil {
+		var lastBallBoyDateSingles, lastBallBoyDateDoubles sql.NullInt64
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &lastBallBoyDateSingles, &lastBallBoyDateDoubles, &p.BookingCountSingles, &p.BookingCountDoubles, &level); err != nil {
 			log.Error("Failed to scan player row", "error", err)
 			continue
 		}
 		p.Name = name.String // handle NULL name from db
 		p.Level = level.Float64
+		if lastBallBoyDateSingles.Valid {
+			p.LastBallBoyDateSingles = &lastBallBoyDateSingles.Int64
+		}
+		if lastBallBoyDateDoubles.Valid {
+			p.LastBallBoyDateDoubles = &lastBallBoyDateDoubles.Int64
+		}
 		players = append(players, p)
 	}
 	return players, nil
@@ -765,7 +772,7 @@ func (s *store) GetPlayers(playerIDs []string) ([]PlayerInfo, error) {
 		return []PlayerInfo{}, nil
 	}
 
-	query := "SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, level FROM players WHERE id IN (?" + strings.Repeat(",?", len(playerIDs)-1) + ")"
+	query := "SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, last_ball_boy_date_singles, last_ball_boy_date_doubles, booking_count_singles, booking_count_doubles, level FROM players WHERE id IN (?" + strings.Repeat(",?", len(playerIDs)-1) + ")"
 	args := make([]interface{}, len(playerIDs))
 	for i, id := range playerIDs {
 		args[i] = id
@@ -783,12 +790,19 @@ func (s *store) GetPlayers(playerIDs []string) ([]PlayerInfo, error) {
 		var p PlayerInfo
 		var name sql.NullString
 		var level sql.NullFloat64
-		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &p.BookingCountSingles, &p.BookingCountDoubles, &level); err != nil {
+		var lastBallBoyDateSingles, lastBallBoyDateDoubles sql.NullInt64
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &lastBallBoyDateSingles, &lastBallBoyDateDoubles, &p.BookingCountSingles, &p.BookingCountDoubles, &level); err != nil {
 			log.Error("Failed to scan player row", "error", err)
 			continue // Or handle error more gracefully
 		}
 		p.Name = name.String
 		p.Level = level.Float64
+		if lastBallBoyDateSingles.Valid {
+			p.LastBallBoyDateSingles = &lastBallBoyDateSingles.Int64
+		}
+		if lastBallBoyDateDoubles.Valid {
+			p.LastBallBoyDateDoubles = &lastBallBoyDateDoubles.Int64
+		}
 		players = append(players, p)
 	}
 	return players, nil
@@ -826,22 +840,26 @@ func (s *store) AssignBallBringerAtomically(matchID string, playerIDs []string) 
 		return "", "", fmt.Errorf("cannot assign ball bringer for match %s with invalid type: %s", matchID, matchTypeEnum.String)
 	}
 
-	var countColumn string
+	var countColumn, dateColumn string
 	if matchTypeEnum.String == "SINGLES" {
 		countColumn = "ball_bringer_count_singles"
+		dateColumn = "last_ball_boy_date_singles"
 	} else {
 		countColumn = "ball_bringer_count_doubles"
+		dateColumn = "last_ball_boy_date_doubles"
 	}
 
-	// Find the player with the minimum count for the specific match type.
-	// Ordering by name provides deterministic tie-breaking.
+	// Find the player using time-based fairness:
+	// 1. Primary: Who hasn't been ball boy for the longest time (NULL sorts first = new players)
+	// 2. Tiebreaker 1: Lowest total count (handles ties and provides secondary fairness)
+	// 3. Tiebreaker 2: Alphabetical by name (deterministic)
 	query := fmt.Sprintf(`
 		SELECT id, name
 		FROM players
 		WHERE id IN (?`+strings.Repeat(",?", len(playerIDs)-1)+`)
-		ORDER BY %s ASC, name ASC
+		ORDER BY %s ASC, %s ASC, name ASC
 		LIMIT 1;
-	`, countColumn)
+	`, dateColumn, countColumn)
 
 	args := ToAnySlice(playerIDs) // Helper to convert []string to []any
 
@@ -855,11 +873,12 @@ func (s *store) AssignBallBringerAtomically(matchID string, playerIDs []string) 
 		return "", "", fmt.Errorf("failed to select next ball bringer: %w", err)
 	}
 
-	// Atomically increment the selected player's count for the correct match type
-	updateQuery := fmt.Sprintf("UPDATE players SET %s = %s + 1 WHERE id = ?", countColumn, countColumn)
+	// Atomically increment the selected player's count and update the last ball boy date
+	// Using unixepoch('now') for SQLite to get current Unix timestamp
+	updateQuery := fmt.Sprintf("UPDATE players SET %s = %s + 1, %s = unixepoch('now') WHERE id = ?", countColumn, countColumn, dateColumn)
 	_, err = tx.Exec(updateQuery, selectedPlayerID)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to increment ball bringer count for player %s: %w", selectedPlayerID, err)
+		return "", "", fmt.Errorf("failed to increment ball bringer count and update date for player %s: %w", selectedPlayerID, err)
 	}
 
 	// Update the match with the ball bringer's details
@@ -942,7 +961,7 @@ func (s *store) GetPlayersSortedByLevel() ([]PlayerInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, level FROM players ORDER BY level DESC")
+	rows, err := s.db.Query("SELECT id, name, ball_bringer_count_singles, ball_bringer_count_doubles, last_ball_boy_date_singles, last_ball_boy_date_doubles, booking_count_singles, booking_count_doubles, level FROM players ORDER BY level DESC")
 	if err != nil {
 		log.Error("Failed to query all players sorted by level", "error", err)
 		return nil, err
@@ -954,12 +973,19 @@ func (s *store) GetPlayersSortedByLevel() ([]PlayerInfo, error) {
 		var p PlayerInfo
 		var name sql.NullString
 		var level sql.NullFloat64
-		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &p.BookingCountSingles, &p.BookingCountDoubles, &level); err != nil {
+		var lastBallBoyDateSingles, lastBallBoyDateDoubles sql.NullInt64
+		if err := rows.Scan(&p.ID, &name, &p.BallBringerCountSingles, &p.BallBringerCountDoubles, &lastBallBoyDateSingles, &lastBallBoyDateDoubles, &p.BookingCountSingles, &p.BookingCountDoubles, &level); err != nil {
 			log.Error("Failed to scan player row", "error", err)
 			continue
 		}
 		p.Name = name.String
 		p.Level = level.Float64
+		if lastBallBoyDateSingles.Valid {
+			p.LastBallBoyDateSingles = &lastBallBoyDateSingles.Int64
+		}
+		if lastBallBoyDateDoubles.Valid {
+			p.LastBallBoyDateDoubles = &lastBallBoyDateDoubles.Int64
+		}
 		players = append(players, p)
 	}
 	return players, nil
@@ -1008,22 +1034,27 @@ func (s *store) GetPlayerBySlackUserID(slackUserID string) (*PlayerInfo, error) 
 	defer s.mu.RUnlock()
 
 	query := `
-		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, 
-			   slack_user_id, slack_username, slack_display_name, 
+		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles,
+			   last_ball_boy_date_singles, last_ball_boy_date_doubles,
+			   booking_count_singles, booking_count_doubles,
+			   slack_user_id, slack_username, slack_display_name,
 			   mapping_status, mapping_confidence, mapping_updated_at
-		FROM players 
+		FROM players
 		WHERE slack_user_id = ?
 	`
 
 	row := s.db.QueryRow(query, slackUserID)
 
 	var player PlayerInfo
+	var lastBallBoyDateSingles, lastBallBoyDateDoubles sql.NullInt64
 	err := row.Scan(
 		&player.ID,
 		&player.Name,
 		&player.Level,
 		&player.BallBringerCountSingles,
 		&player.BallBringerCountDoubles,
+		&lastBallBoyDateSingles,
+		&lastBallBoyDateDoubles,
 		&player.BookingCountSingles,
 		&player.BookingCountDoubles,
 		&player.SlackUserID,
@@ -1033,6 +1064,13 @@ func (s *store) GetPlayerBySlackUserID(slackUserID string) (*PlayerInfo, error) 
 		&player.MappingConfidence,
 		&player.MappingUpdatedAt,
 	)
+
+	if lastBallBoyDateSingles.Valid {
+		player.LastBallBoyDateSingles = &lastBallBoyDateSingles.Int64
+	}
+	if lastBallBoyDateDoubles.Valid {
+		player.LastBallBoyDateDoubles = &lastBallBoyDateDoubles.Int64
+	}
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1050,10 +1088,12 @@ func (s *store) GetUnmappedPlayers() ([]PlayerInfo, error) {
 	defer s.mu.RUnlock()
 
 	query := `
-		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, 
-			   slack_user_id, slack_username, slack_display_name, 
+		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles,
+			   last_ball_boy_date_singles, last_ball_boy_date_doubles,
+			   booking_count_singles, booking_count_doubles,
+			   slack_user_id, slack_username, slack_display_name,
 			   mapping_status, mapping_confidence, mapping_updated_at
-		FROM players 
+		FROM players
 		WHERE slack_user_id IS NULL OR slack_user_id = ''
 		ORDER BY name COLLATE NOCASE
 	`
@@ -1067,12 +1107,15 @@ func (s *store) GetUnmappedPlayers() ([]PlayerInfo, error) {
 	var players []PlayerInfo
 	for rows.Next() {
 		var player PlayerInfo
+		var lastBallBoyDateSingles, lastBallBoyDateDoubles sql.NullInt64
 		err := rows.Scan(
 			&player.ID,
 			&player.Name,
 			&player.Level,
 			&player.BallBringerCountSingles,
 			&player.BallBringerCountDoubles,
+			&lastBallBoyDateSingles,
+			&lastBallBoyDateDoubles,
 			&player.BookingCountSingles,
 			&player.BookingCountDoubles,
 			&player.SlackUserID,
@@ -1084,6 +1127,12 @@ func (s *store) GetUnmappedPlayers() ([]PlayerInfo, error) {
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan unmapped player: %w", err)
+		}
+		if lastBallBoyDateSingles.Valid {
+			player.LastBallBoyDateSingles = &lastBallBoyDateSingles.Int64
+		}
+		if lastBallBoyDateDoubles.Valid {
+			player.LastBallBoyDateDoubles = &lastBallBoyDateDoubles.Int64
 		}
 		players = append(players, player)
 	}
@@ -1126,15 +1175,17 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 	searchPattern := "%" + strings.ToLower(searchName) + "%"
 
 	query := `
-		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles, booking_count_singles, booking_count_doubles, 
-			   slack_user_id, slack_username, slack_display_name, 
+		SELECT id, name, level, ball_bringer_count_singles, ball_bringer_count_doubles,
+			   last_ball_boy_date_singles, last_ball_boy_date_doubles,
+			   booking_count_singles, booking_count_doubles,
+			   slack_user_id, slack_username, slack_display_name,
 			   mapping_status, mapping_confidence, mapping_updated_at
-		FROM players 
-		WHERE LOWER(name) LIKE ? 
-		   OR LOWER(name) LIKE ? 
+		FROM players
+		WHERE LOWER(name) LIKE ?
 		   OR LOWER(name) LIKE ?
-		ORDER BY 
-			CASE 
+		   OR LOWER(name) LIKE ?
+		ORDER BY
+			CASE
 				WHEN LOWER(name) = LOWER(?) THEN 1  -- Exact match
 				WHEN LOWER(name) LIKE LOWER(?) THEN 2  -- Starts with
 				ELSE 3  -- Contains
@@ -1155,12 +1206,15 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 	var players []PlayerInfo
 	for rows.Next() {
 		var player PlayerInfo
+		var lastBallBoyDateSingles, lastBallBoyDateDoubles sql.NullInt64
 		err := rows.Scan(
 			&player.ID,
 			&player.Name,
 			&player.Level,
 			&player.BallBringerCountSingles,
 			&player.BallBringerCountDoubles,
+			&lastBallBoyDateSingles,
+			&lastBallBoyDateDoubles,
 			&player.BookingCountSingles,
 			&player.BookingCountDoubles,
 			&player.SlackUserID,
@@ -1172,6 +1226,12 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan similar player: %w", err)
+		}
+		if lastBallBoyDateSingles.Valid {
+			player.LastBallBoyDateSingles = &lastBallBoyDateSingles.Int64
+		}
+		if lastBallBoyDateDoubles.Valid {
+			player.LastBallBoyDateDoubles = &lastBallBoyDateDoubles.Int64
 		}
 		players = append(players, player)
 	}

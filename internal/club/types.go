@@ -27,17 +27,19 @@ type PlayerStats struct {
 
 // PlayerInfo represents a player in the store.
 type PlayerInfo struct {
-	ID                      string
-	Name                    string
-	BallBringerCountSingles int `json:"ball_bringer_count_singles"`
-	BallBringerCountDoubles int `json:"ball_bringer_count_doubles"`
-	BookingCountSingles     int `json:"booking_count_singles"`
-	BookingCountDoubles     int `json:"booking_count_doubles"`
-	Level                   float64
-	SlackUserID             *string
-	SlackUsername           *string
-	SlackDisplayName        *string
-	MappingStatus           *string
-	MappingConfidence       *float64
-	MappingUpdatedAt        *int64
+	ID                       string
+	Name                     string
+	BallBringerCountSingles  int `json:"ball_bringer_count_singles"`
+	BallBringerCountDoubles  int `json:"ball_bringer_count_doubles"`
+	LastBallBoyDateSingles   *int64 `json:"last_ball_boy_date_singles,omitempty"`
+	LastBallBoyDateDoubles   *int64 `json:"last_ball_boy_date_doubles,omitempty"`
+	BookingCountSingles      int `json:"booking_count_singles"`
+	BookingCountDoubles      int `json:"booking_count_doubles"`
+	Level                    float64
+	SlackUserID              *string
+	SlackUsername            *string
+	SlackDisplayName         *string
+	MappingStatus            *string
+	MappingConfidence        *float64
+	MappingUpdatedAt         *int64
 }
