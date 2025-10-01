@@ -467,3 +467,196 @@ func TestAssignBallBringerAtomically(t *testing.T) {
 		assert.Equal(t, 2, count, "Singles count for p2 should be incremented")
 	})
 }
+
+func TestAssignBallBringerWithTimeBasedLogic(t *testing.T) {
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
+
+	t.Run("prioritizes player with NULL date (new player)", func(t *testing.T) {
+		// Setup: p1 has recent date, p2 has old date, p3 has NULL (new player), p4 has medium date
+		// Expected: p3 should be selected (NULL = never been ball boy)
+		_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count_doubles, last_ball_boy_date_doubles) VALUES
+			('p1', 'Player A', 5, 1727800000),
+			('p2', 'Player B', 3, 1727000000),
+			('p3', 'Player C', 0, NULL),
+			('p4', 'Player D', 4, 1727500000)`)
+		require.NoError(t, err)
+
+		match := &playtomic.PadelMatch{
+			MatchID:          "test_null_date",
+			OwnerID:          "p1",
+			ProcessingStatus: "NEW",
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
+		}
+		require.NoError(t, store.UpsertMatch(match))
+
+		id, name, err := store.AssignBallBringerAtomically(match.MatchID, []string{"p1", "p2", "p3", "p4"})
+		require.NoError(t, err)
+		assert.Equal(t, "p3", id, "Player with NULL date (new player) should be selected")
+		assert.Equal(t, "Player C", name)
+	})
+
+	t.Run("prioritizes player with oldest date when no NULL dates", func(t *testing.T) {
+		// Setup: All players have dates, p5 has oldest
+		// Expected: p5 should be selected
+		_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count_doubles, last_ball_boy_date_doubles) VALUES
+			('p5', 'Player E', 2, 1726000000),
+			('p6', 'Player F', 3, 1727800000),
+			('p7', 'Player G', 4, 1727500000),
+			('p8', 'Player H', 1, 1727900000)`)
+		require.NoError(t, err)
+
+		match := &playtomic.PadelMatch{
+			MatchID:          "test_oldest_date",
+			OwnerID:          "p5",
+			ProcessingStatus: "NEW",
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
+		}
+		require.NoError(t, store.UpsertMatch(match))
+
+		id, name, err := store.AssignBallBringerAtomically(match.MatchID, []string{"p5", "p6", "p7", "p8"})
+		require.NoError(t, err)
+		assert.Equal(t, "p5", id, "Player with oldest date should be selected")
+		assert.Equal(t, "Player E", name)
+	})
+
+	t.Run("uses count as tiebreaker when dates are equal", func(t *testing.T) {
+		// Setup: p9 and p10 both have same date, but p9 has lower count
+		// Expected: p9 should be selected due to count tiebreaker
+		sameDate := int64(1727000000)
+		_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count_doubles, last_ball_boy_date_doubles) VALUES
+			('p9', 'Player I', 2, ?),
+			('p10', 'Player J', 5, ?),
+			('p11', 'Player K', 1, 1727900000),
+			('p12', 'Player L', 3, 1727800000)`, sameDate, sameDate)
+		require.NoError(t, err)
+
+		match := &playtomic.PadelMatch{
+			MatchID:          "test_count_tiebreaker",
+			OwnerID:          "p9",
+			ProcessingStatus: "NEW",
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
+		}
+		require.NoError(t, store.UpsertMatch(match))
+
+		id, name, err := store.AssignBallBringerAtomically(match.MatchID, []string{"p9", "p10", "p11", "p12"})
+		require.NoError(t, err)
+		assert.Equal(t, "p9", id, "Player with same date but lower count should be selected")
+		assert.Equal(t, "Player I", name)
+	})
+
+	t.Run("updates last_ball_boy_date after assignment", func(t *testing.T) {
+		// Setup: Assign ball boy and verify date is updated
+		_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count_doubles, last_ball_boy_date_doubles) VALUES
+			('p13', 'Player M', 0, NULL),
+			('p14', 'Player N', 5, 1727000000)`)
+		require.NoError(t, err)
+
+		match := &playtomic.PadelMatch{
+			MatchID:          "test_date_update",
+			OwnerID:          "p13",
+			ProcessingStatus: "NEW",
+			MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
+		}
+		require.NoError(t, store.UpsertMatch(match))
+
+		// Before assignment
+		var dateBefore sql.NullInt64
+		err = db.QueryRow("SELECT last_ball_boy_date_doubles FROM players WHERE id = 'p13'").Scan(&dateBefore)
+		require.NoError(t, err)
+		assert.False(t, dateBefore.Valid, "Date should be NULL before assignment")
+
+		// Assign ball boy
+		id, _, err := store.AssignBallBringerAtomically(match.MatchID, []string{"p13", "p14"})
+		require.NoError(t, err)
+		assert.Equal(t, "p13", id)
+
+		// After assignment
+		var dateAfter sql.NullInt64
+		err = db.QueryRow("SELECT last_ball_boy_date_doubles FROM players WHERE id = 'p13'").Scan(&dateAfter)
+		require.NoError(t, err)
+		assert.True(t, dateAfter.Valid, "Date should be set after assignment")
+		assert.Greater(t, dateAfter.Int64, int64(1700000000), "Date should be a recent Unix timestamp")
+
+		// Verify count was also incremented
+		var count int
+		err = db.QueryRow("SELECT ball_bringer_count_doubles FROM players WHERE id = 'p13'").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 1, count, "Count should be incremented to 1")
+	})
+
+	t.Run("rotation fairness over multiple assignments", func(t *testing.T) {
+		// Setup: 4 players, all start with NULL dates
+		// Expected: They should rotate based on who was assigned most recently
+		_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count_doubles, last_ball_boy_date_doubles) VALUES
+			('r1', 'Rotate A', 0, NULL),
+			('r2', 'Rotate B', 0, NULL),
+			('r3', 'Rotate C', 0, NULL),
+			('r4', 'Rotate D', 0, NULL)`)
+		require.NoError(t, err)
+
+		playerIDs := []string{"r1", "r2", "r3", "r4"}
+		assignedOrder := []string{}
+
+		// Assign ball boy 4 times, each time should pick a different player
+		for i := 1; i <= 4; i++ {
+			matchID := "rotation_match_" + string(rune('0'+i))
+			match := &playtomic.PadelMatch{
+				MatchID:          matchID,
+				OwnerID:          "r1",
+				ProcessingStatus: "NEW",
+				MatchTypeEnum:    playtomic.MatchTypeEnumDoubles,
+			}
+			require.NoError(t, store.UpsertMatch(match))
+
+			id, _, err := store.AssignBallBringerAtomically(matchID, playerIDs)
+			require.NoError(t, err)
+			assignedOrder = append(assignedOrder, id)
+		}
+
+		// Verify all 4 players were assigned exactly once (fair rotation)
+		assert.Len(t, assignedOrder, 4)
+		uniquePlayers := make(map[string]bool)
+		for _, pid := range assignedOrder {
+			uniquePlayers[pid] = true
+		}
+		assert.Len(t, uniquePlayers, 4, "All 4 players should be assigned exactly once in rotation")
+
+		// Verify dates are set for all players
+		for _, pid := range playerIDs {
+			var date sql.NullInt64
+			err := db.QueryRow("SELECT last_ball_boy_date_doubles FROM players WHERE id = ?", pid).Scan(&date)
+			require.NoError(t, err)
+			assert.True(t, date.Valid, "Date should be set for player "+pid)
+		}
+	})
+
+	t.Run("separate tracking for singles and doubles", func(t *testing.T) {
+		// Setup: Player was recently ball boy in doubles, but not in singles
+		// Expected: Should be selected for singles despite recent doubles duty
+		_, err := db.Exec(`INSERT INTO players (id, name, ball_bringer_count_singles, ball_bringer_count_doubles, last_ball_boy_date_singles, last_ball_boy_date_doubles) VALUES
+			('s1', 'Separate A', 0, 5, NULL, 1727900000),
+			('s2', 'Separate B', 3, 2, 1727800000, 1727000000)`)
+		require.NoError(t, err)
+
+		// Singles match - s1 should be selected (NULL date in singles despite recent doubles)
+		singlesMatch := &playtomic.PadelMatch{
+			MatchID:          "test_singles_separate",
+			OwnerID:          "s1",
+			ProcessingStatus: "NEW",
+			MatchTypeEnum:    playtomic.MatchTypeEnumSingles,
+		}
+		require.NoError(t, store.UpsertMatch(singlesMatch))
+
+		id, _, err := store.AssignBallBringerAtomically(singlesMatch.MatchID, []string{"s1", "s2"})
+		require.NoError(t, err)
+		assert.Equal(t, "s1", id, "Player with NULL singles date should be selected despite recent doubles duty")
+
+		// Verify only singles date was updated, not doubles
+		var singlesDate, doublesDate sql.NullInt64
+		err = db.QueryRow("SELECT last_ball_boy_date_singles, last_ball_boy_date_doubles FROM players WHERE id = 's1'").Scan(&singlesDate, &doublesDate)
+		require.NoError(t, err)
+		assert.True(t, singlesDate.Valid, "Singles date should now be set")
+		assert.Equal(t, int64(1727900000), doublesDate.Int64, "Doubles date should remain unchanged")
+	})
+}
