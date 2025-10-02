@@ -100,14 +100,19 @@ This branch (`feature/matchmaking-system`) implements a matchmaking feature for 
 
 ## 🚧 PENDING TASKS
 
-### 13. Match Detection & Completion System (HIGH PRIORITY)
+### 13. Match Detection & Completion System → ✅ COMPLETE
 - **What**: Detect when proposed matches are booked on Playtomic and mark requests as completed
-- **Requirements**:
-  - Enhance `/fetch` endpoint to check for matches matching proposed requests
-  - Match by date, time range, booking responsible player, and team composition
-  - Update match request status to `StatusCompleted` when detected
-  - Handle edge cases (partial matches, time variations)
-- **Files to modify**: `internal/http/handlers/scheduled.go`, `internal/matchmaking/store.go`
+- **Implementation**:
+  - ✅ Enhanced `/fetch` endpoint to detect matches matching proposed requests
+  - ✅ Matches by date, time range (30min tolerance), booking responsible player, and team composition (all 4 players)
+  - ✅ Updates match request status to `StatusCompleted` when detected
+  - ✅ Handles edge cases with time tolerance and player verification
+  - ✅ Comprehensive test coverage in `internal/matchmaking/store_test.go`
+- **Files modified**:
+  - `internal/http/handlers/scheduled.go` - Added detection logic to fetch workflow
+  - `internal/matchmaking/store.go` - Already had `DetectMatchedRequests()` method
+  - `internal/http/server.go` - Updated handler dependency injection
+  - `internal/http/handlers_test.go` - Updated test to pass matchmaking service
 
 ### 14. Dynamic Team Reassignment → DEFERRED FOR V2 🚀
 - **Decision**: Ship current system first, iterate based on real usage feedback
@@ -162,17 +167,15 @@ This branch (`feature/matchmaking-system`) implements a matchmaking feature for 
 
 ## 🔄 CURRENT WORKFLOW STATUS
 
-### ✅ Working Flow:
+### ✅ Complete Flow:
 1. ✅ User runs `/match` command
 2. ✅ System creates match request and sends availability message
 3. ✅ Players react with day emojis (1️⃣-7️⃣)
 4. ✅ System processes reactions and stores availability
 5. ✅ System automatically analyzes availability and proposes matches
 6. ✅ System sends match proposal with team assignments and booking responsibility
-
-### 🚧 Remaining Flow:
-7. ❌ Player books match on Playtomic (external action)
-8. ❌ System detects booked match via fetch endpoint and marks request as completed
+7. ✅ Player books match on Playtomic (external action)
+8. ✅ System detects booked match via fetch endpoint and marks request as completed
 
 ## 📁 KEY FILES & DIRECTORIES
 
@@ -195,32 +198,22 @@ This branch (`feature/matchmaking-system`) implements a matchmaking feature for 
 ### ✅ RECENTLY COMPLETED:
 - **Task #11**: Automatic Match Proposal Workflow - ✅ COMPLETE
 - **Task #12**: Deadlock Resolution & Debugging System - ✅ COMPLETE
+- **Task #13**: Match Detection & Completion System - ✅ COMPLETE
 
-### IMMEDIATE PRIORITY: Task #13 - Match Detection & Completion System
+### IMMEDIATE PRIORITY: Task #15 - Team Assignment Enhancement (MEDIUM PRIORITY)
 
-1. **Enhance fetch endpoint for match detection**
-   - Modify `/fetch` endpoint to check for matches matching active proposals
-   - Match criteria: date, time range, booking responsible player, team composition
-   - Add method `DetectMatchedRequests()` to matchmaking service
+1. **Improve team balancing algorithm in ProposeMatch**
+   - Balance teams by skill level (use existing player levels from database)
+   - Consider player preferences/partnerships (future enhancement)
+   - Handle odd number of players (>4 available)
 
-2. **Implement completion workflow**
-   - Update match request status to `StatusCompleted` when match detected
-   - Handle partial matches and edge cases
-
-### SECONDARY PRIORITY: Task #14 - Dynamic Team Reassignment
-
-1. **Monitor availability changes during proposal phase**
-   - Modify reaction handlers to check if match request is in `StatusProposingMatch`
-   - When availability changes, re-evaluate if current proposal is still valid
-   - Trigger new proposal if team composition changes
-
-2. **Handle reassignment scenarios**
-   - Player leaves (4→3): Try to find replacement or cancel proposal
-   - Player joins (4→5): Reassign teams with new player
-   - Booking responsible player leaves: Reassign booking responsibility
+2. **Implementation guidance**
+   - Modify `internal/matchmaking/store.go` (enhance ProposeMatch method)
+   - Fetch player levels from club store
+   - Implement balancing algorithm (e.g., sort by level, alternate assignment)
+   - Test with various player level combinations
 
 ### TERTIARY PRIORITIES:
-- **Task #15**: Enhance team balancing with skill levels  
 - **Task #16**: Cleanup jobs for old data
 - **Task #17**: End-to-end testing
 
