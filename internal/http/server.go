@@ -51,7 +51,7 @@ func (s *Server) routes() {
 	s.Router.Handle("/leaderboard", Chain(handlers.LeaderboardHandler(s.Store), paramsMiddleware))
 
 	// Scheduled endpoints (Cloud Scheduler)
-	s.Router.Handle("/fetch", Chain(handlers.FetchMatchesHandler(s.Store, s.Metrics, s.Cfg, s.PlaytomicClient), paramsMiddleware))
+	s.Router.Handle("/fetch", Chain(handlers.FetchMatchesHandler(s.Store, s.Metrics, s.Cfg, s.PlaytomicClient, s.MatchmakingService), paramsMiddleware))
 	s.Router.Handle("/process", Chain(handlers.ProcessMatchesHandler(s.Processor), paramsMiddleware))
 
 	// Job queue endpoints are now processed by background worker

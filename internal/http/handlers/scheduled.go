@@ -10,12 +10,13 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/config"
+	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
 )
 
-func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg config.Config, playtomicClient playtomic.PlaytomicClient) http.HandlerFunc {
+func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg config.Config, playtomicClient playtomic.PlaytomicClient, matchmakingService matchmaking.MatchmakingService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Info("Starting match fetch...")
 		metrics.IncFetcherRuns()
@@ -79,6 +80,34 @@ func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg conf
 				}
 			} else {
 				log.Info("[Dry Run] Would have upserted club matches", "count", len(clubMatchesToUpsert))
+			}
+		}
+
+		// Detect and complete any match requests that match the fetched bookings
+		if matchmakingService != nil && len(clubMatchesToUpsert) > 0 {
+			log.Info("Checking for matches that fulfill match requests")
+			completedRequestIDs, err := matchmakingService.DetectMatchedRequests(clubMatchesToUpsert)
+			if err != nil {
+				log.Error("Failed to detect matched requests", "error", err)
+				// Don't return error - this is non-critical, continue with fetch completion
+			} else if len(completedRequestIDs) > 0 {
+				log.Info("Found match requests fulfilled by bookings", "count", len(completedRequestIDs))
+
+				// Mark each matched request as completed
+				for _, requestID := range completedRequestIDs {
+					if !isDryRun {
+						if err := matchmakingService.UpdateMatchRequestStatus(requestID, matchmaking.StatusCompleted); err != nil {
+							log.Error("Failed to mark match request as completed", "requestID", requestID, "error", err)
+							// Continue with other requests even if one fails
+						} else {
+							log.Info("Marked match request as completed", "requestID", requestID)
+						}
+					} else {
+						log.Info("[Dry Run] Would have marked match request as completed", "requestID", requestID)
+					}
+				}
+			} else {
+				log.Debug("No match requests matched the fetched bookings")
 			}
 		}
 
