@@ -17,7 +17,7 @@ The name "Wally" is inspired by the helpful robot and the glass walls of the pad
 - Fetches upcoming bookings using the [go-playtomic-api](https://github.com/rafa-garcia/go-playtomic-api).
 - Intelligently filters for "club matches" based on the number of known members participating.
 - Discovers and saves new club members automatically.
-- Assigns a "ball boy" for each match atomically to ensure fairness and prevent race conditions, making the assignment idempotent.
+- Assigns a "ball boy" for each match using time-based rotation to ensure fairness, with atomic assignment preventing race conditions and making the process idempotent.
 - Posts formatted Slack notifications for match bookings and results idempotently, preventing duplicate notifications.
 - Tracks player statistics (win/loss records, sets/games won) and provides a leaderboard.
 - Provides two leaderboards accessible via Slack commands: `/leaderboard` (sorted by win percentage) and `/level-leaderboard` (sorted by player level).
@@ -261,26 +261,11 @@ Here's a look at our future development plans:
     - Modify Slack commands to specify match type: `/match doubles` or `/match singles`
     - Add separate leaderboards: `/leaderboard doubles` and `/leaderboard singles`
 
-- **Contextual Ball Boy Assignment:**
-  - **Problem:** Current ball-bringing assignment uses simple global counts, meaning players who play frequently with new/infrequent players never get assigned ball-bringing duties, creating unfairness.
-  - **Solution Ideas:**
-    - **Approach 1: Relative Counts Within Groups**
-      - Track ball-bringing counts relative to specific player groups/combinations
-      - For each match, calculate who has brought balls least often among the 4 players
-      - Maintain a matrix of player-to-player ball-bringing relationships
-    - **Approach 2: Decay-Based System**
-      - Implement time-based decay on ball-bringing counts
-      - Recent ball-bringing duties weigh more heavily than older ones
-      - This naturally rebalances when player groups change
-    - **Approach 3: Match-Context Scoring**
-      - Calculate a "fairness score" for each player based on:
-        - Total balls brought vs total matches played
-        - Balls brought vs matches played with current group
-        - Time since last ball-bringing duty
-      - Assign to player with lowest fairness score
-    - **Approach 4: Rolling Window System**
-      - Only consider ball-bringing within the last N matches for each player
-      - This prevents historical bias from affecting current assignments
+- **Time-Based Ball Boy Assignment:** ✅ **Completed**
+  - Implemented a fairness-based ball-bringing assignment system that considers time since last assignment
+  - Players who haven't brought balls recently are prioritized for assignment
+  - Ensures fair rotation even when player groups change or new members join
+  - Prevents the issue where frequent players with new members never get assigned
 
 - **Enhanced Player Statistics System:**
   - **Problem:** Current statistics system doesn't differentiate between match types and may not provide meaningful insights for different play styles.
