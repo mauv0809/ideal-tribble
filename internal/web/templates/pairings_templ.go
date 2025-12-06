@@ -63,7 +63,7 @@ func PairingsListPage(data PairingsListData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div id=\"pairings-list\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " <div class=\"search-filter-bar\"><input type=\"search\" id=\"pairing-search\" placeholder=\"Search by player name...\" autocomplete=\"off\"> <select id=\"status-filter\"><option value=\"all\">All Status</option> <option value=\"active\">Active Only</option> <option value=\"inactive\">Inactive Only</option></select></div><div id=\"pairings-list\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -71,7 +71,7 @@ func PairingsListPage(data PairingsListData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div><p id=\"no-results\" style=\"display: none; color: var(--pico-muted-color); text-align: center; padding: 2rem;\">No pairings match your search.</p><script>\n\t\t\t\t(function() {\n\t\t\t\t\tconst searchInput = document.getElementById('pairing-search');\n\t\t\t\t\tconst statusFilter = document.getElementById('status-filter');\n\t\t\t\t\tconst noResults = document.getElementById('no-results');\n\n\t\t\t\t\tfunction filterPairings() {\n\t\t\t\t\t\tconst searchTerm = searchInput.value.toLowerCase().trim();\n\t\t\t\t\t\tconst statusValue = statusFilter.value;\n\t\t\t\t\t\tconst rows = document.querySelectorAll('#pairings-list tbody tr');\n\t\t\t\t\t\tlet visibleCount = 0;\n\n\t\t\t\t\t\trows.forEach(row => {\n\t\t\t\t\t\t\tconst player1 = row.cells[0]?.textContent.toLowerCase() || '';\n\t\t\t\t\t\t\tconst player2 = row.cells[1]?.textContent.toLowerCase() || '';\n\t\t\t\t\t\t\tconst status = row.cells[2]?.textContent.toLowerCase().trim() || '';\n\n\t\t\t\t\t\t\t// Check search match\n\t\t\t\t\t\t\tconst matchesSearch = !searchTerm ||\n\t\t\t\t\t\t\t\tplayer1.includes(searchTerm) ||\n\t\t\t\t\t\t\t\tplayer2.includes(searchTerm);\n\n\t\t\t\t\t\t\t// Check status filter\n\t\t\t\t\t\t\tlet matchesStatus = true;\n\t\t\t\t\t\t\tif (statusValue === 'active') {\n\t\t\t\t\t\t\t\tmatchesStatus = status === 'active';\n\t\t\t\t\t\t\t} else if (statusValue === 'inactive') {\n\t\t\t\t\t\t\t\tmatchesStatus = status === 'inactive';\n\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\tif (matchesSearch && matchesStatus) {\n\t\t\t\t\t\t\t\trow.style.display = '';\n\t\t\t\t\t\t\t\tvisibleCount++;\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\trow.style.display = 'none';\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\t// Show/hide no results message\n\t\t\t\t\t\tnoResults.style.display = visibleCount === 0 ? 'block' : 'none';\n\t\t\t\t\t}\n\n\t\t\t\t\tsearchInput.addEventListener('input', filterPairings);\n\t\t\t\t\tstatusFilter.addEventListener('change', filterPairings);\n\t\t\t\t})();\n\t\t\t</script> <style>\n\t\t\t\t.search-filter-bar {\n\t\t\t\t\tdisplay: flex;\n\t\t\t\t\tgap: 1rem;\n\t\t\t\t\tmargin-bottom: 1rem;\n\t\t\t\t}\n\t\t\t\t.search-filter-bar input[type=\"search\"] {\n\t\t\t\t\tflex: 1;\n\t\t\t\t\tmargin-bottom: 0;\n\t\t\t\t}\n\t\t\t\t.search-filter-bar select {\n\t\t\t\t\twidth: auto;\n\t\t\t\t\tmin-width: 150px;\n\t\t\t\t\tmargin-bottom: 0;\n\t\t\t\t\tappearance: none;\n\t\t\t\t\t-webkit-appearance: none;\n\t\t\t\t\t-moz-appearance: none;\n\t\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t\t\tbackground-repeat: no-repeat;\n\t\t\t\t\tbackground-position: right 0.75rem center;\n\t\t\t\t\tbackground-size: 16px;\n\t\t\t\t\tpadding-right: 2.5rem;\n\t\t\t\t}\n\t\t\t\t.search-filter-bar select:hover,\n\t\t\t\t.search-filter-bar select:focus {\n\t\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t\t}\n\t\t\t\t@media (max-width: 576px) {\n\t\t\t\t\t.search-filter-bar {\n\t\t\t\t\t\tflex-direction: column;\n\t\t\t\t\t}\n\t\t\t\t\t.search-filter-bar select {\n\t\t\t\t\t\twidth: 100%;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t</style>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -120,7 +120,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("pairing-%d", p.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 48, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 147, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -133,7 +133,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d", p.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 48, Col: 114}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 147, Col: 114}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -146,7 +146,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(p.Player1Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 49, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 148, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -159,7 +159,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(p.Player2Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 50, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 149, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -192,7 +192,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d/deactivate", p.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 62, Col: 63}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 161, Col: 63}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -210,7 +210,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d/activate", p.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 70, Col: 61}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 169, Col: 61}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -228,7 +228,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d", p.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 78, Col: 52}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 177, Col: 52}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -300,7 +300,7 @@ func NewPairingPage(data NewPairingData) templ.Component {
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(data.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 113, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 212, Col: 48}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {
@@ -328,7 +328,7 @@ func NewPairingPage(data NewPairingData) templ.Component {
 					var templ_7745c5c3_Var14 string
 					templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 124, Col: 35}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 223, Col: 35}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 					if templ_7745c5c3_Err != nil {
@@ -341,7 +341,7 @@ func NewPairingPage(data NewPairingData) templ.Component {
 					var templ_7745c5c3_Var15 string
 					templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerName)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 124, Col: 52}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 223, Col: 52}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 					if templ_7745c5c3_Err != nil {
@@ -374,7 +374,7 @@ func NewPairingPage(data NewPairingData) templ.Component {
 					var templ_7745c5c3_Var16 string
 					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 147, Col: 35}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 246, Col: 35}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 					if templ_7745c5c3_Err != nil {
@@ -387,7 +387,7 @@ func NewPairingPage(data NewPairingData) templ.Component {
 					var templ_7745c5c3_Var17 string
 					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerName)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 147, Col: 52}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 246, Col: 52}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 					if templ_7745c5c3_Err != nil {

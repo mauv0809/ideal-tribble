@@ -25,9 +25,108 @@ templ PairingsListPage(data PairingsListData) {
 				<a href="/pairings/new" role="button">Add Your First Pairing</a>
 			</article>
 		} else {
+			// Search and filter controls
+			<div class="search-filter-bar">
+				<input
+					type="search"
+					id="pairing-search"
+					placeholder="Search by player name..."
+					autocomplete="off"
+				/>
+				<select id="status-filter">
+					<option value="all">All Status</option>
+					<option value="active">Active Only</option>
+					<option value="inactive">Inactive Only</option>
+				</select>
+			</div>
 			<div id="pairings-list">
 				@PairingsTable(data.Pairings)
 			</div>
+			<p id="no-results" style="display: none; color: var(--pico-muted-color); text-align: center; padding: 2rem;">
+				No pairings match your search.
+			</p>
+			<script>
+				(function() {
+					const searchInput = document.getElementById('pairing-search');
+					const statusFilter = document.getElementById('status-filter');
+					const noResults = document.getElementById('no-results');
+
+					function filterPairings() {
+						const searchTerm = searchInput.value.toLowerCase().trim();
+						const statusValue = statusFilter.value;
+						const rows = document.querySelectorAll('#pairings-list tbody tr');
+						let visibleCount = 0;
+
+						rows.forEach(row => {
+							const player1 = row.cells[0]?.textContent.toLowerCase() || '';
+							const player2 = row.cells[1]?.textContent.toLowerCase() || '';
+							const status = row.cells[2]?.textContent.toLowerCase().trim() || '';
+
+							// Check search match
+							const matchesSearch = !searchTerm ||
+								player1.includes(searchTerm) ||
+								player2.includes(searchTerm);
+
+							// Check status filter
+							let matchesStatus = true;
+							if (statusValue === 'active') {
+								matchesStatus = status === 'active';
+							} else if (statusValue === 'inactive') {
+								matchesStatus = status === 'inactive';
+							}
+
+							if (matchesSearch && matchesStatus) {
+								row.style.display = '';
+								visibleCount++;
+							} else {
+								row.style.display = 'none';
+							}
+						});
+
+						// Show/hide no results message
+						noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+					}
+
+					searchInput.addEventListener('input', filterPairings);
+					statusFilter.addEventListener('change', filterPairings);
+				})();
+			</script>
+			<style>
+				.search-filter-bar {
+					display: flex;
+					gap: 1rem;
+					margin-bottom: 1rem;
+				}
+				.search-filter-bar input[type="search"] {
+					flex: 1;
+					margin-bottom: 0;
+				}
+				.search-filter-bar select {
+					width: auto;
+					min-width: 150px;
+					margin-bottom: 0;
+					appearance: none;
+					-webkit-appearance: none;
+					-moz-appearance: none;
+					background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+					background-repeat: no-repeat;
+					background-position: right 0.75rem center;
+					background-size: 16px;
+					padding-right: 2.5rem;
+				}
+				.search-filter-bar select:hover,
+				.search-filter-bar select:focus {
+					background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+				}
+				@media (max-width: 576px) {
+					.search-filter-bar {
+						flex-direction: column;
+					}
+					.search-filter-bar select {
+						width: 100%;
+					}
+				}
+			</style>
 		}
 	}
 }
