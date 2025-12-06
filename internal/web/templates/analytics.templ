@@ -1,0 +1,384 @@
+package templates
+
+import (
+	"fmt"
+	"github.com/mauv0809/ideal-tribble/internal/pairings"
+)
+
+// opponentWinRateClass returns a CSS class based on win percentage thresholds.
+func opponentWinRateClass(pct float64) string {
+	if pct >= 60 {
+		return "winrate-high"
+	} else if pct >= 40 {
+		return "winrate-mid"
+	}
+	return "winrate-low"
+}
+
+// OpponentStatsData holds data for the opponent breakdown page.
+type OpponentStatsData struct {
+	PageData
+	Pairing   pairings.TrackedPairing
+	Opponents []pairings.OpponentStats
+}
+
+// OpponentStatsPage renders the opponent breakdown page.
+templ OpponentStatsPage(data OpponentStatsData) {
+	@Layout(data.PageData) {
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+			<h1>Opponent Breakdown</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d", data.Pairing.ID)) } role="button" class="outline">
+				← Back to { data.Pairing.Player1Name } & { data.Pairing.Player2Name }
+			</a>
+		</div>
+
+		if len(data.Opponents) == 0 {
+			<article>
+				<p>No matches recorded yet against any opponents.</p>
+			</article>
+		} else {
+			<table class="clickable-rows">
+				<thead>
+					<tr>
+						<th>Opponents</th>
+						<th>Matches</th>
+						<th>Wins</th>
+						<th>Losses</th>
+						<th>Win Rate</th>
+						<th>Sets</th>
+						<th>Games</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, opp := range data.Opponents {
+						<tr class="clickable-row" data-href={ fmt.Sprintf("/pairings/%d/opponents/%s/%s", data.Pairing.ID, opp.Opponent1ID, opp.Opponent2ID) }>
+							<td>{ opp.Opponent1Name } & { opp.Opponent2Name }</td>
+							<td>{ fmt.Sprint(opp.MatchesPlayed) }</td>
+							<td>{ fmt.Sprint(opp.MatchesWon) }</td>
+							<td>{ fmt.Sprint(opp.MatchesLost) }</td>
+							<td class={ opponentWinRateClass(opp.WinPercentage) }>{ fmt.Sprintf("%.1f%%", opp.WinPercentage) }</td>
+							<td>{ fmt.Sprintf("%d-%d", opp.SetsWon, opp.SetsLost) }</td>
+							<td>{ fmt.Sprintf("%d-%d", opp.GamesWon, opp.GamesLost) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+			<script>
+				document.querySelectorAll('.clickable-row').forEach(row => {
+					row.addEventListener('click', () => {
+						window.location.href = row.dataset.href;
+					});
+				});
+			</script>
+		}
+	}
+}
+
+// OpponentDetailData holds data for the opponent detail page.
+type OpponentDetailData struct {
+	PageData
+	Pairing       pairings.TrackedPairing
+	OpponentStats pairings.OpponentStats
+	Matches       []OpponentMatch
+	RecentForm    []bool // last 5 results, true = win
+}
+
+// OpponentMatch represents a match against this opponent for display.
+type OpponentMatch struct {
+	MatchID   string
+	MatchDate string
+	Won       bool
+	SetsWon   int
+	SetsLost  int
+}
+
+// OpponentDetailPage renders the opponent detail page.
+templ OpponentDetailPage(data OpponentDetailData) {
+	@Layout(data.PageData) {
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+			<h1>vs { data.OpponentStats.Opponent1Name } & { data.OpponentStats.Opponent2Name }</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d/opponents", data.Pairing.ID)) } role="button" class="outline">
+				← Back to Opponents
+			</a>
+		</div>
+
+		// Overall Record
+		<section>
+			<div class="stats-grid">
+				<div class="stat-card">
+					<div class="stat-value">{ fmt.Sprint(data.OpponentStats.MatchesPlayed) }</div>
+					<div class="stat-label">Matches Played</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-value">{ fmt.Sprint(data.OpponentStats.MatchesWon) } - { fmt.Sprint(data.OpponentStats.MatchesLost) }</div>
+					<div class="stat-label">Record (W-L)</div>
+				</div>
+				<div class="stat-card">
+					<div class={ "stat-value " + opponentWinRateClass(data.OpponentStats.WinPercentage) }>{ fmt.Sprintf("%.1f%%", data.OpponentStats.WinPercentage) }</div>
+					<div class="stat-label">Win Rate</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-value">{ fmt.Sprintf("%d-%d", data.OpponentStats.SetsWon, data.OpponentStats.SetsLost) }</div>
+					<div class="stat-label">Sets</div>
+				</div>
+			</div>
+		</section>
+
+		// Recent Form
+		if len(data.RecentForm) > 0 {
+			<section>
+				<h2>Recent Form</h2>
+				<div style="display: flex; gap: 8px;">
+					for _, won := range data.RecentForm {
+						if won {
+							<span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 4px; background: rgba(166, 227, 161, 0.2); color: var(--ctp-green); font-weight: 600; font-size: 12px;">W</span>
+						} else {
+							<span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 4px; background: rgba(243, 139, 168, 0.2); color: var(--ctp-red); font-weight: 600; font-size: 12px;">L</span>
+						}
+					}
+				</div>
+				<small style="color: var(--text-muted); margin-top: 8px; display: block;">Most recent on the right</small>
+			</section>
+		}
+
+		// Match History
+		if len(data.Matches) > 0 {
+			<section>
+				<h2>Match History</h2>
+				<table class="clickable-rows">
+					<thead>
+						<tr>
+							<th>Date</th>
+							<th>Result</th>
+							<th>Score</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, match := range data.Matches {
+							<tr class="clickable-row" data-href={ fmt.Sprintf("/matches/%s?pairing=%d", match.MatchID, data.Pairing.ID) }>
+								<td>{ match.MatchDate }</td>
+								<td>
+									if match.Won {
+										<span class="text-success">Win</span>
+									} else {
+										<span class="text-error">Loss</span>
+									}
+								</td>
+								<td>{ fmt.Sprintf("%d-%d", match.SetsWon, match.SetsLost) }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+				<script>
+					document.querySelectorAll('.clickable-row').forEach(row => {
+						row.addEventListener('click', () => {
+							window.location.href = row.dataset.href;
+						});
+					});
+				</script>
+			</section>
+		}
+	}
+}
+
+// IndividualPlayersData holds data for the individual players breakdown page.
+type IndividualPlayersData struct {
+	PageData
+	Pairing pairings.TrackedPairing
+	Players []pairings.IndividualPlayerStats
+}
+
+// IndividualPlayersPage renders the individual players breakdown page.
+templ IndividualPlayersPage(data IndividualPlayersData) {
+	@Layout(data.PageData) {
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+			<h1>Individual Players</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d", data.Pairing.ID)) } role="button" class="outline">
+				← Back to { data.Pairing.Player1Name } & { data.Pairing.Player2Name }
+			</a>
+		</div>
+
+		if len(data.Players) == 0 {
+			<article>
+				<p>No matches recorded yet against any players.</p>
+			</article>
+		} else {
+			<table class="clickable-rows">
+				<thead>
+					<tr>
+						<th>Player</th>
+						<th>Matches</th>
+						<th>Wins</th>
+						<th>Losses</th>
+						<th>Win Rate</th>
+						<th>Sets</th>
+						<th>Games</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, player := range data.Players {
+						<tr class="clickable-row" data-href={ fmt.Sprintf("/pairings/%d/players/%s", data.Pairing.ID, player.PlayerID) }>
+							<td>{ player.PlayerName }</td>
+							<td>{ fmt.Sprint(player.MatchesPlayed) }</td>
+							<td>{ fmt.Sprint(player.MatchesWon) }</td>
+							<td>{ fmt.Sprint(player.MatchesLost) }</td>
+							<td class={ opponentWinRateClass(player.WinPercentage) }>{ fmt.Sprintf("%.1f%%", player.WinPercentage) }</td>
+							<td>{ fmt.Sprintf("%d-%d", player.SetsWon, player.SetsLost) }</td>
+							<td>{ fmt.Sprintf("%d-%d", player.GamesWon, player.GamesLost) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+			<script>
+				document.querySelectorAll('.clickable-row').forEach(row => {
+					row.addEventListener('click', () => {
+						window.location.href = row.dataset.href;
+					});
+				});
+			</script>
+		}
+	}
+}
+
+// IndividualPlayerMatch represents a match against an individual player for display.
+type IndividualPlayerMatch struct {
+	MatchID     string
+	MatchDate   string
+	Won         bool
+	SetsWon     int
+	SetsLost    int
+	PartnerName string // The partner of the individual player in this match
+}
+
+// IndividualPlayerDetailData holds data for the individual player detail page.
+type IndividualPlayerDetailData struct {
+	PageData
+	Pairing     pairings.TrackedPairing
+	PlayerStats pairings.IndividualPlayerStats
+	Partners    []pairings.PlayerPartnerStats
+	Matches     []IndividualPlayerMatch
+	RecentForm  []bool // last 5 results, true = win
+}
+
+// IndividualPlayerDetailPage renders the individual player detail page.
+templ IndividualPlayerDetailPage(data IndividualPlayerDetailData) {
+	@Layout(data.PageData) {
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+			<h1>vs { data.PlayerStats.PlayerName }</h1>
+			<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d/players", data.Pairing.ID)) } role="button" class="outline">
+				← Back to Players
+			</a>
+		</div>
+
+		// Overall Record
+		<section>
+			<div class="stats-grid">
+				<div class="stat-card">
+					<div class="stat-value">{ fmt.Sprint(data.PlayerStats.MatchesPlayed) }</div>
+					<div class="stat-label">Matches Played</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-value">{ fmt.Sprint(data.PlayerStats.MatchesWon) } - { fmt.Sprint(data.PlayerStats.MatchesLost) }</div>
+					<div class="stat-label">Record (W-L)</div>
+				</div>
+				<div class="stat-card">
+					<div class={ "stat-value " + opponentWinRateClass(data.PlayerStats.WinPercentage) }>{ fmt.Sprintf("%.1f%%", data.PlayerStats.WinPercentage) }</div>
+					<div class="stat-label">Win Rate</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-value">{ fmt.Sprintf("%d-%d", data.PlayerStats.SetsWon, data.PlayerStats.SetsLost) }</div>
+					<div class="stat-label">Sets</div>
+				</div>
+			</div>
+		</section>
+
+		// Recent Form
+		if len(data.RecentForm) > 0 {
+			<section>
+				<h2>Recent Form</h2>
+				<div style="display: flex; gap: 8px;">
+					for _, won := range data.RecentForm {
+						if won {
+							<span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 4px; background: rgba(166, 227, 161, 0.2); color: var(--ctp-green); font-weight: 600; font-size: 12px;">W</span>
+						} else {
+							<span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 4px; background: rgba(243, 139, 168, 0.2); color: var(--ctp-red); font-weight: 600; font-size: 12px;">L</span>
+						}
+					}
+				</div>
+				<small style="color: var(--text-muted); margin-top: 8px; display: block;">Most recent on the right</small>
+			</section>
+		}
+
+		// Partner Breakdown
+		if len(data.Partners) > 0 {
+			<section>
+				<h2>By Partner</h2>
+				<p style="color: var(--text-muted); margin-bottom: 1rem;">Record vs { data.PlayerStats.PlayerName } when paired with different partners:</p>
+				<table>
+					<thead>
+						<tr>
+							<th>Partner</th>
+							<th>Matches</th>
+							<th>Wins</th>
+							<th>Losses</th>
+							<th>Win Rate</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, partner := range data.Partners {
+							<tr>
+								<td>{ partner.PartnerName }</td>
+								<td>{ fmt.Sprint(partner.MatchesPlayed) }</td>
+								<td>{ fmt.Sprint(partner.MatchesWon) }</td>
+								<td>{ fmt.Sprint(partner.MatchesLost) }</td>
+								<td class={ opponentWinRateClass(partner.WinPercentage) }>{ fmt.Sprintf("%.1f%%", partner.WinPercentage) }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</section>
+		}
+
+		// Match History
+		if len(data.Matches) > 0 {
+			<section>
+				<h2>Match History</h2>
+				<table class="clickable-rows">
+					<thead>
+						<tr>
+							<th>Date</th>
+							<th>Partner</th>
+							<th>Result</th>
+							<th>Score</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, match := range data.Matches {
+							<tr class="clickable-row" data-href={ fmt.Sprintf("/matches/%s?pairing=%d", match.MatchID, data.Pairing.ID) }>
+								<td>{ match.MatchDate }</td>
+								<td>{ match.PartnerName }</td>
+								<td>
+									if match.Won {
+										<span class="text-success">Win</span>
+									} else {
+										<span class="text-error">Loss</span>
+									}
+								</td>
+								<td>{ fmt.Sprintf("%d-%d", match.SetsWon, match.SetsLost) }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+				<script>
+					document.querySelectorAll('.clickable-row').forEach(row => {
+						row.addEventListener('click', () => {
+							window.location.href = row.dataset.href;
+						});
+					});
+				</script>
+			</section>
+		}
+	}
+}
+
+

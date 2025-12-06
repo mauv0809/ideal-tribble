@@ -1,0 +1,120 @@
+package templates
+
+// ProfilePage renders the user profile page.
+templ ProfilePage(data PageData) {
+	@Layout(data) {
+		<h1>Profile</h1>
+
+		<article>
+			<header>
+				<h2>Account Information</h2>
+			</header>
+			<dl>
+				<dt>Email</dt>
+				<dd>{ data.User.Email }</dd>
+				<dt>Role</dt>
+				<dd>
+					if data.User.IsAdmin {
+						Administrator
+					} else {
+						User
+					}
+				</dd>
+				<dt>Two-Factor Authentication</dt>
+				<dd>
+					if data.User.TOTPEnabled {
+						<span style="color: var(--pico-primary);">Enabled</span>
+					} else {
+						<span style="color: var(--pico-muted-color);">Disabled</span>
+					}
+				</dd>
+			</dl>
+		</article>
+
+		<article>
+			<header>
+				<h2>Change Password</h2>
+			</header>
+			<form method="POST" action="/profile/password">
+				<label for="current_password">
+					Current Password
+					<input type="password" id="current_password" name="current_password" required/>
+				</label>
+				<label for="new_password">
+					New Password
+					<input type="password" id="new_password" name="new_password"
+						   minlength="8" required/>
+					<small>Minimum 8 characters</small>
+				</label>
+				<label for="confirm_password">
+					Confirm New Password
+					<input type="password" id="confirm_password" name="confirm_password"
+						   minlength="8" required/>
+				</label>
+				<button type="submit">Change Password</button>
+			</form>
+		</article>
+
+		<article>
+			<header>
+				<h2>Two-Factor Authentication</h2>
+			</header>
+			if data.User.TOTPEnabled {
+				<p>Two-factor authentication is currently <strong>enabled</strong>.</p>
+				<form method="POST" action="/profile/totp/disable">
+					<button type="submit" class="outline secondary">Disable 2FA</button>
+				</form>
+			} else {
+				<p>Two-factor authentication adds an extra layer of security to your account.</p>
+				<a href="/profile/totp/setup" role="button">Enable 2FA</a>
+			}
+		</article>
+	}
+}
+
+// TOTPSetupData holds data for the TOTP setup page.
+type TOTPSetupData struct {
+	PageData
+	ProvisioningURI string
+	Secret          string
+}
+
+// TOTPSetupPage renders the TOTP setup page.
+templ TOTPSetupPage(data TOTPSetupData) {
+	@Layout(data.PageData) {
+		<h1>Set Up Two-Factor Authentication</h1>
+
+		<article>
+			<header>
+				<h2>Step 1: Scan QR Code</h2>
+			</header>
+			<p>Scan this QR code with your authenticator app (e.g., Google Authenticator, Authy):</p>
+			<div style="text-align: center; padding: 1rem; background: white; display: inline-block;">
+				<img src={ "/profile/totp/qr" } alt="TOTP QR Code" style="max-width: 200px;"/>
+			</div>
+			<p>Or manually enter this secret:</p>
+			<code style="display: block; padding: 1rem; background: var(--pico-code-background-color); word-break: break-all;">
+				{ data.Secret }
+			</code>
+		</article>
+
+		<article>
+			<header>
+				<h2>Step 2: Verify Code</h2>
+			</header>
+			<p>Enter the 6-digit code from your authenticator app to verify setup:</p>
+			<form method="POST" action="/profile/totp/verify">
+				<label for="code">
+					Verification Code
+					<input type="text" id="code" name="code" placeholder="123456"
+						   pattern="[0-9]{6}" maxlength="6" inputmode="numeric"
+						   autocomplete="one-time-code" required autofocus/>
+				</label>
+				<div class="grid">
+					<a href="/profile" role="button" class="outline secondary">Cancel</a>
+					<button type="submit">Verify & Enable 2FA</button>
+				</div>
+			</form>
+		</article>
+	}
+}

@@ -1,0 +1,405 @@
+package templates
+
+import (
+	"fmt"
+	"time"
+	"github.com/mauv0809/ideal-tribble/internal/pairings"
+)
+
+// winRateClass returns a CSS class based on win percentage thresholds.
+func winRateClass(pct float64) string {
+	if pct >= 60 {
+		return "winrate-high"
+	} else if pct >= 40 {
+		return "winrate-mid"
+	}
+	return "winrate-low"
+}
+
+// RecentMatch represents a recent match for display.
+type RecentMatch struct {
+	MatchID       string
+	MatchDate     string
+	Won           bool
+	SetsWon       int
+	SetsLost      int
+	Opponent1Name string
+	Opponent2Name string
+	TenantName    string
+}
+
+// PairingDetailData holds data for the pairing detail page.
+type PairingDetailData struct {
+	PageData
+	Pairing       pairings.TrackedPairing
+	Stats         pairings.PairingStats
+	RecentMatches []RecentMatch
+	// Pagination
+	CurrentPage   int
+	TotalPages    int
+	TotalMatches  int
+	// Filter
+	Filter        string // "", "wins", "losses"
+}
+
+// MatchHistoryData holds data for the match history partial.
+type MatchHistoryData struct {
+	PairingID     int64
+	Matches       []RecentMatch
+	CurrentPage   int
+	TotalPages    int
+	TotalMatches  int
+	Filter        string // "", "wins", "losses"
+}
+
+// PairingDetailPage renders the pairing detail/analytics page.
+templ PairingDetailPage(data PairingDetailData) {
+	@Layout(data.PageData) {
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+			<h1>{ data.Pairing.Player1Name } & { data.Pairing.Player2Name }</h1>
+			<a href="/pairings" role="button" class="outline">← Back to Pairings</a>
+		</div>
+
+		// Overall Stats
+		<section>
+			<h2>Overall Statistics</h2>
+			<div class="stats-grid" id="filter-cards">
+				<div
+					class="stat-card stat-card-clickable stat-card-filter"
+					data-filter=""
+					hx-get={ fmt.Sprintf("/pairings/%d/matches", data.Pairing.ID) }
+					hx-target="#match-history"
+					hx-swap="innerHTML"
+				>
+					<div class="stat-value">{ fmt.Sprint(data.Stats.MatchesPlayed) }</div>
+					<div class="stat-label">Matches Played</div>
+				</div>
+				<div
+					class="stat-card stat-card-clickable stat-card-filter"
+					data-filter="wins"
+					hx-get={ fmt.Sprintf("/pairings/%d/matches?filter=wins", data.Pairing.ID) }
+					hx-target="#match-history"
+					hx-swap="innerHTML"
+				>
+					<div class="stat-value">{ fmt.Sprint(data.Stats.MatchesWon) }</div>
+					<div class="stat-label">Wins</div>
+				</div>
+				<div
+					class="stat-card stat-card-clickable stat-card-filter"
+					data-filter="losses"
+					hx-get={ fmt.Sprintf("/pairings/%d/matches?filter=losses", data.Pairing.ID) }
+					hx-target="#match-history"
+					hx-swap="innerHTML"
+				>
+					<div class="stat-value">{ fmt.Sprint(data.Stats.MatchesLost) }</div>
+					<div class="stat-label">Losses</div>
+				</div>
+				<div class="stat-card">
+					<div class={ "stat-value " + winRateClass(data.Stats.WinPercentage) }>{ fmt.Sprintf("%.1f%%", data.Stats.WinPercentage) }</div>
+					<div class="stat-label">Win Rate</div>
+				</div>
+			</div>
+			<script>
+				document.querySelectorAll('.stat-card-filter').forEach(card => {
+					card.addEventListener('click', () => {
+						document.querySelectorAll('.stat-card-filter').forEach(c => c.classList.remove('stat-card-active'));
+						card.classList.add('stat-card-active');
+					});
+				});
+			</script>
+
+			<div class="stats-grid">
+				<div class="stat-card">
+					<div class="stat-value">{ fmt.Sprint(data.Stats.SetsWon) } - { fmt.Sprint(data.Stats.SetsLost) }</div>
+					<div class="stat-label">Sets Won/Lost</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-value">{ fmt.Sprint(data.Stats.GamesWon) } - { fmt.Sprint(data.Stats.GamesLost) }</div>
+					<div class="stat-label">Games Won/Lost</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-value">
+						if data.Stats.CurrentStreak < 0 {
+							{ fmt.Sprint(-data.Stats.CurrentStreak) }
+						} else {
+							{ fmt.Sprint(data.Stats.CurrentStreak) }
+						}
+					</div>
+					<div class="stat-label">
+						if data.Stats.CurrentStreak > 0 {
+							Current Win Streak
+						} else if data.Stats.CurrentStreak < 0 {
+							Current Loss Streak
+						} else {
+							Current Streak
+						}
+					</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-value">{ fmt.Sprint(data.Stats.LongestWin) }</div>
+					<div class="stat-label">Best Win Streak</div>
+				</div>
+			</div>
+		</section>
+
+		// Navigation to detailed analytics
+		<section>
+			<h2>Detailed Analytics</h2>
+			<div style="display: flex; gap: 12px;">
+				<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d/opponents", data.Pairing.ID)) } role="button" class="outline">
+					Opponent Pairs
+				</a>
+				<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d/players", data.Pairing.ID)) } role="button" class="outline">
+					Individual Players
+				</a>
+			</div>
+		</section>
+
+		// Match History
+		<section>
+			<div id="match-history">
+				@MatchHistoryPartial(MatchHistoryData{
+					PairingID:    data.Pairing.ID,
+					Matches:      data.RecentMatches,
+					CurrentPage:  data.CurrentPage,
+					TotalPages:   data.TotalPages,
+					TotalMatches: data.TotalMatches,
+					Filter:       data.Filter,
+				})
+			</div>
+		</section>
+	}
+}
+
+// filterLabel returns a human-readable label for the current filter.
+func filterLabel(filter string) string {
+	switch filter {
+	case "wins":
+		return "wins"
+	case "losses":
+		return "losses"
+	default:
+		return "total"
+	}
+}
+
+// MatchHistoryPartial renders just the match history table (for HTMX swaps).
+templ MatchHistoryPartial(data MatchHistoryData) {
+	<h2>
+		Match History
+		if data.TotalMatches > 0 {
+			<small style="font-weight: normal; color: var(--pico-muted-color);"> ({ fmt.Sprint(data.TotalMatches) } { filterLabel(data.Filter) })</small>
+		}
+	</h2>
+	if len(data.Matches) > 0 {
+		<table class="clickable-rows">
+			<thead>
+				<tr>
+					<th>Date</th>
+					<th>Result</th>
+					<th>Score</th>
+					<th>Opponents</th>
+					<th>Venue</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, match := range data.Matches {
+					<tr class="clickable-row" data-href={ fmt.Sprintf("/matches/%s?pairing=%d", match.MatchID, data.PairingID) } style="cursor: pointer;">
+						<td>{ match.MatchDate }</td>
+						<td>
+							if match.Won {
+								<span class="text-success">Win</span>
+							} else {
+								<span class="text-error">Loss</span>
+							}
+						</td>
+						<td>{ fmt.Sprintf("%d-%d", match.SetsWon, match.SetsLost) }</td>
+						<td>{ match.Opponent1Name } & { match.Opponent2Name }</td>
+						<td>{ match.TenantName }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+
+		// Pagination
+		if data.TotalPages > 1 {
+			<nav style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1rem;">
+				if data.CurrentPage > 1 {
+					@paginationLink(data.PairingID, data.CurrentPage-1, data.Filter, "← Previous")
+				}
+				<span style="display: flex; align-items: center; padding: 0 1rem;">
+					Page { fmt.Sprint(data.CurrentPage) } of { fmt.Sprint(data.TotalPages) }
+				</span>
+				if data.CurrentPage < data.TotalPages {
+					@paginationLink(data.PairingID, data.CurrentPage+1, data.Filter, "Next →")
+				}
+			</nav>
+		}
+
+		<script>
+			document.querySelectorAll('.clickable-row').forEach(row => {
+				row.addEventListener('click', () => {
+					window.location.href = row.dataset.href;
+				});
+				row.addEventListener('mouseover', () => {
+					row.style.backgroundColor = 'var(--pico-muted-border-color)';
+				});
+				row.addEventListener('mouseout', () => {
+					row.style.backgroundColor = '';
+				});
+			});
+		</script>
+	} else {
+		<p style="color: var(--pico-muted-color);">No matches found.</p>
+	}
+}
+
+// paginationLink renders a pagination link with HTMX attributes.
+templ paginationLink(pairingID int64, page int, filter string, label string) {
+	if filter != "" {
+		<a
+			role="button"
+			class="outline"
+			hx-get={ fmt.Sprintf("/pairings/%d/matches?filter=%s&page=%d", pairingID, filter, page) }
+			hx-target="#match-history"
+			hx-swap="innerHTML"
+		>{ label }</a>
+	} else {
+		<a
+			role="button"
+			class="outline"
+			hx-get={ fmt.Sprintf("/pairings/%d/matches?page=%d", pairingID, page) }
+			hx-target="#match-history"
+			hx-swap="innerHTML"
+		>{ label }</a>
+	}
+}
+
+// MatchDetailData holds data for the match detail page.
+type MatchDetailData struct {
+	PageData
+	Match         pairings.PairingMatch
+	PairingID     int64
+	PairingName   string
+	HeadToHead    []RecentMatch
+	H2HWins       int
+	H2HLosses     int
+}
+
+// MatchDetailPage renders the match detail page.
+templ MatchDetailPage(data MatchDetailData) {
+	@Layout(data.PageData) {
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+			<h1>Match Details</h1>
+			if data.PairingID > 0 {
+				<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d", data.PairingID)) } role="button" class="outline">← Back to { data.PairingName }</a>
+			}
+		</div>
+
+		// Match Overview
+		<section>
+			<article>
+				<div class="grid">
+					<div>
+						<h3>Date & Venue</h3>
+						<p><strong>Date:</strong> { formatMatchDate(data.Match.MatchDate) }</p>
+						<p><strong>Venue:</strong> { data.Match.TenantName }</p>
+						<p><strong>Time:</strong> { formatMatchTime(data.Match.HourOfDay) }</p>
+					</div>
+					<div>
+						<h3>Result</h3>
+						<p style="font-size: 2rem; font-weight: bold;">
+							if data.Match.PairingWon {
+								<span class="text-success">WIN</span>
+							} else {
+								<span class="text-error">LOSS</span>
+							}
+						</p>
+						<p style="font-size: 1.5rem;">{ fmt.Sprintf("%d - %d", data.Match.SetsWon, data.Match.SetsLost) } sets</p>
+						<p>{ fmt.Sprintf("%d - %d", data.Match.GamesWon, data.Match.GamesLost) } games</p>
+					</div>
+				</div>
+			</article>
+		</section>
+
+		// Teams
+		<section>
+			<h2>Teams</h2>
+			<div class="grid">
+				<article>
+					<header>
+						if data.Match.PairingWon {
+							<span class="text-success">Winner</span>
+						} else {
+							<span class="text-error">Loser</span>
+						}
+					</header>
+					<p style="font-size: 1.25rem;">{ data.PairingName }</p>
+				</article>
+				<article>
+					<header>
+						if data.Match.PairingWon {
+							<span class="text-error">Loser</span>
+						} else {
+							<span class="text-success">Winner</span>
+						}
+					</header>
+					<p style="font-size: 1.25rem;">{ data.Match.Opponent1Name } & { data.Match.Opponent2Name }</p>
+				</article>
+			</div>
+		</section>
+
+		// Head-to-Head History
+		if len(data.HeadToHead) > 1 {
+			<section>
+				<h2>Head-to-Head vs { data.Match.Opponent1Name } & { data.Match.Opponent2Name }</h2>
+				<p>
+					<strong>Record:</strong> { fmt.Sprint(data.H2HWins) } wins, { fmt.Sprint(data.H2HLosses) } losses
+					if data.H2HWins + data.H2HLosses > 0 {
+						({ fmt.Sprintf("%.0f%%", float64(data.H2HWins)/float64(data.H2HWins+data.H2HLosses)*100) } win rate)
+					}
+				</p>
+				<table>
+					<thead>
+						<tr>
+							<th>Date</th>
+							<th>Result</th>
+							<th>Score</th>
+							<th>Venue</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, match := range data.HeadToHead {
+							<tr>
+								<td>{ match.MatchDate }</td>
+								<td>
+									if match.Won {
+										<span class="text-success">Win</span>
+									} else {
+										<span class="text-error">Loss</span>
+									}
+								</td>
+								<td>{ fmt.Sprintf("%d-%d", match.SetsWon, match.SetsLost) }</td>
+								<td>{ match.TenantName }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</section>
+		}
+	}
+}
+
+func formatMatchDate(unixTime int64) string {
+	t := time.Unix(unixTime, 0)
+	return t.Format("Monday, January 2, 2006")
+}
+
+func formatMatchTime(hour int) string {
+	if hour < 12 {
+		return fmt.Sprintf("%d:00 AM", hour)
+	} else if hour == 12 {
+		return "12:00 PM"
+	}
+	return fmt.Sprintf("%d:00 PM", hour-12)
+}

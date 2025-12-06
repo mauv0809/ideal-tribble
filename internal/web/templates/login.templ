@@ -1,0 +1,56 @@
+package templates
+
+// LoginPage renders the login form.
+templ LoginPage(data PageData, showTOTP bool) {
+	@Layout(data) {
+		<article style="max-width: 400px; margin: 2rem auto;">
+			<header>
+				<h2>Login</h2>
+			</header>
+			<form method="POST" action="/login">
+				<label for="email">
+					Email
+					<input type="email" id="email" name="email" placeholder="you@example.com" required autofocus/>
+				</label>
+				<label for="password">
+					Password
+					<input type="password" id="password" name="password" placeholder="Your password" required/>
+				</label>
+				if showTOTP {
+					<label for="totp_code">
+						Two-Factor Code
+						<input type="text" id="totp_code" name="totp_code" placeholder="123456"
+							   pattern="[0-9]{6}" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
+						<small>Enter the 6-digit code from your authenticator app</small>
+					</label>
+				}
+				<button type="submit">Login</button>
+			</form>
+		</article>
+	}
+}
+
+// TOTPRequiredPage shows when TOTP verification is needed.
+templ TOTPRequiredPage(data PageData, email string) {
+	@Layout(data) {
+		<article style="max-width: 400px; margin: 2rem auto;">
+			<header>
+				<h2>Two-Factor Authentication</h2>
+			</header>
+			<p>Enter the 6-digit code from your authenticator app.</p>
+			<form method="POST" action="/login/totp">
+				<input type="hidden" name="email" value={ email }/>
+				<label for="totp_code">
+					Code
+					<input type="text" id="totp_code" name="totp_code" placeholder="123456"
+						   pattern="[0-9]{6}" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
+						   required autofocus/>
+				</label>
+				<button type="submit">Verify</button>
+			</form>
+			<p>
+				<a href="/login">← Back to login</a>
+			</p>
+		</article>
+	}
+}
