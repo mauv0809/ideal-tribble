@@ -85,9 +85,19 @@ func (c *APIClient) GetMatches(params *SearchMatchesParams) ([]MatchSummary, err
 
 		log.Info("Successfully fetched matches", "count", len(matches), "page", page)
 		for _, m := range matches {
+			// Extract all player IDs from both teams
+			var playerIDs []string
+			for _, team := range m.Teams {
+				for _, player := range team.Players {
+					playerIDs = append(playerIDs, player.BasePlayer.UserID)
+				}
+			}
+
 			allMatches = append(allMatches, MatchSummary{
-				MatchID: m.MatchID,
-				OwnerID: m.OwnerID,
+				MatchID:    m.MatchID,
+				OwnerID:    m.OwnerID,
+				GameStatus: m.GameStatus,
+				PlayerIDs:  playerIDs,
 			})
 		}
 

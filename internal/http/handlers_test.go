@@ -20,6 +20,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
+	"github.com/mauv0809/ideal-tribble/internal/pairings"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
 	"github.com/prometheus/client_golang/prometheus"
@@ -51,9 +52,10 @@ func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, no
 	metricsHandler := metrics.NewMetricsHandler(reg)
 	matchMaking := matchmaking.NewStore(db, clubStore)
 	jobqueue := jobqueue.New(db)
+	pairingsStore := pairings.New(db)
 	proc := processor.New(clubStore, notifier, metricsSvc, jobqueue, matchMaking)
 	// A real mux is needed to prevent the router from being nil.
-	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, matchMaking, jobqueue)
+	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, matchMaking, pairingsStore, jobqueue)
 
 	teardown := func() {
 		if dbTeardown != nil {
@@ -305,7 +307,7 @@ func TestFetchMatchesHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
-	handler := handlers.FetchMatchesHandler(server.Store, server.Metrics, server.Cfg, server.PlaytomicClient, server.MatchmakingService)
+	handler := handlers.FetchMatchesHandler(server.Store, server.Metrics, server.Cfg, server.PlaytomicClient, server.MatchmakingService, server.PairingsStore)
 	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
@@ -380,7 +382,7 @@ func TestFetchMatchesHandler_DetectsMatchRequests(t *testing.T) {
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
-	handler := handlers.FetchMatchesHandler(server.Store, server.Metrics, server.Cfg, server.PlaytomicClient, server.MatchmakingService)
+	handler := handlers.FetchMatchesHandler(server.Store, server.Metrics, server.Cfg, server.PlaytomicClient, server.MatchmakingService, server.PairingsStore)
 	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)

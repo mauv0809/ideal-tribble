@@ -23,6 +23,18 @@ func Load() Config {
 		return "" // This line is never reached
 	}
 
+	// Get web config (optional - will use defaults if not set)
+	sessionSecret := os.Getenv("WEB_SESSION_SECRET")
+	if sessionSecret == "" {
+		sessionSecret = "change-me-in-production-32chars!" // Default for dev
+		log.Warn("WEB_SESSION_SECRET not set, using insecure default")
+	}
+	totpKey := os.Getenv("WEB_TOTP_ENCRYPTION_KEY")
+	if totpKey == "" {
+		totpKey = "change-me-32-chars-for-aes-256!" // Default for dev
+		log.Warn("WEB_TOTP_ENCRYPTION_KEY not set, using insecure default")
+	}
+
 	cfg := Config{
 		DBName:        getEnv("DB_NAME"),
 		MigrationsDir: "./migrations",
@@ -44,6 +56,10 @@ func Load() Config {
 		},*/
 		Ngrok: NgrokConfig{
 			AuthToken: os.Getenv("NGROK_AUTHTOKEN"),
+		},
+		Web: WebConfig{
+			SessionSecret:     sessionSecret,
+			TOTPEncryptionKey: totpKey,
 		},
 	}
 	return cfg

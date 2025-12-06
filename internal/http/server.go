@@ -6,15 +6,16 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/config"
 	"github.com/mauv0809/ideal-tribble/internal/http/handlers"
+	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
+	"github.com/mauv0809/ideal-tribble/internal/pairings"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
-	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 )
 
-func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler http.Handler, cfg config.Config, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier, processor *processor.Processor, matchmakingService matchmaking.MatchmakingService, jobQueue jobqueue.JobQueue /*inngestClient inngest.InngestClient*/) *Server {
+func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler http.Handler, cfg config.Config, playtomicClient playtomic.PlaytomicClient, notifier notifier.Notifier, processor *processor.Processor, matchmakingService matchmaking.MatchmakingService, pairingsStore pairings.PairingsStore, jobQueue jobqueue.JobQueue /*inngestClient inngest.InngestClient*/) *Server {
 	server := &Server{
 		Store:              store,
 		Metrics:            metricsSvc,
@@ -24,6 +25,7 @@ func NewServer(store club.ClubStore, metricsSvc metrics.Metrics, metricsHandler 
 		Notifier:           notifier,
 		Processor:          processor,
 		MatchmakingService: matchmakingService,
+		PairingsStore:      pairingsStore,
 		Router:             http.NewServeMux(),
 		jobQueue:           jobQueue,
 		//InngestClient:   inngestClient,
@@ -51,7 +53,7 @@ func (s *Server) routes() {
 	s.Router.Handle("/leaderboard", Chain(handlers.LeaderboardHandler(s.Store), paramsMiddleware))
 
 	// Scheduled endpoints (Cloud Scheduler)
-	s.Router.Handle("/fetch", Chain(handlers.FetchMatchesHandler(s.Store, s.Metrics, s.Cfg, s.PlaytomicClient, s.MatchmakingService), paramsMiddleware))
+	s.Router.Handle("/fetch", Chain(handlers.FetchMatchesHandler(s.Store, s.Metrics, s.Cfg, s.PlaytomicClient, s.MatchmakingService, s.PairingsStore), paramsMiddleware))
 	s.Router.Handle("/process", Chain(handlers.ProcessMatchesHandler(s.Processor), paramsMiddleware))
 
 	// Job queue endpoints are now processed by background worker

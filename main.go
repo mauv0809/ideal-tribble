@@ -10,17 +10,20 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/mauv0809/ideal-tribble/internal/auth"
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/config"
 	"github.com/mauv0809/ideal-tribble/internal/database"
 	server "github.com/mauv0809/ideal-tribble/internal/http"
+	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier/slack"
+	"github.com/mauv0809/ideal-tribble/internal/pairings"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
-	"github.com/mauv0809/ideal-tribble/internal/jobqueue"
 	"github.com/mauv0809/ideal-tribble/internal/telemetry"
+	"github.com/mauv0809/ideal-tribble/internal/web"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.ngrok.com/ngrok/v2"
 )
@@ -69,7 +72,36 @@ func main() {
 	notifier := slack.NewNotifier(cfg.Slack.Token, cfg.Slack.ChannelID, metricsSvc)
 	jobQueue := jobqueue.New(db)
 	matchmakingService := matchmaking.NewStore(db, clubStore)
+	pairingsStore := pairings.New(db)
 	processor := processor.New(clubStore, notifier, metricsSvc, jobQueue, matchmakingService)
+
+	// Initialize auth components for web UI
+	authStore := auth.NewStore(db)
+	sessionManager := auth.NewSessionManager(db)
+
+	// Create fetch service for manual match fetching from web UI
+	fetchService := web.NewFetchService(
+		clubStore,
+		cfg,
+		playtomicClient,
+		matchmakingService,
+		pairingsStore,
+	)
+
+	// Create web router
+	webRouter, err := web.NewRouter(
+		web.Config{
+			SessionSecret:     []byte(cfg.Web.SessionSecret),
+			TOTPEncryptionKey: []byte(cfg.Web.TOTPEncryptionKey),
+		},
+		authStore,
+		sessionManager,
+		pairingsStore,
+		fetchService,
+	)
+	if err != nil {
+		log.Fatalf("Failed to create web router: %s", err)
+	}
 
 	s := server.NewServer(
 		clubStore,
@@ -80,6 +112,7 @@ func main() {
 		notifier,
 		processor,
 		matchmakingService,
+		pairingsStore,
 		jobQueue,
 		//inngestClient,
 	)
@@ -158,9 +191,31 @@ func main() {
 	}()
 
 	// --- Graceful shutdown setup ---
-	// Wrap the server handler with OpenTelemetry middleware
-	wrappedHandler := otelhttp.NewHandler(s, "ideal-tribble")
-	
+	// Create a combined handler that routes to either API or web UI
+	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Web UI routes
+		switch {
+		case r.URL.Path == "/" ||
+			r.URL.Path == "/login" ||
+			r.URL.Path == "/logout" ||
+			r.URL.Path == "/dashboard" ||
+			r.URL.Path == "/profile" ||
+			r.URL.Path == "/fetch-matches" ||
+			hasPrefix(r.URL.Path, "/static/") ||
+			hasPrefix(r.URL.Path, "/pairings") ||
+			hasPrefix(r.URL.Path, "/matches/") ||
+			hasPrefix(r.URL.Path, "/admin") ||
+			hasPrefix(r.URL.Path, "/profile/"):
+			webRouter.ServeHTTP(w, r)
+		default:
+			// API routes (existing server)
+			s.ServeHTTP(w, r)
+		}
+	})
+
+	// Wrap the combined handler with OpenTelemetry middleware
+	wrappedHandler := otelhttp.NewHandler(combinedHandler, "ideal-tribble")
+
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: wrappedHandler,
@@ -229,4 +284,9 @@ func main() {
 	}
 
 	log.Info("Server process shutting down")
+}
+
+// hasPrefix checks if s starts with prefix.
+func hasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }

@@ -11,8 +11,10 @@ type SearchMatchesParams struct {
 
 // MatchSummary contains the essential details of a match from a search result.
 type MatchSummary struct {
-	MatchID string
-	OwnerID *string
+	MatchID    string
+	OwnerID    *string
+	GameStatus string
+	PlayerIDs  []string // All player IDs from both teams
 }
 
 // MatchTypeEnum represents the format of a padel match (singles vs doubles).
