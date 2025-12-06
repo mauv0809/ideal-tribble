@@ -42,6 +42,10 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 	recentMatches, _ := h.pairingsStore.GetRecentMatchesAllPairings(5)
 	lastFetchTimestamp, _ := h.pairingsStore.GetLastFetchTimestamp()
 
+	// Get pairing highlights (last 30 days)
+	mostActive, _ := h.pairingsStore.GetMostActivePairing(30)
+	bestPerforming, _ := h.pairingsStore.GetBestPerformingPairing(30, 3) // Min 3 matches
+
 	// Build a map of pairing ID to pairing name for display
 	pairingNames := make(map[int64]string)
 	for _, p := range allPairings {
@@ -63,17 +67,42 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Convert pairing highlights to template format
+	var mostActiveHighlight *templates.PairingHighlight
+	if mostActive != nil {
+		mostActiveHighlight = &templates.PairingHighlight{
+			PairingID:     mostActive.PairingID,
+			PairingName:   mostActive.PairingName,
+			MatchesPlayed: mostActive.MatchesPlayed,
+			MatchesWon:    mostActive.MatchesWon,
+			WinPercentage: mostActive.WinPercentage,
+		}
+	}
+
+	var bestPerformingHighlight *templates.PairingHighlight
+	if bestPerforming != nil {
+		bestPerformingHighlight = &templates.PairingHighlight{
+			PairingID:     bestPerforming.PairingID,
+			PairingName:   bestPerforming.PairingName,
+			MatchesPlayed: bestPerforming.MatchesPlayed,
+			MatchesWon:    bestPerforming.MatchesWon,
+			WinPercentage: bestPerforming.WinPercentage,
+		}
+	}
+
 	data := templates.DashboardData{
 		PageData: templates.PageData{
 			Title: "Dashboard",
 			User:  user,
 		},
-		TotalPairings:      len(allPairings),
-		ActivePairings:     len(activePairings),
-		TotalMatches:       totalMatches,
-		RecentMatchCount:   recentMatchCount,
-		RecentMatchesList:  dashboardMatches,
-		LastFetchTimestamp: lastFetchTimestamp,
+		TotalPairings:         len(allPairings),
+		ActivePairings:        len(activePairings),
+		TotalMatches:          totalMatches,
+		RecentMatchCount:      recentMatchCount,
+		RecentMatchesList:     dashboardMatches,
+		LastFetchTimestamp:    lastFetchTimestamp,
+		MostActivePairing:     mostActiveHighlight,
+		BestPerformingPairing: bestPerformingHighlight,
 	}
 
 	if flashes := h.middleware.GetFlash(w, r, "success"); len(flashes) > 0 {

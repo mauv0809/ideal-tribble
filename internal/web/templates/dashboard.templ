@@ -14,15 +14,26 @@ type DashboardMatch struct {
 	OpponentName  string
 }
 
+// PairingHighlight represents a highlighted pairing for the dashboard.
+type PairingHighlight struct {
+	PairingID     int64
+	PairingName   string
+	MatchesPlayed int
+	MatchesWon    int
+	WinPercentage float64
+}
+
 // DashboardData holds data for the dashboard page.
 type DashboardData struct {
 	PageData
-	TotalPairings      int
-	ActivePairings     int
-	TotalMatches       int
-	RecentMatchCount   int
-	RecentMatchesList  []DashboardMatch
-	LastFetchTimestamp int64
+	TotalPairings        int
+	ActivePairings       int
+	TotalMatches         int
+	RecentMatchCount     int
+	RecentMatchesList    []DashboardMatch
+	LastFetchTimestamp   int64
+	MostActivePairing    *PairingHighlight
+	BestPerformingPairing *PairingHighlight
 }
 
 // DashboardPage renders the main dashboard.
@@ -48,6 +59,28 @@ templ DashboardPage(data DashboardData) {
 				<div class="stat-label">Matches (Last 30 Days)</div>
 			</div>
 		</div>
+
+		if data.MostActivePairing != nil || data.BestPerformingPairing != nil {
+			<section>
+				<h2>Last 30 Days Highlights</h2>
+				<div class="stats-grid">
+					if data.MostActivePairing != nil {
+						<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d", data.MostActivePairing.PairingID)) } class="stat-card stat-card-link stat-card-highlight">
+							<div class="stat-label">Most Active</div>
+							<div class="stat-value-small">{ data.MostActivePairing.PairingName }</div>
+							<div class="stat-sublabel">{ fmt.Sprintf("%d matches", data.MostActivePairing.MatchesPlayed) }</div>
+						</a>
+					}
+					if data.BestPerformingPairing != nil {
+						<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d", data.BestPerformingPairing.PairingID)) } class="stat-card stat-card-link stat-card-highlight">
+							<div class="stat-label">Best Performing</div>
+							<div class="stat-value-small">{ data.BestPerformingPairing.PairingName }</div>
+							<div class="stat-sublabel">{ fmt.Sprintf("%.0f%% win rate (%d-%d)", data.BestPerformingPairing.WinPercentage, data.BestPerformingPairing.MatchesWon, data.BestPerformingPairing.MatchesPlayed - data.BestPerformingPairing.MatchesWon) }</div>
+						</a>
+					}
+				</div>
+			</section>
+		}
 
 		if len(data.RecentMatchesList) > 0 {
 			<section>

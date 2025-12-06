@@ -1158,3 +1158,93 @@ func (s *store) SetLastFetchTimestamp(timestamp int64) error {
 	}
 	return nil
 }
+
+// GetMostActivePairing returns the pairing with the most matches in the last N days.
+func (s *store) GetMostActivePairing(days int) (*PairingHighlight, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	cutoff := time.Now().AddDate(0, 0, -days).Unix()
+
+	var pairingID int64
+	var player1Name, player2Name string
+	var matchesPlayed, matchesWon int
+
+	err := s.db.QueryRow(`
+		SELECT tp.id, tp.player1_name, tp.player2_name,
+			COUNT(*) as matches_played,
+			SUM(pm.pairing_won) as matches_won
+		FROM pairing_matches pm
+		JOIN tracked_pairings tp ON pm.pairing_id = tp.id
+		WHERE pm.match_date >= ?
+		GROUP BY pm.pairing_id
+		ORDER BY matches_played DESC
+		LIMIT 1
+	`, cutoff).Scan(&pairingID, &player1Name, &player2Name, &matchesPlayed, &matchesWon)
+
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil // No matches in time period
+		}
+		return nil, fmt.Errorf("failed to get most active pairing: %w", err)
+	}
+
+	winPct := 0.0
+	if matchesPlayed > 0 {
+		winPct = float64(matchesWon) / float64(matchesPlayed) * 100
+	}
+
+	return &PairingHighlight{
+		PairingID:     pairingID,
+		PairingName:   player1Name + " & " + player2Name,
+		MatchesPlayed: matchesPlayed,
+		MatchesWon:    matchesWon,
+		WinPercentage: winPct,
+	}, nil
+}
+
+// GetBestPerformingPairing returns the pairing with the highest win rate in the last N days,
+// with a minimum number of matches required to qualify.
+func (s *store) GetBestPerformingPairing(days int, minMatches int) (*PairingHighlight, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	cutoff := time.Now().AddDate(0, 0, -days).Unix()
+
+	var pairingID int64
+	var player1Name, player2Name string
+	var matchesPlayed, matchesWon int
+
+	err := s.db.QueryRow(`
+		SELECT tp.id, tp.player1_name, tp.player2_name,
+			COUNT(*) as matches_played,
+			SUM(pm.pairing_won) as matches_won
+		FROM pairing_matches pm
+		JOIN tracked_pairings tp ON pm.pairing_id = tp.id
+		WHERE pm.match_date >= ?
+		GROUP BY pm.pairing_id
+		HAVING matches_played >= ?
+		ORDER BY (CAST(SUM(pm.pairing_won) AS REAL) / COUNT(*)) DESC, matches_played DESC
+		LIMIT 1
+	`, cutoff, minMatches).Scan(&pairingID, &player1Name, &player2Name, &matchesPlayed, &matchesWon)
+
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil // No pairing qualifies
+		}
+		return nil, fmt.Errorf("failed to get best performing pairing: %w", err)
+	}
+
+	winPct := 0.0
+	if matchesPlayed > 0 {
+		winPct = float64(matchesWon) / float64(matchesPlayed) * 100
+	}
+
+	return &PairingHighlight{
+		PairingID:     pairingID,
+		PairingName:   player1Name + " & " + player2Name,
+		MatchesPlayed: matchesPlayed,
+		MatchesWon:    matchesWon,
+		WinPercentage: winPct,
+	}, nil
+}

@@ -129,3 +129,12 @@ type KnownPlayer struct {
 	PlayerID   string `json:"player_id"`
 	PlayerName string `json:"player_name"`
 }
+
+// PairingHighlight represents a pairing with summary stats for dashboard display.
+type PairingHighlight struct {
+	PairingID     int64   `json:"pairing_id"`
+	PairingName   string  `json:"pairing_name"`
+	MatchesPlayed int     `json:"matches_played"`
+	MatchesWon    int     `json:"matches_won"`
+	WinPercentage float64 `json:"win_percentage"`
+}

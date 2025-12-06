@@ -35,6 +35,8 @@ type PairingsStore interface {
 	GetTotalMatchCount() (int, error)
 	GetRecentMatchCount(days int) (int, error)
 	GetRecentMatchesAllPairings(limit int) ([]PairingMatch, error)
+	GetMostActivePairing(days int) (*PairingHighlight, error)
+	GetBestPerformingPairing(days int, minMatches int) (*PairingHighlight, error)
 
 	// Individual player analytics
 	GetIndividualOpponentStats(pairingID int64) ([]IndividualPlayerStats, error)
