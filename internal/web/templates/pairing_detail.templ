@@ -2,7 +2,6 @@ package templates
 
 import (
 	"fmt"
-	"time"
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
 )
 
@@ -19,7 +18,7 @@ func winRateClass(pct float64) string {
 // RecentMatch represents a recent match for display.
 type RecentMatch struct {
 	MatchID       string
-	MatchDate     string
+	MatchDateUnix int64
 	Won           bool
 	SetsWon       int
 	SetsLost      int
@@ -205,7 +204,7 @@ templ MatchHistoryPartial(data MatchHistoryData) {
 			<tbody>
 				for _, match := range data.Matches {
 					<tr class="clickable-row" data-href={ fmt.Sprintf("/matches/%s?pairing=%d", match.MatchID, data.PairingID) } style="cursor: pointer;">
-						<td>{ match.MatchDate }</td>
+						<td><span class="local-datetime" data-timestamp={ fmt.Sprint(match.MatchDateUnix) }></span></td>
 						<td>
 							if match.Won {
 								<span class="text-success">Win</span>
@@ -302,9 +301,9 @@ templ MatchDetailPage(data MatchDetailData) {
 				<div class="grid">
 					<div>
 						<h3>Date & Venue</h3>
-						<p><strong>Date:</strong> { formatMatchDate(data.Match.MatchDate) }</p>
+						<p><strong>Date:</strong> <span class="local-date" data-timestamp={ fmt.Sprint(data.Match.MatchDate) }></span></p>
 						<p><strong>Venue:</strong> { data.Match.TenantName }</p>
-						<p><strong>Time:</strong> { formatMatchTime(data.Match.HourOfDay) }</p>
+						<p><strong>Time:</strong> <span class="local-time" data-timestamp={ fmt.Sprint(data.Match.MatchDate) }></span></p>
 					</div>
 					<div>
 						<h3>Result</h3>
@@ -371,7 +370,7 @@ templ MatchDetailPage(data MatchDetailData) {
 					<tbody>
 						for _, match := range data.HeadToHead {
 							<tr>
-								<td>{ match.MatchDate }</td>
+								<td><span class="local-datetime" data-timestamp={ fmt.Sprint(match.MatchDateUnix) }></span></td>
 								<td>
 									if match.Won {
 										<span class="text-success">Win</span>
@@ -390,16 +389,3 @@ templ MatchDetailPage(data MatchDetailData) {
 	}
 }
 
-func formatMatchDate(unixTime int64) string {
-	t := time.Unix(unixTime, 0)
-	return t.Format("Monday, January 2, 2006")
-}
-
-func formatMatchTime(hour int) string {
-	if hour < 12 {
-		return fmt.Sprintf("%d:00 AM", hour)
-	} else if hour == 12 {
-		return "12:00 PM"
-	}
-	return fmt.Sprintf("%d:00 PM", hour-12)
-}

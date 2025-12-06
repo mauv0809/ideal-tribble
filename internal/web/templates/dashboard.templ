@@ -4,14 +4,14 @@ import "fmt"
 
 // DashboardMatch represents a recent match for the dashboard.
 type DashboardMatch struct {
-	MatchID      string
-	PairingID    int64
-	PairingName  string
-	MatchDate    string
-	Won          bool
-	SetsWon      int
-	SetsLost     int
-	OpponentName string
+	MatchID       string
+	PairingID     int64
+	PairingName   string
+	MatchDateUnix int64
+	Won           bool
+	SetsWon       int
+	SetsLost      int
+	OpponentName  string
 }
 
 // DashboardData holds data for the dashboard page.
@@ -64,7 +64,7 @@ templ DashboardPage(data DashboardData) {
 					<tbody>
 						for _, match := range data.RecentMatchesList {
 							<tr class="clickable-row" data-href={ fmt.Sprintf("/matches/%s?pairing=%d", match.MatchID, match.PairingID) }>
-								<td>{ match.MatchDate }</td>
+								<td><span class="local-datetime" data-timestamp={ fmt.Sprint(match.MatchDateUnix) }></span></td>
 								<td>{ match.PairingName }</td>
 								<td>
 									if match.Won {

@@ -577,6 +577,51 @@ templ Layout(data PageData) {
 		<footer>
 			<small>Padel Pairings Analytics</small>
 		</footer>
+		<script>
+			// Convert UTC timestamps to local timezone
+			function formatLocalDates() {
+				// Full date format (e.g., "Monday, January 2, 2006")
+				document.querySelectorAll('.local-date').forEach(el => {
+					const ts = parseInt(el.dataset.timestamp, 10);
+					if (ts) {
+						const date = new Date(ts * 1000);
+						el.textContent = date.toLocaleDateString(undefined, {
+							weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+						});
+					}
+				});
+
+				// Time format (e.g., "2:00 PM")
+				document.querySelectorAll('.local-time').forEach(el => {
+					const ts = parseInt(el.dataset.timestamp, 10);
+					if (ts) {
+						const date = new Date(ts * 1000);
+						el.textContent = date.toLocaleTimeString(undefined, {
+							hour: 'numeric', minute: '2-digit'
+						});
+					}
+				});
+
+				// Short date + time format for tables (e.g., "Jan 2, 2006 2:00 PM")
+				document.querySelectorAll('.local-datetime').forEach(el => {
+					const ts = parseInt(el.dataset.timestamp, 10);
+					if (ts) {
+						const date = new Date(ts * 1000);
+						el.textContent = date.toLocaleDateString(undefined, {
+							month: 'short', day: 'numeric', year: 'numeric'
+						}) + ' ' + date.toLocaleTimeString(undefined, {
+							hour: 'numeric', minute: '2-digit'
+						});
+					}
+				});
+			}
+
+			// Run on page load
+			formatLocalDates();
+
+			// Run after htmx swaps content
+			document.body.addEventListener('htmx:afterSwap', formatLocalDates);
+		</script>
 	</body>
 	</html>
 }

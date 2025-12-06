@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
 	"github.com/mauv0809/ideal-tribble/internal/web/templates"
@@ -52,14 +51,14 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 	var dashboardMatches []templates.DashboardMatch
 	for _, m := range recentMatches {
 		dashboardMatches = append(dashboardMatches, templates.DashboardMatch{
-			MatchID:      m.MatchID,
-			PairingID:    m.PairingID,
-			PairingName:  pairingNames[m.PairingID],
-			MatchDate:    time.Unix(m.MatchDate, 0).Format("Jan 2, 2006"),
-			Won:          m.PairingWon,
-			SetsWon:      m.SetsWon,
-			SetsLost:     m.SetsLost,
-			OpponentName: m.Opponent1Name + " & " + m.Opponent2Name,
+			MatchID:       m.MatchID,
+			PairingID:     m.PairingID,
+			PairingName:   pairingNames[m.PairingID],
+			MatchDateUnix: m.MatchDate,
+			Won:           m.PairingWon,
+			SetsWon:       m.SetsWon,
+			SetsLost:      m.SetsLost,
+			OpponentName:  m.Opponent1Name + " & " + m.Opponent2Name,
 		})
 	}
 
@@ -353,7 +352,7 @@ func (h *Handlers) convertMatches(matches []pairings.PairingMatch) []templates.R
 	for i, m := range matches {
 		result[i] = templates.RecentMatch{
 			MatchID:       m.MatchID,
-			MatchDate:     time.Unix(m.MatchDate, 0).Format("2006-01-02 15:04"),
+			MatchDateUnix: m.MatchDate,
 			Won:           m.PairingWon,
 			SetsWon:       m.SetsWon,
 			SetsLost:      m.SetsLost,
@@ -512,11 +511,11 @@ func (h *Handlers) OpponentDetail(w http.ResponseWriter, r *http.Request) {
 	var oppMatches []templates.OpponentMatch
 	for _, m := range matches {
 		oppMatches = append(oppMatches, templates.OpponentMatch{
-			MatchID:   m.MatchID,
-			MatchDate: time.Unix(m.MatchDate, 0).Format("Jan 2, 2006"),
-			Won:       m.PairingWon,
-			SetsWon:   m.SetsWon,
-			SetsLost:  m.SetsLost,
+			MatchID:       m.MatchID,
+			MatchDateUnix: m.MatchDate,
+			Won:           m.PairingWon,
+			SetsWon:       m.SetsWon,
+			SetsLost:      m.SetsLost,
 		})
 	}
 
@@ -619,12 +618,12 @@ func (h *Handlers) IndividualPlayerDetail(w http.ResponseWriter, r *http.Request
 			partnerName = m.Opponent1Name
 		}
 		playerMatches = append(playerMatches, templates.IndividualPlayerMatch{
-			MatchID:     m.MatchID,
-			MatchDate:   time.Unix(m.MatchDate, 0).Format("Jan 2, 2006"),
-			Won:         m.PairingWon,
-			SetsWon:     m.SetsWon,
-			SetsLost:    m.SetsLost,
-			PartnerName: partnerName,
+			MatchID:       m.MatchID,
+			MatchDateUnix: m.MatchDate,
+			Won:           m.PairingWon,
+			SetsWon:       m.SetsWon,
+			SetsLost:      m.SetsLost,
+			PartnerName:   partnerName,
 		})
 	}
 
