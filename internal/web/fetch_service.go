@@ -156,6 +156,13 @@ func (s *DefaultFetchService) fetchAndFilterClubMatches(summaries []playtomic.Ma
 	concurrencyLimit := 50
 	sem := make(chan struct{}, concurrencyLimit)
 
+	log.Info("Filtering matches from API summaries",
+		"total_summaries", len(summaries),
+		"known_player_count", len(knownPlayerIDs),
+		"tracked_player_count", len(trackedPlayerIDs))
+
+	skippedNoRelevant := 0
+
 	for _, summary := range summaries {
 		// Pre-filter using summary data: check if ANY player is known or tracked
 		hasRelevantPlayer := false
@@ -171,6 +178,7 @@ func (s *DefaultFetchService) fetchAndFilterClubMatches(summaries []playtomic.Ma
 		}
 
 		if !hasRelevantPlayer {
+			skippedNoRelevant++
 			continue // Skip matches with no relevant players
 		}
 
@@ -196,6 +204,11 @@ func (s *DefaultFetchService) fetchAndFilterClubMatches(summaries []playtomic.Ma
 		}(summary)
 	}
 	wg.Wait()
+
+	log.Info("Fetch filtering complete",
+		"skipped_no_relevant_player", skippedNoRelevant,
+		"total_fetched", len(allFetchedMatches),
+		"club_matches", len(clubMatchesToUpsert))
 
 	return clubMatchesToUpsert, allFetchedMatches
 }

@@ -10,7 +10,12 @@ import (
 // DetectPairingMatches checks matches against tracked pairings and returns
 // PairingMatch records for any matches where a tracked pair plays together on the same team.
 func DetectPairingMatches(matches []*playtomic.PadelMatch, trackedPairings []TrackedPairing) []*PairingMatch {
+	log.Info("Starting pairing match detection",
+		"totalMatches", len(matches),
+		"trackedPairings", len(trackedPairings))
+
 	if len(trackedPairings) == 0 || len(matches) == 0 {
+		log.Info("No matches or pairings to process")
 		return nil
 	}
 
@@ -21,30 +26,43 @@ func DetectPairingMatches(matches []*playtomic.PadelMatch, trackedPairings []Tra
 		// Key is normalized: smaller ID first
 		key := normalizePairingKey(p.Player1ID, p.Player2ID)
 		pairingMap[key] = p
+		log.Debug("Tracking pairing", "key", key, "name", p.Player1Name+" & "+p.Player2Name)
 	}
 
 	var result []*PairingMatch
 
+	// Counters for debugging
+	var skippedNotDoubles, skippedNotPlayed, skippedNotConfirmed, skippedNoPairing int
+
 	for _, match := range matches {
 		// Skip matches that aren't doubles (we need 2v2 for pairings)
 		if match.MatchTypeEnum != playtomic.MatchTypeEnumDoubles {
-			log.Debug("Skipping non-doubles match", "matchID", match.MatchID, "type", match.MatchTypeEnum)
+			skippedNotDoubles++
 			continue
 		}
 
 		// Skip matches without results (we need winner/loser info)
 		if match.GameStatus != playtomic.GameStatusPlayed {
-			log.Debug("Skipping match without results", "matchID", match.MatchID, "gameStatus", match.GameStatus)
+			skippedNotPlayed++
+			log.Debug("Skipping match - not played yet",
+				"matchID", match.MatchID,
+				"gameStatus", match.GameStatus,
+				"matchDate", time.Unix(match.Start, 0).Format("2006-01-02 15:04"))
 			continue
 		}
 
 		// Skip matches where results weren't confirmed (expired, pending, etc.)
 		if match.ResultsStatus != playtomic.ResultsStatusConfirmed {
-			log.Debug("Skipping match with unconfirmed results", "matchID", match.MatchID, "resultsStatus", match.ResultsStatus)
+			skippedNotConfirmed++
+			log.Info("Skipping match - results not confirmed",
+				"matchID", match.MatchID,
+				"resultsStatus", match.ResultsStatus,
+				"matchDate", time.Unix(match.Start, 0).Format("2006-01-02 15:04"))
 			continue
 		}
 
 		// Check each team for tracked pairings
+		foundPairing := false
 		for teamIdx, team := range match.Teams {
 			if len(team.Players) != 2 {
 				continue
@@ -57,17 +75,29 @@ func DetectPairingMatches(matches []*playtomic.PadelMatch, trackedPairings []Tra
 				continue
 			}
 
+			foundPairing = true
 			// Found a match with a tracked pairing!
 			pairingMatch := buildPairingMatch(match, pairing, teamIdx)
 			if pairingMatch != nil {
 				result = append(result, pairingMatch)
-				log.Debug("Detected pairing match",
+				log.Info("Detected pairing match",
 					"matchID", match.MatchID,
 					"pairing", pairing.Player1Name+" & "+pairing.Player2Name,
-					"won", pairingMatch.PairingWon)
+					"won", pairingMatch.PairingWon,
+					"matchDate", time.Unix(match.Start, 0).Format("2006-01-02 15:04"))
 			}
 		}
+		if !foundPairing {
+			skippedNoPairing++
+		}
 	}
+
+	log.Info("Pairing match detection complete",
+		"detected", len(result),
+		"skippedNotDoubles", skippedNotDoubles,
+		"skippedNotPlayed", skippedNotPlayed,
+		"skippedNotConfirmed", skippedNotConfirmed,
+		"skippedNoPairing", skippedNoPairing)
 
 	return result
 }
