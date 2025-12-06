@@ -827,11 +827,14 @@ templ Layout(data PageData) {
 
 					// Save to server
 					try {
-						await fetch('/api/theme', {
+						const response = await fetch('/api/theme', {
 							method: 'POST',
 							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 							body: 'theme=' + encodeURIComponent(theme)
 						});
+						if (!response.ok) {
+							console.error('Failed to save theme: HTTP', response.status);
+						}
 					} catch (err) {
 						console.error('Failed to save theme:', err);
 					}

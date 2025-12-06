@@ -201,6 +201,7 @@ func main() {
 			r.URL.Path == "/dashboard" ||
 			r.URL.Path == "/profile" ||
 			r.URL.Path == "/fetch-matches" ||
+			r.URL.Path == "/api/theme" ||
 			hasPrefix(r.URL.Path, "/static/") ||
 			hasPrefix(r.URL.Path, "/pairings") ||
 			hasPrefix(r.URL.Path, "/matches/") ||
