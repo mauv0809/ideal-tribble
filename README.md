@@ -27,19 +27,22 @@ The name "Wally" is inspired by the helpful robot and the glass walls of the pad
 - Resiliently processes matches through a state machine, leveraging PubSub for asynchronous processing and ensuring status updates and notifications are handled reliably and idempotently across various stages.
 - Secures Slack command endpoints (e.g., `/slack/command/leaderboard`) by verifying the `X-Slack-Signature` header, ensuring requests originate genuinely from Slack.
 - Supports match type separation (singles/doubles) with dedicated statistics and ball-bringing tracking.
+- **Web dashboard** for tracking pairing analytics, opponent breakdowns, and match history with session-based authentication and optional TOTP 2FA.
 - Infrastructure is managed via Terraform for consistent, repeatable deployments.
 - Includes a simple hot-reloading setup for easy local development.
 
 ## Technology Stack
 
 - **Language:** Go
+- **Web UI:** Templ templates, htmx, Pico CSS
 - **Local Development:** Air
-- **Infrastructure as Code:** Terraform with Spacelift
-- **Platform:** Docker
+- **Infrastructure as Code:** Terraform with Terraform Cloud
+- **Platform:** Docker (observability stack)
 - **Deployment:** Hetzner Cloud Server, systemd service with cron scheduling
 - **CI/CD:** GitHub Actions
 - **Testing:** Go standard library, Testify
 - **Database Migrations:** Goose
+- **SSL:** Let's Encrypt via Cloudflare DNS-01 challenge
 
 ## Local Development
 
@@ -134,15 +137,20 @@ PORT=8080
 | `TENANT_ID` | Playtomic tenant ID |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry endpoint (e.g., localhost:4317) |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password |
+| `WEB_SESSION_SECRET` | Session cookie secret (32+ characters) |
+| `WEB_TOTP_ENCRYPTION_KEY` | TOTP encryption key (exactly 32 characters) |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token for DNS-01 SSL (Zone:DNS:Edit) |
 
 ---
 
-#### Step 4: Configure DNS
+#### Step 4: Configure DNS (Cloudflare)
 
-1.  **Point your domain to the server:**
-    - Configure your domain's A record to point to your server IP
-    - Example: `wally-api.utiger.dk` → `YOUR_SERVER_IP`
-    - The server IP will be output by the deployment workflow
+1.  **Point your domains to the server:**
+    - Configure A records in Cloudflare pointing to your server IP
+    - `wally-api.utiger.dk` → `YOUR_SERVER_IP` (API endpoints)
+    - `wally.utiger.dk` → `YOUR_SERVER_IP` (Web dashboard)
+    - Both can be **proxied** (orange cloud) - DNS-01 challenge works with proxied domains
+    - Set SSL/TLS mode to **Full (strict)** in Cloudflare settings
 
 ---
 
@@ -160,20 +168,28 @@ The unified GitHub Actions workflow will automatically:
 6.  **Health Check**: Verify the application is running correctly
 
 Your application will be available at:
-- **HTTP**: `http://YOUR_SERVER_IP:8080` (direct access)
-- **HTTPS**: `https://wally-api.utiger.dk` (after SSL setup)
+- **API**: `https://wally-api.utiger.dk` (Slack, health, Grafana)
+- **Web Dashboard**: `https://wally.utiger.dk` (pairing analytics)
+
+SSL certificates are automatically obtained via Cloudflare DNS-01 challenge on first deploy.
 
 #### Post-Deployment Setup
 
 After the first successful deployment:
 
-1.  **Setup SSL certificate:**
+1.  **Create the initial admin user:**
     ```bash
     ssh root@YOUR_SERVER_IP
-    sudo certbot --nginx -d wally-api.utiger.dk
+    cd /opt/ideal-tribble
+    ./tribble-admin create-user --email admin@example.com --admin
     ```
 
-2.  **Access observability:**
+2.  **Access the web dashboard:**
+    - URL: `https://wally.utiger.dk`
+    - Login with the email and password from step 1
+    - Optionally enable TOTP 2FA in your profile
+
+3.  **Access observability:**
     - Grafana: `https://wally-api.utiger.dk/grafana`
     - Username: `admin`
     - Password: Set via `GRAFANA_ADMIN_PASSWORD` secret
@@ -267,15 +283,12 @@ Here's a look at our future development plans:
   - Ensures fair rotation even when player groups change or new members join
   - Prevents the issue where frequent players with new members never get assigned
 
-- **Enhanced Player Statistics System:**
-  - **Problem:** Current statistics system doesn't differentiate between match types and may not provide meaningful insights for different play styles.
-  - **Solution Ideas:**
-    - Separate statistics tracking for doubles vs singles
-    - Add match type context to all statistical calculations
-    - Implement skill-based matching considerations for doubles team balancing
-    - Track partner-specific statistics for doubles (who plays well together)
-    - Add match type preferences to player profiles
-    - Consider implementing ELO-style ratings separate for doubles/singles
+- **Enhanced Player Statistics System:** ✅ **Completed**
+  - Web dashboard for tracking pairing analytics with session-based authentication
+  - Track partner-specific statistics (win rate, streaks, opponent breakdowns)
+  - Individual player performance against different opponents
+  - Match history with filtering by wins/losses
+  - Head-to-head records against specific opponent pairs
 
 ## License
 
