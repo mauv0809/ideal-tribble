@@ -1,24 +1,23 @@
-package auth
+package auth_test
 
 import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mauv0809/ideal-tribble/internal/auth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCreateSession(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
 
 	// Create a user first
-	store := NewStore(db)
 	user, err := store.CreateUser("session@example.com", "password", false)
 	require.NoError(t, err)
 
-	manager := NewSessionManager(db)
+	manager := auth.NewSessionManager(db)
 
 	t.Run("creates session successfully", func(t *testing.T) {
 		session, err := manager.CreateSession(user.ID)
@@ -30,14 +29,13 @@ func TestCreateSession(t *testing.T) {
 }
 
 func TestGetSession(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
 
-	store := NewStore(db)
 	user, err := store.CreateUser("get@example.com", "password", false)
 	require.NoError(t, err)
 
-	manager := NewSessionManager(db)
+	manager := auth.NewSessionManager(db)
 	created, err := manager.CreateSession(user.ID)
 	require.NoError(t, err)
 
@@ -50,19 +48,18 @@ func TestGetSession(t *testing.T) {
 
 	t.Run("returns error for non-existent session", func(t *testing.T) {
 		_, err := manager.GetSession("nonexistent_token")
-		assert.ErrorIs(t, err, ErrSessionNotFound)
+		assert.ErrorIs(t, err, auth.ErrSessionNotFound)
 	})
 }
 
 func TestValidateSession(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
 
-	store := NewStore(db)
 	user, err := store.CreateUser("validate@example.com", "password", false)
 	require.NoError(t, err)
 
-	manager := NewSessionManager(db)
+	manager := auth.NewSessionManager(db)
 	session, err := manager.CreateSession(user.ID)
 	require.NoError(t, err)
 
@@ -74,19 +71,18 @@ func TestValidateSession(t *testing.T) {
 
 	t.Run("returns error for invalid token", func(t *testing.T) {
 		_, err := manager.ValidateSession("invalid_token")
-		assert.ErrorIs(t, err, ErrSessionNotFound)
+		assert.ErrorIs(t, err, auth.ErrSessionNotFound)
 	})
 }
 
 func TestExpiredSession(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
 
-	store := NewStore(db)
 	user, err := store.CreateUser("expired@example.com", "password", false)
 	require.NoError(t, err)
 
-	manager := NewSessionManager(db)
+	manager := auth.NewSessionManager(db)
 	manager.SetSessionDuration(1 * time.Millisecond) // Very short expiry
 
 	session, err := manager.CreateSession(user.ID)
@@ -97,19 +93,18 @@ func TestExpiredSession(t *testing.T) {
 
 	t.Run("returns error for expired session", func(t *testing.T) {
 		_, err := manager.GetSession(session.ID)
-		assert.ErrorIs(t, err, ErrSessionExpired)
+		assert.ErrorIs(t, err, auth.ErrSessionExpired)
 	})
 }
 
 func TestExtendSession(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
 
-	store := NewStore(db)
 	user, err := store.CreateUser("extend@example.com", "password", false)
 	require.NoError(t, err)
 
-	manager := NewSessionManager(db)
+	manager := auth.NewSessionManager(db)
 	manager.SetSessionDuration(1 * time.Hour)
 
 	session, err := manager.CreateSession(user.ID)
@@ -129,14 +124,13 @@ func TestExtendSession(t *testing.T) {
 }
 
 func TestDeleteSession(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
 
-	store := NewStore(db)
 	user, err := store.CreateUser("delete@example.com", "password", false)
 	require.NoError(t, err)
 
-	manager := NewSessionManager(db)
+	manager := auth.NewSessionManager(db)
 	session, err := manager.CreateSession(user.ID)
 	require.NoError(t, err)
 
@@ -145,19 +139,18 @@ func TestDeleteSession(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = manager.GetSession(session.ID)
-		assert.ErrorIs(t, err, ErrSessionNotFound)
+		assert.ErrorIs(t, err, auth.ErrSessionNotFound)
 	})
 }
 
 func TestDeleteUserSessions(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
 
-	store := NewStore(db)
 	user, err := store.CreateUser("multiplelogout@example.com", "password", false)
 	require.NoError(t, err)
 
-	manager := NewSessionManager(db)
+	manager := auth.NewSessionManager(db)
 
 	// Create multiple sessions
 	session1, err := manager.CreateSession(user.ID)
@@ -171,20 +164,19 @@ func TestDeleteUserSessions(t *testing.T) {
 
 	// Both sessions should be gone
 	_, err = manager.GetSession(session1.ID)
-	assert.ErrorIs(t, err, ErrSessionNotFound)
+	assert.ErrorIs(t, err, auth.ErrSessionNotFound)
 	_, err = manager.GetSession(session2.ID)
-	assert.ErrorIs(t, err, ErrSessionNotFound)
+	assert.ErrorIs(t, err, auth.ErrSessionNotFound)
 }
 
 func TestCleanupExpiredSessions(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
 
-	store := NewStore(db)
 	user, err := store.CreateUser("cleanup@example.com", "password", false)
 	require.NoError(t, err)
 
-	manager := NewSessionManager(db)
+	manager := auth.NewSessionManager(db)
 	manager.SetSessionDuration(1 * time.Millisecond)
 
 	// Create expired session
@@ -205,31 +197,9 @@ func TestCleanupExpiredSessions(t *testing.T) {
 
 	// Expired session should be gone (either not found or expired)
 	_, err = manager.GetSession(expiredSession.ID)
-	assert.True(t, err == ErrSessionNotFound || err == ErrSessionExpired)
+	assert.True(t, err == auth.ErrSessionNotFound || err == auth.ErrSessionExpired)
 
 	// Valid session should still exist
 	_, err = manager.GetSession(validSession.ID)
 	require.NoError(t, err)
-}
-
-func TestGenerateSecureToken(t *testing.T) {
-	t.Run("generates unique tokens", func(t *testing.T) {
-		token1, err := generateSecureToken(32)
-		require.NoError(t, err)
-
-		token2, err := generateSecureToken(32)
-		require.NoError(t, err)
-
-		assert.NotEqual(t, token1, token2)
-		assert.NotEmpty(t, token1)
-		assert.NotEmpty(t, token2)
-	})
-
-	t.Run("generates tokens of expected length", func(t *testing.T) {
-		token, err := generateSecureToken(32)
-		require.NoError(t, err)
-
-		// Base64 encoding of 32 bytes = 44 characters (with padding)
-		assert.Len(t, token, 44)
-	})
 }

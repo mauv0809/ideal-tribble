@@ -1,59 +1,35 @@
-package auth
+package auth_test
 
 import (
 	"database/sql"
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mauv0809/ideal-tribble/internal/auth"
+	"github.com/mauv0809/ideal-tribble/internal/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB(t *testing.T) *sql.DB {
-	db, err := sql.Open("sqlite3", ":memory:")
+// setupTestDB creates a temporary in-memory SQLite database for testing.
+func setupTestDB(t *testing.T) (*auth.Store, *sql.DB, func()) {
+	t.Helper()
+
+	db, dbTeardown, err := database.InitDB(":memory:", "", "", "../../migrations")
 	require.NoError(t, err)
 
-	// Create tables
-	_, err = db.Exec(`
-		CREATE TABLE users (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			email TEXT UNIQUE NOT NULL,
-			password_hash TEXT NOT NULL,
-			totp_secret TEXT,
-			totp_enabled INTEGER NOT NULL DEFAULT 0,
-			is_admin INTEGER NOT NULL DEFAULT 0,
-			theme TEXT DEFAULT 'mocha',
-			created_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL
-		);
+	store := auth.NewStore(db)
+	teardown := func() {
+		dbTeardown()
+		db.Close()
+	}
 
-		CREATE TABLE sessions (
-			id TEXT PRIMARY KEY,
-			user_id INTEGER NOT NULL,
-			expires_at INTEGER NOT NULL,
-			created_at INTEGER NOT NULL,
-			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-		);
-
-		CREATE TABLE login_attempts (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			ip_address TEXT NOT NULL,
-			email TEXT,
-			attempted_at INTEGER NOT NULL,
-			success INTEGER NOT NULL DEFAULT 0
-		);
-	`)
-	require.NoError(t, err)
-
-	return db
+	return store, db, teardown
 }
 
 func TestCreateUser(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	t.Run("creates user successfully", func(t *testing.T) {
 		user, err := store.CreateUser("test@example.com", "password123", false)
@@ -72,15 +48,13 @@ func TestCreateUser(t *testing.T) {
 
 	t.Run("fails on duplicate email", func(t *testing.T) {
 		_, err := store.CreateUser("test@example.com", "anotherpass", false)
-		assert.ErrorIs(t, err, ErrEmailAlreadyExists)
+		assert.ErrorIs(t, err, auth.ErrEmailAlreadyExists)
 	})
 }
 
 func TestGetUserByEmail(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	t.Run("retrieves existing user", func(t *testing.T) {
 		created, err := store.CreateUser("find@example.com", "password", false)
@@ -94,15 +68,13 @@ func TestGetUserByEmail(t *testing.T) {
 
 	t.Run("returns error for non-existent user", func(t *testing.T) {
 		_, err := store.GetUserByEmail("nonexistent@example.com")
-		assert.ErrorIs(t, err, ErrUserNotFound)
+		assert.ErrorIs(t, err, auth.ErrUserNotFound)
 	})
 }
 
 func TestValidatePassword(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	user, err := store.CreateUser("validate@example.com", "correctpassword", false)
 	require.NoError(t, err)
@@ -123,10 +95,8 @@ func TestValidatePassword(t *testing.T) {
 }
 
 func TestUpdatePassword(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	user, err := store.CreateUser("update@example.com", "oldpassword", false)
 	require.NoError(t, err)
@@ -144,15 +114,13 @@ func TestUpdatePassword(t *testing.T) {
 
 	t.Run("fails for non-existent user", func(t *testing.T) {
 		err := store.UpdatePassword(9999, "password")
-		assert.ErrorIs(t, err, ErrUserNotFound)
+		assert.ErrorIs(t, err, auth.ErrUserNotFound)
 	})
 }
 
 func TestTOTPOperations(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	user, err := store.CreateUser("totp@example.com", "password", false)
 	require.NoError(t, err)
@@ -187,10 +155,8 @@ func TestTOTPOperations(t *testing.T) {
 }
 
 func TestListUsers(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	_, err := store.CreateUser("user1@example.com", "pass", false)
 	require.NoError(t, err)
@@ -203,10 +169,8 @@ func TestListUsers(t *testing.T) {
 }
 
 func TestDeleteUser(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	user, err := store.CreateUser("delete@example.com", "pass", false)
 	require.NoError(t, err)
@@ -216,20 +180,18 @@ func TestDeleteUser(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = store.GetUserByID(user.ID)
-		assert.ErrorIs(t, err, ErrUserNotFound)
+		assert.ErrorIs(t, err, auth.ErrUserNotFound)
 	})
 
 	t.Run("fails for non-existent user", func(t *testing.T) {
 		err := store.DeleteUser(9999)
-		assert.ErrorIs(t, err, ErrUserNotFound)
+		assert.ErrorIs(t, err, auth.ErrUserNotFound)
 	})
 }
 
 func TestLoginAttempts(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	t.Run("records login attempts", func(t *testing.T) {
 		err := store.RecordLoginAttempt("192.168.1.1", "test@example.com", false)
@@ -250,10 +212,8 @@ func TestLoginAttempts(t *testing.T) {
 }
 
 func TestLoginAttemptsCleanup(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	// Record some attempts
 	err := store.RecordLoginAttempt("192.168.1.2", "cleanup@example.com", false)
@@ -270,10 +230,8 @@ func TestLoginAttemptsCleanup(t *testing.T) {
 }
 
 func TestUserCount(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store := NewStore(db)
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
 
 	count, err := store.UserCount()
 	require.NoError(t, err)
@@ -285,4 +243,59 @@ func TestUserCount(t *testing.T) {
 	count, err = store.UserCount()
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), count)
+}
+
+func TestSetTheme(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	user, err := store.CreateUser("theme@example.com", "pass", false)
+	require.NoError(t, err)
+
+	t.Run("default theme is mocha", func(t *testing.T) {
+		fetchedUser, err := store.GetUserByID(user.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "mocha", fetchedUser.Theme)
+	})
+
+	t.Run("sets valid theme", func(t *testing.T) {
+		err := store.SetTheme(user.ID, "latte")
+		require.NoError(t, err)
+
+		fetchedUser, err := store.GetUserByID(user.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "latte", fetchedUser.Theme)
+	})
+
+	t.Run("sets frappe theme", func(t *testing.T) {
+		err := store.SetTheme(user.ID, "frappe")
+		require.NoError(t, err)
+
+		fetchedUser, err := store.GetUserByID(user.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "frappe", fetchedUser.Theme)
+	})
+
+	t.Run("sets macchiato theme", func(t *testing.T) {
+		err := store.SetTheme(user.ID, "macchiato")
+		require.NoError(t, err)
+
+		fetchedUser, err := store.GetUserByID(user.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "macchiato", fetchedUser.Theme)
+	})
+
+	t.Run("invalid theme falls back to mocha", func(t *testing.T) {
+		err := store.SetTheme(user.ID, "invalid-theme")
+		require.NoError(t, err)
+
+		fetchedUser, err := store.GetUserByID(user.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "mocha", fetchedUser.Theme)
+	})
+
+	t.Run("fails for non-existent user", func(t *testing.T) {
+		err := store.SetTheme(9999, "latte")
+		assert.ErrorIs(t, err, auth.ErrUserNotFound)
+	})
 }
