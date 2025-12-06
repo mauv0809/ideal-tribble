@@ -55,6 +55,24 @@ WEB_SSL_EXISTS=$(certbot certificates 2>/dev/null | grep -q "Certificate Name: $
 if [ "$API_SSL_EXISTS" = "yes" ] && [ "$WEB_SSL_EXISTS" = "yes" ]; then
     echo "🔒 SSL certificates for both domains already exist"
 
+    # Create SSL options file if it doesn't exist (certbot --nginx creates this, but certonly doesn't)
+    if [ ! -f /etc/letsencrypt/options-ssl-nginx.conf ]; then
+        echo "📝 Creating SSL options file..."
+        cat > /etc/letsencrypt/options-ssl-nginx.conf << 'SSLEOF'
+ssl_session_cache shared:le_nginx_SSL:10m;
+ssl_session_timeout 1440m;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_prefer_server_ciphers off;
+ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+SSLEOF
+    fi
+
+    # Create DH params file if it doesn't exist
+    if [ ! -f /etc/letsencrypt/ssl-dhparams.pem ]; then
+        echo "📝 Creating DH params file (this may take a moment)..."
+        openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
+    fi
+
     # Update nginx config to use HTTPS
     if ! grep -q "listen 443 ssl" /etc/nginx/sites-available/ideal-tribble; then
         echo "🔧 Adding HTTPS configuration to nginx..."
