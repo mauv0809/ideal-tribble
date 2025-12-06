@@ -136,6 +136,22 @@ func (s *store) UpsertMatches(matches []*playtomic.PadelMatch) error {
 
 		_, err = stmt.Exec(match.MatchID, match.OwnerID, match.OwnerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, match.AccessCode, match.Price, match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew, matchTypeEnum)
 		if err != nil {
+			// Get team sizes for debugging
+			var team1Size, team2Size int
+			if len(match.Teams) > 0 {
+				team1Size = len(match.Teams[0].Players)
+			}
+			if len(match.Teams) > 1 {
+				team2Size = len(match.Teams[1].Players)
+			}
+			log.Error("Failed to upsert match",
+				"matchID", match.MatchID,
+				"matchTypeEnum", matchTypeEnum,
+				"teamsCount", len(match.Teams),
+				"team1Size", team1Size,
+				"team2Size", team2Size,
+				"ownerName", match.OwnerName,
+				"error", err)
 			return fmt.Errorf("failed to execute statement for match %s: %w", match.MatchID, err)
 		}
 	}
@@ -426,52 +442,20 @@ func aggregateMatchStats(match *playtomic.PadelMatch) map[string]map[string]int 
 		}
 	}
 
-	for _, set := range match.Results {
-		// Since matches are always 2 teams, we can determine winner/loser directly.
-		var teamIDs []string
-		for teamID := range set.Scores {
-			teamIDs = append(teamIDs, teamID)
-		}
+	// Use the shared utility to calculate set/game stats per team
+	teamStats := playtomic.CalculateAllTeamsSetGameStats(match)
 
-		if len(teamIDs) != 2 {
-			log.Warn("Cannot determine set winner/loser for a set without exactly 2 teams", "matchID", match.MatchID, "scores", set.Scores)
-			continue // Skip this set
-		}
-
-		// Skip unplayed sets (both scores are 0)
-		if set.Scores[teamIDs[0]] == 0 && set.Scores[teamIDs[1]] == 0 {
-			continue // This set was not played
-		}
-
-		var setWinnerID, setLoserID string
-		var maxScore, minScore int
-
-		if set.Scores[teamIDs[0]] > set.Scores[teamIDs[1]] {
-			setWinnerID, setLoserID = teamIDs[0], teamIDs[1]
-			maxScore, minScore = set.Scores[teamIDs[0]], set.Scores[teamIDs[1]]
-		} else {
-			setWinnerID, setLoserID = teamIDs[1], teamIDs[0]
-			maxScore, minScore = set.Scores[teamIDs[1]], set.Scores[teamIDs[0]]
-		}
-
-		// Update stats for the winning team's players
-		for _, team := range match.Teams {
-			switch team.ID {
-			case setWinnerID:
-				for _, player := range team.Players {
-					playerStats[player.UserID]["sets_won"]++
-					playerStats[player.UserID]["games_won"] += maxScore
-					playerStats[player.UserID]["games_lost"] += minScore
-				}
-			case setLoserID:
-				for _, player := range team.Players {
-					playerStats[player.UserID]["sets_lost"]++
-					playerStats[player.UserID]["games_won"] += minScore
-					playerStats[player.UserID]["games_lost"] += maxScore
-				}
-			}
+	// Map team stats to individual players
+	for _, team := range match.Teams {
+		stats := teamStats[team.ID]
+		for _, player := range team.Players {
+			playerStats[player.UserID]["sets_won"] += stats.SetsWon
+			playerStats[player.UserID]["sets_lost"] += stats.SetsLost
+			playerStats[player.UserID]["games_won"] += stats.GamesWon
+			playerStats[player.UserID]["games_lost"] += stats.GamesLost
 		}
 	}
+
 	return playerStats
 }
 

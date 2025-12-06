@@ -44,6 +44,10 @@ go.work.sum
 # Project-specific binaries
 ideal-tribble
 tribble-cli
+tribble-admin
+
+# Image assets (logos, etc)
+*.png
 
 # Air log
 air.log

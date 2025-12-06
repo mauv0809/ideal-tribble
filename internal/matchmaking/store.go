@@ -728,9 +728,9 @@ func (s *store) isMatchingRequest(request *MatchRequest, padelMatch *playtomic.P
 		return false
 	}
 
-	// Check if booking responsible player is the owner or ball bringer
+	// Check if booking responsible player is the match owner
 	bookingPlayerID := *request.BookingResponsibleID
-	if padelMatch.OwnerID == bookingPlayerID || padelMatch.BallBringerID == bookingPlayerID {
+	if padelMatch.OwnerID == bookingPlayerID {
 		// Require all 4 players to match (same standard as isClubMatch in fetch logic)
 		// This ensures we have the exact same match and maintains consistency with club match detection
 		if s.verifyTeamComposition(request.TeamAssignments, padelMatch.Teams, 4) {

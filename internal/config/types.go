@@ -10,6 +10,13 @@ type Config struct {
 	Turso         TursoConfig
 	//Inngest        InngestConfig
 	Ngrok NgrokConfig
+	Web   WebConfig
+}
+
+// WebConfig holds configuration for the web UI.
+type WebConfig struct {
+	SessionSecret     string // 32+ chars recommended
+	TOTPEncryptionKey string // Must be exactly 32 chars for AES-256
 }
 type SlackConfig struct {
 	Token         string

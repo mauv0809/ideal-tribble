@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 env:
   # ------------------------------------------------------------------------------------
@@ -11,10 +14,10 @@ env:
   # ------------------------------------------------------------------------------------
   # Infrastructure:
   # TF_API_TOKEN: Terraform Cloud API token
-  # HCLOUD_TOKEN: Hetzner Cloud API token  
+  # HCLOUD_TOKEN: Hetzner Cloud API token
   # SSH_PRIVATE_KEY: Private SSH key for server access
   # SSH_PUBLIC_KEY: Public SSH key for server access
-  # 
+  #
   # Application Environment Variables (Secrets):
   # DB_NAME: Database name
   # TURSO_PRIMARY_URL: Primary database URL (libsql://...)
@@ -25,6 +28,9 @@ env:
   # TENANT_ID: Playtomic tenant ID
   # OTEL_EXPORTER_OTLP_ENDPOINT: OpenTelemetry endpoint (e.g., localhost:4317)
   # GRAFANA_ADMIN_PASSWORD: Grafana admin password
+  # WEB_SESSION_SECRET: Session cookie secret (32+ chars)
+  # WEB_TOTP_ENCRYPTION_KEY: TOTP encryption key (exactly 32 chars for AES-256)
+  # CLOUDFLARE_API_TOKEN: Cloudflare API token for DNS-01 SSL certificates (Zone:DNS:Edit)
   # ------------------------------------------------------------------------------------
   
   # Application Configuration (easily changeable)
@@ -139,6 +145,7 @@ jobs:
           chmod +x ${{ env.BINARY_NAME }}
 
       - name: Upload Binary Artifact
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BINARY_NAME }}
@@ -191,23 +198,27 @@ jobs:
           DB_NAME=${{ secrets.DB_NAME }}
           TURSO_PRIMARY_URL=${{ secrets.TURSO_PRIMARY_URL }}
           TURSO_AUTH_TOKEN=${{ secrets.TURSO_AUTH_TOKEN }}
-          
+
           # Slack
           SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID=${{ secrets.SLACK_CHANNEL_ID }}
           SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }}
-          
+
           # Playtomic
           TENANT_ID=${{ secrets.TENANT_ID }}
-          
+
           # Server
           PORT=8080
-          
+
+          # Web UI Authentication
+          WEB_SESSION_SECRET=${{ secrets.WEB_SESSION_SECRET }}
+          WEB_TOTP_ENCRYPTION_KEY=${{ secrets.WEB_TOTP_ENCRYPTION_KEY }}
+
           # OpenTelemetry
           OTEL_EXPORTER_OTLP_ENDPOINT=${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
           APP_ENV=${{ env.APP_ENV }}
           APP_VERSION=${{ env.APP_VERSION }}
-          
+
           # Observability
           GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           EOF
@@ -233,7 +244,16 @@ jobs:
           
           # Stop service before copying new binary to avoid file-in-use error
           ssh -o StrictHostKeyChecking=no root@$SERVER_IP "systemctl stop ideal-tribble || true"
-          
+
+          # Setup Cloudflare credentials for certbot DNS-01 challenge
+          ssh -o StrictHostKeyChecking=no root@$SERVER_IP << EOF
+            mkdir -p /etc/letsencrypt
+            cat > /etc/letsencrypt/cloudflare.ini << 'CFEOF'
+          dns_cloudflare_api_token = ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CFEOF
+            chmod 600 /etc/letsencrypt/cloudflare.ini
+          EOF
+
           # Copy files to server as tribble user
           scp -o StrictHostKeyChecking=no ${{ env.BINARY_NAME }} tribble@$SERVER_IP:/opt/ideal-tribble/
           scp -o StrictHostKeyChecking=no .env tribble@$SERVER_IP:/opt/ideal-tribble/

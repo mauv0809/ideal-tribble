@@ -20,6 +20,7 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
 	"github.com/mauv0809/ideal-tribble/internal/notifier"
+	"github.com/mauv0809/ideal-tribble/internal/pairings"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
 	"github.com/prometheus/client_golang/prometheus"
@@ -51,9 +52,10 @@ func setupTestServer(t *testing.T, playtomicClient playtomic.PlaytomicClient, no
 	metricsHandler := metrics.NewMetricsHandler(reg)
 	matchMaking := matchmaking.NewStore(db, clubStore)
 	jobqueue := jobqueue.New(db)
+	pairingsStore := pairings.New(db)
 	proc := processor.New(clubStore, notifier, metricsSvc, jobqueue, matchMaking)
 	// A real mux is needed to prevent the router from being nil.
-	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, matchMaking, jobqueue)
+	server := NewServer(clubStore, metricsSvc, metricsHandler, cfg, playtomicClient, notifier, proc, matchMaking, pairingsStore, jobqueue)
 
 	teardown := func() {
 		if dbTeardown != nil {
@@ -305,7 +307,7 @@ func TestFetchMatchesHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
-	handler := handlers.FetchMatchesHandler(server.Store, server.Metrics, server.Cfg, server.PlaytomicClient)
+	handler := handlers.FetchMatchesHandler(server.Store, server.Metrics, server.Cfg, server.PlaytomicClient, server.MatchmakingService, server.PairingsStore)
 	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
@@ -316,6 +318,79 @@ func TestFetchMatchesHandler(t *testing.T) {
 	require.Len(t, matches, 1)
 	assert.Equal(t, "m1", matches[0].MatchID)
 	assert.Equal(t, playtomic.StatusNew, matches[0].ProcessingStatus)
+}
+
+func TestFetchMatchesHandler_DetectsMatchRequests(t *testing.T) {
+	// Setup: Create a proposed match request that should be detected
+	mockClient := playtomic.NewMockClient()
+	ownerID := "p1"
+	matchDate := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	// Mock GetMatches to return a match that matches our proposal
+	mockClient.GetMatchesFunc = func(params *playtomic.SearchMatchesParams) ([]playtomic.MatchSummary, error) {
+		return []playtomic.MatchSummary{
+			{MatchID: "m1", OwnerID: &ownerID},
+		}, nil
+	}
+
+	// Mock GetSpecificMatch to return full match details
+	mockClient.GetSpecificMatchFunc = func(matchID string) (playtomic.PadelMatch, error) {
+		return playtomic.PadelMatch{
+			MatchID:       matchID,
+			OwnerID:       ownerID,
+			BallBringerID: "p1",
+			Start:         matchDate.Unix(),
+			End:           matchDate.Add(90 * time.Minute).Unix(),
+			Teams: []playtomic.Team{
+				{Players: []playtomic.Player{{UserID: "p1", Name: "Player 1"}, {UserID: "p2", Name: "Player 2"}}},
+				{Players: []playtomic.Player{{UserID: "p3", Name: "Player 3"}, {UserID: "p4", Name: "Player 4"}}},
+			},
+			MatchTypeEnum: playtomic.MatchTypeEnumDoubles,
+		}, nil
+	}
+
+	server, teardown := setupTestServer(t, mockClient, notifier.NewMock(), "")
+	defer teardown()
+
+	// Add players (including the requester)
+	server.Store.AddPlayer("u1", "User 1", 1.0)
+	server.Store.AddPlayer("p1", "Player 1", 1.0)
+	server.Store.AddPlayer("p2", "Player 2", 1.0)
+	server.Store.AddPlayer("p3", "Player 3", 1.0)
+	server.Store.AddPlayer("p4", "Player 4", 1.0)
+
+	// Create a match request
+	matchRequest, err := server.MatchmakingService.CreateMatchRequest("u1", "User 1", "channel1")
+	require.NoError(t, err)
+
+	// Add player availability for the date
+	err = server.MatchmakingService.AddPlayerAvailability(matchRequest.ID, "p1", "Player 1", "2024-01-15")
+	require.NoError(t, err)
+	err = server.MatchmakingService.AddPlayerAvailability(matchRequest.ID, "p2", "Player 2", "2024-01-15")
+	require.NoError(t, err)
+	err = server.MatchmakingService.AddPlayerAvailability(matchRequest.ID, "p3", "Player 3", "2024-01-15")
+	require.NoError(t, err)
+	err = server.MatchmakingService.AddPlayerAvailability(matchRequest.ID, "p4", "Player 4", "2024-01-15")
+	require.NoError(t, err)
+
+	// Propose the match - this will set status to StatusProposingMatch and assign teams
+	_, err = server.MatchmakingService.ProposeMatch(matchRequest.ID, "2024-01-15", "10:00", "11:30")
+	require.NoError(t, err)
+
+	// Execute the fetch handler
+	req, err := http.NewRequest("GET", "/fetch", nil)
+	require.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+	handler := handlers.FetchMatchesHandler(server.Store, server.Metrics, server.Cfg, server.PlaytomicClient, server.MatchmakingService, server.PairingsStore)
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	// Verify the match request was marked as completed
+	updatedRequest, err := server.MatchmakingService.GetMatchRequest(matchRequest.ID)
+	require.NoError(t, err)
+	assert.Equal(t, matchmaking.StatusCompleted, updatedRequest.Status, "Match request should be marked as completed")
 }
 
 func TestProcessMatchesHandler(t *testing.T) {

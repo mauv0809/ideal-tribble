@@ -1,0 +1,217 @@
+package templates
+
+import (
+	"fmt"
+	"github.com/mauv0809/ideal-tribble/internal/pairings"
+)
+
+// PairingsListData holds data for the pairings list page.
+type PairingsListData struct {
+	PageData
+	Pairings []pairings.TrackedPairing
+}
+
+// PairingsListPage renders the list of tracked pairings.
+templ PairingsListPage(data PairingsListData) {
+	@Layout(data.PageData) {
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+			<h1>Tracked Pairings</h1>
+			<a href="/pairings/new" role="button">Add Pairing</a>
+		</div>
+
+		if len(data.Pairings) == 0 {
+			<article>
+				<p>No pairings tracked yet. Add your first pairing to start tracking analytics!</p>
+				<a href="/pairings/new" role="button">Add Your First Pairing</a>
+			</article>
+		} else {
+			<div id="pairings-list">
+				@PairingsTable(data.Pairings)
+			</div>
+		}
+	}
+}
+
+// PairingsTable renders just the pairings table (for htmx updates).
+templ PairingsTable(pairingsList []pairings.TrackedPairing) {
+	<table class="clickable-rows">
+		<thead>
+			<tr>
+				<th>Player 1</th>
+				<th>Player 2</th>
+				<th>Status</th>
+				<th style="text-align: right;">Actions</th>
+			</tr>
+		</thead>
+		<tbody>
+			for _, p := range pairingsList {
+				<tr id={ fmt.Sprintf("pairing-%d", p.ID) } class="clickable-row" data-href={ fmt.Sprintf("/pairings/%d", p.ID) }>
+					<td>{ p.Player1Name }</td>
+					<td>{ p.Player2Name }</td>
+					<td>
+						if p.Active {
+							<span class="text-success">Active</span>
+						} else {
+							<span style="color: var(--text-muted);">Inactive</span>
+						}
+					</td>
+					<td class="table-actions" style="justify-content: flex-end;" onclick="event.stopPropagation();">
+						if p.Active {
+							<button
+								class="warning"
+								hx-patch={ fmt.Sprintf("/pairings/%d/deactivate", p.ID) }
+								hx-target="#pairings-list"
+								hx-swap="innerHTML">
+								Deactivate
+							</button>
+						} else {
+							<button
+								class="success"
+								hx-patch={ fmt.Sprintf("/pairings/%d/activate", p.ID) }
+								hx-target="#pairings-list"
+								hx-swap="innerHTML">
+								Activate
+							</button>
+						}
+						<button
+							class="danger"
+							hx-delete={ fmt.Sprintf("/pairings/%d", p.ID) }
+							hx-target="#pairings-list"
+							hx-swap="innerHTML"
+							hx-confirm="Are you sure you want to delete this pairing?">
+							Delete
+						</button>
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+	<script>
+		document.querySelectorAll('.clickable-row').forEach(row => {
+			row.addEventListener('click', () => {
+				window.location.href = row.dataset.href;
+			});
+		});
+	</script>
+}
+
+// NewPairingData holds data for the new pairing form.
+type NewPairingData struct {
+	PageData
+	Error   string
+	Players []pairings.KnownPlayer
+}
+
+// NewPairingPage renders the add new pairing form.
+templ NewPairingPage(data NewPairingData) {
+	@Layout(data.PageData) {
+		<h1>Add New Pairing</h1>
+
+		<article>
+			<form method="POST" action="/pairings">
+				if data.Error != "" {
+					<div class="flash flash-error">{ data.Error }</div>
+				}
+
+				<div class="player-section">
+					<h3>Player 1</h3>
+					if len(data.Players) > 0 {
+						<label for="player1_select">
+							Select Known Player
+							<select id="player1_select">
+								<option value="">-- Select or enter manually below --</option>
+								for _, p := range data.Players {
+									<option value={ p.PlayerID }>{ p.PlayerName }</option>
+								}
+							</select>
+						</label>
+					}
+					<label for="player1_name">
+						Player Name
+						<input type="text" id="player1_name" name="player1_name" placeholder="Display Name" required/>
+					</label>
+					<label for="player1_id">
+						Player ID
+						<input type="text" id="player1_id" name="player1_id" placeholder="Playtomic User ID" required/>
+					</label>
+				</div>
+
+				<div class="player-section">
+					<h3>Player 2</h3>
+					if len(data.Players) > 0 {
+						<label for="player2_select">
+							Select Known Player
+							<select id="player2_select">
+								<option value="">-- Select or enter manually below --</option>
+								for _, p := range data.Players {
+									<option value={ p.PlayerID }>{ p.PlayerName }</option>
+								}
+							</select>
+						</label>
+					}
+					<label for="player2_name">
+						Player Name
+						<input type="text" id="player2_name" name="player2_name" placeholder="Display Name" required/>
+					</label>
+					<label for="player2_id">
+						Player ID
+						<input type="text" id="player2_id" name="player2_id" placeholder="Playtomic User ID" required/>
+					</label>
+				</div>
+
+				<div class="grid">
+					<a href="/pairings" role="button" class="outline secondary">Cancel</a>
+					<button type="submit">Add Pairing</button>
+				</div>
+			</form>
+		</article>
+
+		if len(data.Players) > 0 {
+			<script>
+				document.getElementById('player1_select').addEventListener('change', function() {
+					if (this.value) {
+						document.getElementById('player1_id').value = this.value;
+						document.getElementById('player1_name').value = this.options[this.selectedIndex].text;
+					}
+				});
+
+				document.getElementById('player2_select').addEventListener('change', function() {
+					if (this.value) {
+						document.getElementById('player2_id').value = this.value;
+						document.getElementById('player2_name').value = this.options[this.selectedIndex].text;
+					}
+				});
+			</script>
+		}
+
+		<style>
+			.player-section {
+				margin-bottom: 1.5rem;
+				padding: 1rem;
+				background: var(--bg-surface);
+				border-radius: 8px;
+			}
+			.player-section h3 {
+				margin-top: 0;
+				margin-bottom: 1rem;
+				font-size: 1rem;
+				color: var(--text-muted);
+			}
+			/* Consistent select styling - hide browser default arrow on hover */
+			.player-section select {
+				appearance: none;
+				-webkit-appearance: none;
+				-moz-appearance: none;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+				background-repeat: no-repeat;
+				background-position: right 0.75rem center;
+				background-size: 16px;
+				padding-right: 2.5rem;
+			}
+			.player-section select:hover,
+			.player-section select:focus {
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+			}
+		</style>
+	}
+}

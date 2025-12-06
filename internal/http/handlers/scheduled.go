@@ -10,12 +10,14 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/config"
+	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/metrics"
+	"github.com/mauv0809/ideal-tribble/internal/pairings"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/processor"
 )
 
-func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg config.Config, playtomicClient playtomic.PlaytomicClient) http.HandlerFunc {
+func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg config.Config, playtomicClient playtomic.PlaytomicClient, matchmakingService matchmaking.MatchmakingService, pairingsStore pairings.PairingsStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Info("Starting match fetch...")
 		metrics.IncFetcherRuns()
@@ -67,7 +69,7 @@ func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg conf
 		}
 		log.Info("Fetched all players for filtering", "count", len(knownPlayerIDs))
 
-		clubMatchesToUpsert := fetchAndFilterClubMatches(matches, knownPlayerIDs, playtomicClient)
+		clubMatchesToUpsert, allFetchedMatches := fetchAndFilterClubMatches(matches, knownPlayerIDs, playtomicClient)
 
 		if len(clubMatchesToUpsert) > 0 {
 			if !isDryRun {
@@ -82,16 +84,70 @@ func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg conf
 			}
 		}
 
+		// Detect and complete any match requests that match the fetched bookings
+		if matchmakingService != nil && len(clubMatchesToUpsert) > 0 {
+			log.Info("Checking for matches that fulfill match requests")
+			completedRequestIDs, err := matchmakingService.DetectMatchedRequests(clubMatchesToUpsert)
+			if err != nil {
+				log.Error("Failed to detect matched requests", "error", err)
+				// Don't return error - this is non-critical, continue with fetch completion
+			} else if len(completedRequestIDs) > 0 {
+				log.Info("Found match requests fulfilled by bookings", "count", len(completedRequestIDs))
+
+				// Mark each matched request as completed
+				for _, requestID := range completedRequestIDs {
+					if !isDryRun {
+						if err := matchmakingService.UpdateMatchRequestStatus(requestID, matchmaking.StatusCompleted); err != nil {
+							log.Error("Failed to mark match request as completed", "requestID", requestID, "error", err)
+							// Continue with other requests even if one fails
+						} else {
+							log.Info("Marked match request as completed", "requestID", requestID)
+						}
+					} else {
+						log.Info("[Dry Run] Would have marked match request as completed", "requestID", requestID)
+					}
+				}
+			} else {
+				log.Debug("No match requests matched the fetched bookings")
+			}
+		}
+
+		// Detect and store pairing matches for analytics
+		pairingMatchCount := 0
+		if pairingsStore != nil {
+			trackedPairings, err := pairingsStore.GetActivePairings()
+			if err != nil {
+				log.Error("Failed to get tracked pairings", "error", err)
+			} else if len(trackedPairings) > 0 {
+				pairingMatches := pairings.DetectPairingMatches(allFetchedMatches, trackedPairings)
+				if len(pairingMatches) > 0 {
+					if !isDryRun {
+						log.Info("Upserting pairing matches", "count", len(pairingMatches))
+						if err := pairingsStore.UpsertPairingMatches(pairingMatches); err != nil {
+							log.Error("Failed to upsert pairing matches", "error", err)
+							// Non-critical, continue
+						} else {
+							pairingMatchCount = len(pairingMatches)
+						}
+					} else {
+						log.Info("[Dry Run] Would have upserted pairing matches", "count", len(pairingMatches))
+						pairingMatchCount = len(pairingMatches)
+					}
+				}
+			}
+		}
+
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "Match fetch completed.")
-		log.Info("Match fetch finished.", "total_api_matches", len(matches), "club_matches_found", len(clubMatchesToUpsert))
+		log.Info("Match fetch finished.", "total_api_matches", len(matches), "club_matches_found", len(clubMatchesToUpsert), "pairing_matches_found", pairingMatchCount)
 	}
 }
 
 // fetchAndFilterClubMatches takes a list of match summaries and concurrently fetches
-// full details, returning only the ones that are confirmed to be club matches.
-func fetchAndFilterClubMatches(summaries []playtomic.MatchSummary, knownPlayerIDs map[string]struct{}, playtomicClient playtomic.PlaytomicClient) []*playtomic.PadelMatch {
+// full details, returning club matches and all fetched matches (for pairing detection).
+func fetchAndFilterClubMatches(summaries []playtomic.MatchSummary, knownPlayerIDs map[string]struct{}, playtomicClient playtomic.PlaytomicClient) ([]*playtomic.PadelMatch, []*playtomic.PadelMatch) {
 	var clubMatchesToUpsert []*playtomic.PadelMatch
+	var allFetchedMatches []*playtomic.PadelMatch
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -123,17 +179,20 @@ func fetchAndFilterClubMatches(summaries []playtomic.MatchSummary, knownPlayerID
 				return
 			}
 
-			// Final filter: check if all participants are known club members.
+			mu.Lock()
+			// Store all fetched matches for pairing detection
+			allFetchedMatches = append(allFetchedMatches, &specificMatch)
+
+			// Filter: check if all participants are known club members.
 			if isClubMatch(specificMatch, knownPlayerIDs) {
-				mu.Lock()
 				clubMatchesToUpsert = append(clubMatchesToUpsert, &specificMatch)
-				mu.Unlock()
 			}
+			mu.Unlock()
 		}(summary)
 	}
 	wg.Wait()
 
-	return clubMatchesToUpsert
+	return clubMatchesToUpsert, allFetchedMatches
 }
 
 func ProcessMatchesHandler(processor *processor.Processor) http.HandlerFunc {

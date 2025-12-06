@@ -1,0 +1,146 @@
+package templates
+
+import (
+	"fmt"
+	"github.com/mauv0809/ideal-tribble/internal/auth"
+)
+
+// UserListData holds data for the admin user list page.
+type UserListData struct {
+	PageData
+	Users []*auth.User
+}
+
+// UserListPage renders the admin user management page.
+templ UserListPage(data UserListData) {
+	@Layout(data.PageData) {
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+			<h1>User Management</h1>
+			<a href="/admin/users/new" role="button">Add User</a>
+		</div>
+
+		if len(data.Users) == 0 {
+			<article>
+				<p>No users found.</p>
+			</article>
+		} else {
+			<div id="users-list">
+				@UsersTable(data.Users, data.User.ID)
+			</div>
+		}
+	}
+}
+
+// UsersTable renders just the users table (for htmx updates).
+templ UsersTable(users []*auth.User, currentUserID int64) {
+	<table>
+		<thead>
+			<tr>
+				<th>Email</th>
+				<th>Role</th>
+				<th>2FA</th>
+				<th>Created</th>
+				<th>Actions</th>
+			</tr>
+		</thead>
+		<tbody>
+			for _, u := range users {
+				<tr id={ fmt.Sprintf("user-%d", u.ID) }>
+					<td>{ u.Email }</td>
+					<td>
+						if u.IsAdmin {
+							Admin
+						} else {
+							User
+						}
+					</td>
+					<td>
+						if u.TOTPEnabled {
+							<span class="text-success">Enabled</span>
+						} else {
+							<span style="color: var(--text-muted);">Disabled</span>
+						}
+					</td>
+					<td>{ u.CreatedAt.Format("2006-01-02") }</td>
+					<td class="table-actions" style="justify-content: flex-end;">
+						if u.ID != currentUserID {
+							<button
+								class="danger"
+								hx-delete={ fmt.Sprintf("/admin/users/%d", u.ID) }
+								hx-target="#users-list"
+								hx-swap="innerHTML"
+								hx-confirm="Are you sure you want to delete this user? This cannot be undone.">
+								Delete
+							</button>
+						} else {
+							<span style="color: var(--text-muted);">(You)</span>
+						}
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+// NewUserData holds data for the new user form.
+type NewUserData struct {
+	PageData
+	Error string
+}
+
+// NewUserPage renders the add new user form.
+templ NewUserPage(data NewUserData) {
+	@Layout(data.PageData) {
+		<h1>Add New User</h1>
+
+		<article>
+			<form method="POST" action="/admin/users">
+				if data.Error != "" {
+					<div class="flash flash-error">{ data.Error }</div>
+				}
+				<label for="email">
+					Email Address
+					<input type="email" id="email" name="email" placeholder="user@example.com" required/>
+				</label>
+				<label for="password">
+					Temporary Password
+					<input type="password" id="password" name="password"
+						   minlength="8" required/>
+					<small>The user should change this password after first login.</small>
+				</label>
+				<label for="is_admin">
+					<input type="checkbox" id="is_admin" name="is_admin" value="1"/>
+					Administrator
+				</label>
+				<div class="grid">
+					<a href="/admin/users" role="button" class="outline secondary">Cancel</a>
+					<button type="submit">Create User</button>
+				</div>
+			</form>
+		</article>
+
+		<article>
+			<h3>User Roles</h3>
+			<dl>
+				<dt><strong>User</strong></dt>
+				<dd>
+					<ul>
+						<li>View dashboard and statistics</li>
+						<li>View and manage pairings</li>
+						<li>View analytics (opponent breakdown, time analysis, venue stats)</li>
+						<li>Manually fetch matches from Playtomic</li>
+						<li>Manage own profile and 2FA settings</li>
+					</ul>
+				</dd>
+				<dt><strong>Administrator</strong></dt>
+				<dd>
+					<ul>
+						<li>All User permissions</li>
+						<li>Access user management page</li>
+						<li>Create and delete user accounts</li>
+					</ul>
+				</dd>
+			</dl>
+		</article>
+	}
+}

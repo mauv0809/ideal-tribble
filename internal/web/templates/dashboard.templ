@@ -1,0 +1,167 @@
+package templates
+
+import "fmt"
+
+// DashboardMatch represents a recent match for the dashboard.
+type DashboardMatch struct {
+	MatchID      string
+	PairingID    int64
+	PairingName  string
+	MatchDate    string
+	Won          bool
+	SetsWon      int
+	SetsLost     int
+	OpponentName string
+}
+
+// DashboardData holds data for the dashboard page.
+type DashboardData struct {
+	PageData
+	TotalPairings     int
+	ActivePairings    int
+	TotalMatches      int
+	RecentMatchCount  int
+	RecentMatchesList []DashboardMatch
+}
+
+// DashboardPage renders the main dashboard.
+templ DashboardPage(data DashboardData) {
+	@Layout(data.PageData) {
+		<h1>Dashboard</h1>
+
+		<div class="stats-grid">
+			<a href="/pairings" class="stat-card stat-card-link">
+				<div class="stat-value">{ fmt.Sprint(data.TotalPairings) }</div>
+				<div class="stat-label">Total Pairings</div>
+			</a>
+			<a href="/pairings" class="stat-card stat-card-link">
+				<div class="stat-value">{ fmt.Sprint(data.ActivePairings) }</div>
+				<div class="stat-label">Active Pairings</div>
+			</a>
+			<div class="stat-card">
+				<div class="stat-value">{ fmt.Sprint(data.TotalMatches) }</div>
+				<div class="stat-label">Total Matches</div>
+			</div>
+			<div class="stat-card">
+				<div class="stat-value">{ fmt.Sprint(data.RecentMatchCount) }</div>
+				<div class="stat-label">Matches (Last 30 Days)</div>
+			</div>
+		</div>
+
+		if len(data.RecentMatchesList) > 0 {
+			<section>
+				<h2>Recent Matches</h2>
+				<table class="clickable-rows">
+					<thead>
+						<tr>
+							<th>Date</th>
+							<th>Pairing</th>
+							<th>Result</th>
+							<th>Score</th>
+							<th>Opponents</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, match := range data.RecentMatchesList {
+							<tr class="clickable-row" data-href={ fmt.Sprintf("/matches/%s?pairing=%d", match.MatchID, match.PairingID) }>
+								<td>{ match.MatchDate }</td>
+								<td>{ match.PairingName }</td>
+								<td>
+									if match.Won {
+										<span class="text-success">Win</span>
+									} else {
+										<span class="text-error">Loss</span>
+									}
+								</td>
+								<td>{ fmt.Sprintf("%d-%d", match.SetsWon, match.SetsLost) }</td>
+								<td>{ match.OpponentName }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+				<script>
+					document.querySelectorAll('.clickable-row').forEach(row => {
+						row.addEventListener('click', () => {
+							window.location.href = row.dataset.href;
+						});
+					});
+				</script>
+			</section>
+		}
+
+		<section>
+			<h2>Quick Actions</h2>
+			<div style="display: flex; gap: 12px;">
+				<a href="/pairings" role="button" class="outline">Manage Pairings</a>
+				<a href="/pairings/new" role="button" class="outline">Add New Pairing</a>
+			</div>
+		</section>
+
+		<section>
+			<h2>Fetch Matches</h2>
+			<article>
+				<p>Manually fetch matches from Playtomic. Use the days parameter to backfill historical data.</p>
+				<form method="POST" action="/fetch-matches" id="fetch-form">
+					<div style="display: flex; gap: 12px; align-items: flex-end;">
+						<div style="flex: 0 0 200px;">
+							<label for="days">Days to fetch</label>
+							<input type="number" id="days" name="days" value="7" min="1" max="365" required/>
+						</div>
+						<button type="submit" id="fetch-btn">
+							<span class="btn-text">Fetch Matches</span>
+							<span class="btn-loading" style="display: none;">Fetching...</span>
+						</button>
+					</div>
+					<small style="display: block; margin-top: 8px; color: var(--text-muted);">Number of days to look back (1-365)</small>
+				</form>
+				<div id="fetch-result" style="margin-top: 1rem;"></div>
+			</article>
+		</section>
+
+		<script>
+			document.getElementById('fetch-form').addEventListener('submit', async function(e) {
+				e.preventDefault();
+				const btn = document.getElementById('fetch-btn');
+				const btnText = btn.querySelector('.btn-text');
+				const btnLoading = btn.querySelector('.btn-loading');
+				const resultDiv = document.getElementById('fetch-result');
+				const days = document.getElementById('days').value;
+
+				// Show loading state
+				btn.disabled = true;
+				btn.setAttribute('aria-busy', 'true');
+				btnText.style.display = 'none';
+				btnLoading.style.display = 'inline';
+				resultDiv.innerHTML = '';
+
+				try {
+					const response = await fetch('/fetch-matches', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/x-www-form-urlencoded',
+						},
+						body: 'days=' + encodeURIComponent(days)
+					});
+
+					const result = await response.json();
+
+					if (response.ok) {
+						resultDiv.innerHTML = '<div class="flash flash-success">' + result.message + '</div>';
+						// Reload page after 2 seconds to update stats
+						setTimeout(() => window.location.reload(), 2000);
+					} else {
+						resultDiv.innerHTML = '<div class="flash flash-error">' + (result.error || 'Failed to fetch matches') + '</div>';
+					}
+				} catch (err) {
+					resultDiv.innerHTML = '<div class="flash flash-error">Network error: ' + err.message + '</div>';
+				} finally {
+					// Reset button state
+					btn.disabled = false;
+					btn.removeAttribute('aria-busy');
+					btnText.style.display = 'inline';
+					btnLoading.style.display = 'none';
+				}
+			});
+		</script>
+	}
+}
