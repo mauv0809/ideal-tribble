@@ -26,20 +26,30 @@ type PairingHighlight struct {
 // DashboardData holds data for the dashboard page.
 type DashboardData struct {
 	PageData
-	TotalPairings        int
-	ActivePairings       int
-	TotalMatches         int
-	RecentMatchCount     int
-	RecentMatchesList    []DashboardMatch
-	LastFetchTimestamp   int64
-	MostActivePairing    *PairingHighlight
+	TotalPairings         int
+	ActivePairings        int
+	TotalMatches          int
+	PeriodMatchCount      int
+	RecentMatchesList     []DashboardMatch
+	LastFetchTimestamp    int64
+	MostActivePairing     *PairingHighlight
 	BestPerformingPairing *PairingHighlight
+	SelectedPeriod        int    // Days: 7, 30, 90, 0 = all time
+	PeriodLabel           string // "Last 7 Days", "Last 30 Days", etc.
 }
 
 // DashboardPage renders the main dashboard.
 templ DashboardPage(data DashboardData) {
 	@Layout(data.PageData) {
-		<h1>Dashboard</h1>
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+			<h1 style="margin-bottom: 0;">Dashboard</h1>
+			<select id="period-select" class="period-select">
+				<option value="7" selected?={ data.SelectedPeriod == 7 }>Last 7 Days</option>
+				<option value="30" selected?={ data.SelectedPeriod == 30 }>Last 30 Days</option>
+				<option value="90" selected?={ data.SelectedPeriod == 90 }>Last 90 Days</option>
+				<option value="0" selected?={ data.SelectedPeriod == 0 }>All Time</option>
+			</select>
+		</div>
 
 		<div class="stats-grid">
 			<a href="/pairings" class="stat-card stat-card-link">
@@ -55,14 +65,14 @@ templ DashboardPage(data DashboardData) {
 				<div class="stat-label">Total Matches</div>
 			</div>
 			<div class="stat-card">
-				<div class="stat-value">{ fmt.Sprint(data.RecentMatchCount) }</div>
-				<div class="stat-label">Matches (Last 30 Days)</div>
+				<div class="stat-value">{ fmt.Sprint(data.PeriodMatchCount) }</div>
+				<div class="stat-label">Matches ({ data.PeriodLabel })</div>
 			</div>
 		</div>
 
 		if data.MostActivePairing != nil || data.BestPerformingPairing != nil {
 			<section>
-				<h2>Last 30 Days Highlights</h2>
+				<h2>{ data.PeriodLabel } Highlights</h2>
 				<div class="stats-grid">
 					if data.MostActivePairing != nil {
 						<a href={ templ.SafeURL(fmt.Sprintf("/pairings/%d", data.MostActivePairing.PairingID)) } class="stat-card stat-card-link stat-card-highlight">
@@ -206,6 +216,30 @@ templ DashboardPage(data DashboardData) {
 					btnLoading.style.display = 'none';
 				}
 			});
+
+			// Period selector
+			document.getElementById('period-select').addEventListener('change', function() {
+				const period = this.value;
+				const url = new URL(window.location.href);
+				url.searchParams.set('period', period);
+				window.location.href = url.toString();
+			});
 		</script>
+
+		<style>
+			.period-select {
+				width: auto;
+				min-width: 140px;
+				margin-bottom: 0;
+				appearance: none;
+				-webkit-appearance: none;
+				-moz-appearance: none;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+				background-repeat: no-repeat;
+				background-position: right 0.75rem center;
+				background-size: 16px;
+				padding-right: 2.5rem;
+			}
+		</style>
 	}
 }

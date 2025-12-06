@@ -37,11 +37,13 @@ type DashboardData struct {
 	TotalPairings         int
 	ActivePairings        int
 	TotalMatches          int
-	RecentMatchCount      int
+	PeriodMatchCount      int
 	RecentMatchesList     []DashboardMatch
 	LastFetchTimestamp    int64
 	MostActivePairing     *PairingHighlight
 	BestPerformingPairing *PairingHighlight
+	SelectedPeriod        int    // Days: 7, 30, 90, 0 = all time
+	PeriodLabel           string // "Last 7 Days", "Last 30 Days", etc.
 }
 
 // DashboardPage renders the main dashboard.
@@ -78,291 +80,357 @@ func DashboardPage(data DashboardData) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h1>Dashboard</h1><div class=\"stats-grid\"><a href=\"/pairings\" class=\"stat-card stat-card-link\"><div class=\"stat-value\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\"><h1 style=\"margin-bottom: 0;\">Dashboard</h1><select id=\"period-select\" class=\"period-select\"><option value=\"7\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.SelectedPeriod == 7 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, ">Last 7 Days</option> <option value=\"30\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.SelectedPeriod == 30 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, ">Last 30 Days</option> <option value=\"90\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.SelectedPeriod == 90 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, ">Last 90 Days</option> <option value=\"0\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.SelectedPeriod == 0 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, ">All Time</option></select></div><div class=\"stats-grid\"><a href=\"/pairings\" class=\"stat-card stat-card-link\"><div class=\"stat-value\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.TotalPairings))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 46, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 56, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div><div class=\"stat-label\">Total Pairings</div></a> <a href=\"/pairings\" class=\"stat-card stat-card-link\"><div class=\"stat-value\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div><div class=\"stat-label\">Total Pairings</div></a> <a href=\"/pairings\" class=\"stat-card stat-card-link\"><div class=\"stat-value\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.ActivePairings))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 50, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 60, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div><div class=\"stat-label\">Active Pairings</div></a><div class=\"stat-card\"><div class=\"stat-value\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div><div class=\"stat-label\">Active Pairings</div></a><div class=\"stat-card\"><div class=\"stat-value\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.TotalMatches))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 54, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 64, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div><div class=\"stat-label\">Total Matches</div></div><div class=\"stat-card\"><div class=\"stat-value\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</div><div class=\"stat-label\">Total Matches</div></div><div class=\"stat-card\"><div class=\"stat-value\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var6 string
-			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.RecentMatchCount))
+			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.PeriodMatchCount))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 58, Col: 63}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 68, Col: 63}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div><div class=\"stat-label\">Matches (Last 30 Days)</div></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div><div class=\"stat-label\">Matches (")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var7 string
+			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(data.PeriodLabel)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 69, Col: 55}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, ")</div></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if data.MostActivePairing != nil || data.BestPerformingPairing != nil {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<section><h2>Last 30 Days Highlights</h2><div class=\"stats-grid\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<section><h2>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var8 string
+				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(data.PeriodLabel)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 75, Col: 26}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " Highlights</h2><div class=\"stats-grid\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if data.MostActivePairing != nil {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<a href=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<a href=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var7 templ.SafeURL
-					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/pairings/%d", data.MostActivePairing.PairingID)))
+					var templ_7745c5c3_Var9 templ.SafeURL
+					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/pairings/%d", data.MostActivePairing.PairingID)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 68, Col: 92}
-					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "\" class=\"stat-card stat-card-link stat-card-highlight\"><div class=\"stat-label\">Most Active</div><div class=\"stat-value-small\">")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					var templ_7745c5c3_Var8 string
-					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(data.MostActivePairing.PairingName)
-					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 70, Col: 73}
-					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div><div class=\"stat-sublabel\">")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					var templ_7745c5c3_Var9 string
-					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d matches", data.MostActivePairing.MatchesPlayed))
-					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 71, Col: 99}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 78, Col: 92}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div></a> ")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" class=\"stat-card stat-card-link stat-card-highlight\"><div class=\"stat-label\">Most Active</div><div class=\"stat-value-small\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-				}
-				if data.BestPerformingPairing != nil {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<a href=\"")
+					var templ_7745c5c3_Var10 string
+					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(data.MostActivePairing.PairingName)
 					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					var templ_7745c5c3_Var10 templ.SafeURL
-					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/pairings/%d", data.BestPerformingPairing.PairingID)))
-					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 75, Col: 96}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 80, Col: 73}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" class=\"stat-card stat-card-link stat-card-highlight\"><div class=\"stat-label\">Best Performing</div><div class=\"stat-value-small\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</div><div class=\"stat-sublabel\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var11 string
-					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(data.BestPerformingPairing.PairingName)
+					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d matches", data.MostActivePairing.MatchesPlayed))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 77, Col: 77}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 81, Col: 99}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div><div class=\"stat-sublabel\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div></a> ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var12 string
-					templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.0f%% win rate (%d-%d)", data.BestPerformingPairing.WinPercentage, data.BestPerformingPairing.MatchesWon, data.BestPerformingPairing.MatchesPlayed-data.BestPerformingPairing.MatchesWon))
+				}
+				if data.BestPerformingPairing != nil {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<a href=\"")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 78, Col: 237}
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var12 templ.SafeURL
+					templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/pairings/%d", data.BestPerformingPairing.PairingID)))
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 85, Col: 96}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div></a>")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</div></section>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if len(data.RecentMatchesList) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<section><h2>Recent Matches</h2><table class=\"clickable-rows\"><thead><tr><th>Date</th><th>Pairing</th><th>Result</th><th>Score</th><th>Opponents</th></tr></thead> <tbody>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				for _, match := range data.RecentMatchesList {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<tr class=\"clickable-row\" data-href=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\" class=\"stat-card stat-card-link stat-card-highlight\"><div class=\"stat-label\">Best Performing</div><div class=\"stat-value-small\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var13 string
-					templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/matches/%s?pairing=%d", match.MatchID, match.PairingID))
+					templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(data.BestPerformingPairing.PairingName)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 100, Col: 114}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 87, Col: 77}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\"><td><span class=\"local-datetime\" data-timestamp=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</div><div class=\"stat-sublabel\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var14 string
-					templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(match.MatchDateUnix))
+					templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.0f%% win rate (%d-%d)", data.BestPerformingPairing.WinPercentage, data.BestPerformingPairing.MatchesWon, data.BestPerformingPairing.MatchesPlayed-data.BestPerformingPairing.MatchesWon))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 101, Col: 89}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 88, Col: 237}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\"></span></td><td>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</div></a>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</div></section>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, " ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if len(data.RecentMatchesList) > 0 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<section><h2>Recent Matches</h2><table class=\"clickable-rows\"><thead><tr><th>Date</th><th>Pairing</th><th>Result</th><th>Score</th><th>Opponents</th></tr></thead> <tbody>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				for _, match := range data.RecentMatchesList {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<tr class=\"clickable-row\" data-href=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var15 string
-					templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(match.PairingName)
+					templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/matches/%s?pairing=%d", match.MatchID, match.PairingID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 102, Col: 31}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 110, Col: 114}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</td><td>")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					if match.Won {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<span class=\"text-success\">Win</span>")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<span class=\"text-error\">Loss</span>")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</td><td>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\"><td><span class=\"local-datetime\" data-timestamp=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var16 string
-					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d-%d", match.SetsWon, match.SetsLost))
+					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(match.MatchDateUnix))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 110, Col: 65}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 111, Col: 89}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</td><td>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\"></span></td><td>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var17 string
-					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(match.OpponentName)
+					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(match.PairingName)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 111, Col: 32}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 112, Col: 31}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</td></tr>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</td><td>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					if match.Won {
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<span class=\"text-success\">Win</span>")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					} else {
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<span class=\"text-error\">Loss</span>")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</td><td>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var18 string
+					templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d-%d", match.SetsWon, match.SetsLost))
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 120, Col: 65}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</td><td>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var19 string
+					templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(match.OpponentName)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 121, Col: 32}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</td></tr>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</tbody></table><script>\n\t\t\t\t\tdocument.querySelectorAll('.clickable-row').forEach(row => {\n\t\t\t\t\t\trow.addEventListener('click', () => {\n\t\t\t\t\t\t\twindow.location.href = row.dataset.href;\n\t\t\t\t\t\t});\n\t\t\t\t\t});\n\t\t\t\t</script></section>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</tbody></table><script>\n\t\t\t\t\tdocument.querySelectorAll('.clickable-row').forEach(row => {\n\t\t\t\t\t\trow.addEventListener('click', () => {\n\t\t\t\t\t\t\twindow.location.href = row.dataset.href;\n\t\t\t\t\t\t});\n\t\t\t\t\t});\n\t\t\t\t</script></section>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, " <section><h2>Quick Actions</h2><div style=\"display: flex; gap: 12px;\"><a href=\"/pairings\" role=\"button\" class=\"outline\">Manage Pairings</a> <a href=\"/pairings/new\" role=\"button\" class=\"outline\">Add New Pairing</a></div></section><section><h2>Fetch Matches</h2><article><div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\"><p style=\"margin: 0;\">Manually fetch matches from Playtomic. Use the days parameter to backfill historical data.</p><small style=\"color: var(--pico-muted-color);\">Last fetched: ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, " <section><h2>Quick Actions</h2><div style=\"display: flex; gap: 12px;\"><a href=\"/pairings\" role=\"button\" class=\"outline\">Manage Pairings</a> <a href=\"/pairings/new\" role=\"button\" class=\"outline\">Add New Pairing</a></div></section><section><h2>Fetch Matches</h2><article><div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\"><p style=\"margin: 0;\">Manually fetch matches from Playtomic. Use the days parameter to backfill historical data.</p><small style=\"color: var(--pico-muted-color);\">Last fetched: ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if data.LastFetchTimestamp > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<span class=\"local-datetime\" data-timestamp=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<span class=\"local-datetime\" data-timestamp=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var18 string
-				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.LastFetchTimestamp))
+				var templ_7745c5c3_Var20 string
+				templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.LastFetchTimestamp))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 142, Col: 88}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 152, Col: 88}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\"></span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\"></span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "Never")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "Never")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</small></div><form method=\"POST\" action=\"/fetch-matches\" id=\"fetch-form\"><div style=\"display: flex; gap: 12px; align-items: flex-end;\"><div style=\"flex: 0 0 200px;\"><label for=\"days\">Days to fetch</label> <input type=\"number\" id=\"days\" name=\"days\" value=\"7\" min=\"1\" max=\"365\" required></div><button type=\"submit\" id=\"fetch-btn\"><span class=\"btn-text\">Fetch Matches</span> <span class=\"btn-loading\" style=\"display: none;\">Fetching...</span></button></div><small style=\"display: block; margin-top: 8px; color: var(--pico-muted-color);\">Number of days to look back (1-365)</small></form><div id=\"fetch-result\" style=\"margin-top: 1rem;\"></div></article></section><script>\n\t\t\tdocument.getElementById('fetch-form').addEventListener('submit', async function(e) {\n\t\t\t\te.preventDefault();\n\t\t\t\tconst btn = document.getElementById('fetch-btn');\n\t\t\t\tconst btnText = btn.querySelector('.btn-text');\n\t\t\t\tconst btnLoading = btn.querySelector('.btn-loading');\n\t\t\t\tconst resultDiv = document.getElementById('fetch-result');\n\t\t\t\tconst days = document.getElementById('days').value;\n\n\t\t\t\t// Show loading state\n\t\t\t\tbtn.disabled = true;\n\t\t\t\tbtn.setAttribute('aria-busy', 'true');\n\t\t\t\tbtnText.style.display = 'none';\n\t\t\t\tbtnLoading.style.display = 'inline';\n\t\t\t\tresultDiv.innerHTML = '';\n\n\t\t\t\ttry {\n\t\t\t\t\tconst response = await fetch('/fetch-matches', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/x-www-form-urlencoded',\n\t\t\t\t\t\t},\n\t\t\t\t\t\tbody: 'days=' + encodeURIComponent(days)\n\t\t\t\t\t});\n\n\t\t\t\t\tconst result = await response.json();\n\n\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-success\">' + result.message + '</div>';\n\t\t\t\t\t\t// Reload page after 2 seconds to update stats\n\t\t\t\t\t\tsetTimeout(() => window.location.reload(), 2000);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-error\">' + (result.error || 'Failed to fetch matches') + '</div>';\n\t\t\t\t\t}\n\t\t\t\t} catch (err) {\n\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-error\">Network error: ' + err.message + '</div>';\n\t\t\t\t} finally {\n\t\t\t\t\t// Reset button state\n\t\t\t\t\tbtn.disabled = false;\n\t\t\t\t\tbtn.removeAttribute('aria-busy');\n\t\t\t\t\tbtnText.style.display = 'inline';\n\t\t\t\t\tbtnLoading.style.display = 'none';\n\t\t\t\t}\n\t\t\t});\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</small></div><form method=\"POST\" action=\"/fetch-matches\" id=\"fetch-form\"><div style=\"display: flex; gap: 12px; align-items: flex-end;\"><div style=\"flex: 0 0 200px;\"><label for=\"days\">Days to fetch</label> <input type=\"number\" id=\"days\" name=\"days\" value=\"7\" min=\"1\" max=\"365\" required></div><button type=\"submit\" id=\"fetch-btn\"><span class=\"btn-text\">Fetch Matches</span> <span class=\"btn-loading\" style=\"display: none;\">Fetching...</span></button></div><small style=\"display: block; margin-top: 8px; color: var(--pico-muted-color);\">Number of days to look back (1-365)</small></form><div id=\"fetch-result\" style=\"margin-top: 1rem;\"></div></article></section><script>\n\t\t\tdocument.getElementById('fetch-form').addEventListener('submit', async function(e) {\n\t\t\t\te.preventDefault();\n\t\t\t\tconst btn = document.getElementById('fetch-btn');\n\t\t\t\tconst btnText = btn.querySelector('.btn-text');\n\t\t\t\tconst btnLoading = btn.querySelector('.btn-loading');\n\t\t\t\tconst resultDiv = document.getElementById('fetch-result');\n\t\t\t\tconst days = document.getElementById('days').value;\n\n\t\t\t\t// Show loading state\n\t\t\t\tbtn.disabled = true;\n\t\t\t\tbtn.setAttribute('aria-busy', 'true');\n\t\t\t\tbtnText.style.display = 'none';\n\t\t\t\tbtnLoading.style.display = 'inline';\n\t\t\t\tresultDiv.innerHTML = '';\n\n\t\t\t\ttry {\n\t\t\t\t\tconst response = await fetch('/fetch-matches', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/x-www-form-urlencoded',\n\t\t\t\t\t\t},\n\t\t\t\t\t\tbody: 'days=' + encodeURIComponent(days)\n\t\t\t\t\t});\n\n\t\t\t\t\tconst result = await response.json();\n\n\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-success\">' + result.message + '</div>';\n\t\t\t\t\t\t// Reload page after 2 seconds to update stats\n\t\t\t\t\t\tsetTimeout(() => window.location.reload(), 2000);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-error\">' + (result.error || 'Failed to fetch matches') + '</div>';\n\t\t\t\t\t}\n\t\t\t\t} catch (err) {\n\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-error\">Network error: ' + err.message + '</div>';\n\t\t\t\t} finally {\n\t\t\t\t\t// Reset button state\n\t\t\t\t\tbtn.disabled = false;\n\t\t\t\t\tbtn.removeAttribute('aria-busy');\n\t\t\t\t\tbtnText.style.display = 'inline';\n\t\t\t\t\tbtnLoading.style.display = 'none';\n\t\t\t\t}\n\t\t\t});\n\n\t\t\t// Period selector\n\t\t\tdocument.getElementById('period-select').addEventListener('change', function() {\n\t\t\t\tconst period = this.value;\n\t\t\t\tconst url = new URL(window.location.href);\n\t\t\t\turl.searchParams.set('period', period);\n\t\t\t\twindow.location.href = url.toString();\n\t\t\t});\n\t\t</script> <style>\n\t\t\t.period-select {\n\t\t\t\twidth: auto;\n\t\t\t\tmin-width: 140px;\n\t\t\t\tmargin-bottom: 0;\n\t\t\t\tappearance: none;\n\t\t\t\t-webkit-appearance: none;\n\t\t\t\t-moz-appearance: none;\n\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t\tbackground-repeat: no-repeat;\n\t\t\t\tbackground-position: right 0.75rem center;\n\t\t\t\tbackground-size: 16px;\n\t\t\t\tpadding-right: 2.5rem;\n\t\t\t}\n\t\t</style>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

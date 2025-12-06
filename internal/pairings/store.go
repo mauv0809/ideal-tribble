@@ -1160,27 +1160,42 @@ func (s *store) SetLastFetchTimestamp(timestamp int64) error {
 }
 
 // GetMostActivePairing returns the pairing with the most matches in the last N days.
+// If days is 0, returns all-time stats.
 func (s *store) GetMostActivePairing(days int) (*PairingHighlight, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	cutoff := time.Now().AddDate(0, 0, -days).Unix()
-
 	var pairingID int64
 	var player1Name, player2Name string
 	var matchesPlayed, matchesWon int
+	var err error
 
-	err := s.db.QueryRow(`
-		SELECT tp.id, tp.player1_name, tp.player2_name,
-			COUNT(*) as matches_played,
-			SUM(pm.pairing_won) as matches_won
-		FROM pairing_matches pm
-		JOIN tracked_pairings tp ON pm.pairing_id = tp.id
-		WHERE pm.match_date >= ?
-		GROUP BY pm.pairing_id
-		ORDER BY matches_played DESC
-		LIMIT 1
-	`, cutoff).Scan(&pairingID, &player1Name, &player2Name, &matchesPlayed, &matchesWon)
+	if days > 0 {
+		cutoff := time.Now().AddDate(0, 0, -days).Unix()
+		err = s.db.QueryRow(`
+			SELECT tp.id, tp.player1_name, tp.player2_name,
+				COUNT(*) as matches_played,
+				SUM(pm.pairing_won) as matches_won
+			FROM pairing_matches pm
+			JOIN tracked_pairings tp ON pm.pairing_id = tp.id
+			WHERE pm.match_date >= ?
+			GROUP BY pm.pairing_id
+			ORDER BY matches_played DESC
+			LIMIT 1
+		`, cutoff).Scan(&pairingID, &player1Name, &player2Name, &matchesPlayed, &matchesWon)
+	} else {
+		// All time
+		err = s.db.QueryRow(`
+			SELECT tp.id, tp.player1_name, tp.player2_name,
+				COUNT(*) as matches_played,
+				SUM(pm.pairing_won) as matches_won
+			FROM pairing_matches pm
+			JOIN tracked_pairings tp ON pm.pairing_id = tp.id
+			GROUP BY pm.pairing_id
+			ORDER BY matches_played DESC
+			LIMIT 1
+		`).Scan(&pairingID, &player1Name, &player2Name, &matchesPlayed, &matchesWon)
+	}
 
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
@@ -1204,29 +1219,44 @@ func (s *store) GetMostActivePairing(days int) (*PairingHighlight, error) {
 }
 
 // GetBestPerformingPairing returns the pairing with the highest win rate in the last N days,
-// with a minimum number of matches required to qualify.
+// with a minimum number of matches required to qualify. If days is 0, returns all-time stats.
 func (s *store) GetBestPerformingPairing(days int, minMatches int) (*PairingHighlight, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	cutoff := time.Now().AddDate(0, 0, -days).Unix()
-
 	var pairingID int64
 	var player1Name, player2Name string
 	var matchesPlayed, matchesWon int
+	var err error
 
-	err := s.db.QueryRow(`
-		SELECT tp.id, tp.player1_name, tp.player2_name,
-			COUNT(*) as matches_played,
-			SUM(pm.pairing_won) as matches_won
-		FROM pairing_matches pm
-		JOIN tracked_pairings tp ON pm.pairing_id = tp.id
-		WHERE pm.match_date >= ?
-		GROUP BY pm.pairing_id
-		HAVING matches_played >= ?
-		ORDER BY (CAST(SUM(pm.pairing_won) AS REAL) / COUNT(*)) DESC, matches_played DESC
-		LIMIT 1
-	`, cutoff, minMatches).Scan(&pairingID, &player1Name, &player2Name, &matchesPlayed, &matchesWon)
+	if days > 0 {
+		cutoff := time.Now().AddDate(0, 0, -days).Unix()
+		err = s.db.QueryRow(`
+			SELECT tp.id, tp.player1_name, tp.player2_name,
+				COUNT(*) as matches_played,
+				SUM(pm.pairing_won) as matches_won
+			FROM pairing_matches pm
+			JOIN tracked_pairings tp ON pm.pairing_id = tp.id
+			WHERE pm.match_date >= ?
+			GROUP BY pm.pairing_id
+			HAVING matches_played >= ?
+			ORDER BY (CAST(SUM(pm.pairing_won) AS REAL) / COUNT(*)) DESC, matches_played DESC
+			LIMIT 1
+		`, cutoff, minMatches).Scan(&pairingID, &player1Name, &player2Name, &matchesPlayed, &matchesWon)
+	} else {
+		// All time
+		err = s.db.QueryRow(`
+			SELECT tp.id, tp.player1_name, tp.player2_name,
+				COUNT(*) as matches_played,
+				SUM(pm.pairing_won) as matches_won
+			FROM pairing_matches pm
+			JOIN tracked_pairings tp ON pm.pairing_id = tp.id
+			GROUP BY pm.pairing_id
+			HAVING matches_played >= ?
+			ORDER BY (CAST(SUM(pm.pairing_won) AS REAL) / COUNT(*)) DESC, matches_played DESC
+			LIMIT 1
+		`, minMatches).Scan(&pairingID, &player1Name, &player2Name, &matchesPlayed, &matchesWon)
+	}
 
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {

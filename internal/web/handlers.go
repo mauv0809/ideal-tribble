@@ -34,17 +34,48 @@ func NewHandlers(middleware *Middleware, pairingsStore pairings.PairingsStore, f
 func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r)
 
+	// Parse period from query param (default 30 days)
+	period := 30
+	periodLabel := "Last 30 Days"
+	if periodStr := r.URL.Query().Get("period"); periodStr != "" {
+		if p, err := strconv.Atoi(periodStr); err == nil {
+			switch p {
+			case 7:
+				period = 7
+				periodLabel = "Last 7 Days"
+			case 30:
+				period = 30
+				periodLabel = "Last 30 Days"
+			case 90:
+				period = 90
+				periodLabel = "Last 90 Days"
+			case 0:
+				period = 0
+				periodLabel = "All Time"
+			}
+		}
+	}
+
 	// Gather stats
 	allPairings, _ := h.pairingsStore.GetTrackedPairings()
 	activePairings, _ := h.pairingsStore.GetActivePairings()
 	totalMatches, _ := h.pairingsStore.GetTotalMatchCount()
-	recentMatchCount, _ := h.pairingsStore.GetRecentMatchCount(30)
 	recentMatches, _ := h.pairingsStore.GetRecentMatchesAllPairings(5)
 	lastFetchTimestamp, _ := h.pairingsStore.GetLastFetchTimestamp()
 
-	// Get pairing highlights (last 30 days)
-	mostActive, _ := h.pairingsStore.GetMostActivePairing(30)
-	bestPerforming, _ := h.pairingsStore.GetBestPerformingPairing(30, 3) // Min 3 matches
+	// Get period-specific stats
+	var periodMatchCount int
+	var mostActive, bestPerforming *pairings.PairingHighlight
+	if period > 0 {
+		periodMatchCount, _ = h.pairingsStore.GetRecentMatchCount(period)
+		mostActive, _ = h.pairingsStore.GetMostActivePairing(period)
+		bestPerforming, _ = h.pairingsStore.GetBestPerformingPairing(period, 3)
+	} else {
+		// All time
+		periodMatchCount = totalMatches
+		mostActive, _ = h.pairingsStore.GetMostActivePairing(0)
+		bestPerforming, _ = h.pairingsStore.GetBestPerformingPairing(0, 3)
+	}
 
 	// Build a map of pairing ID to pairing name for display
 	pairingNames := make(map[int64]string)
@@ -98,11 +129,13 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 		TotalPairings:         len(allPairings),
 		ActivePairings:        len(activePairings),
 		TotalMatches:          totalMatches,
-		RecentMatchCount:      recentMatchCount,
+		PeriodMatchCount:      periodMatchCount,
 		RecentMatchesList:     dashboardMatches,
 		LastFetchTimestamp:    lastFetchTimestamp,
 		MostActivePairing:     mostActiveHighlight,
 		BestPerformingPairing: bestPerformingHighlight,
+		SelectedPeriod:        period,
+		PeriodLabel:           periodLabel,
 	}
 
 	if flashes := h.middleware.GetFlash(w, r, "success"); len(flashes) > 0 {
