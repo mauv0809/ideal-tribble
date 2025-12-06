@@ -32,23 +32,27 @@ REQUIRED_VARS=(
     "DB_NAME"
     "TURSO_PRIMARY_URL"
     "TURSO_AUTH_TOKEN"
-    
+
     # Slack
     "SLACK_BOT_TOKEN"
     "SLACK_CHANNEL_ID"
     "SLACK_SIGNING_SECRET"
-    
+
     # Playtomic
     "TENANT_ID"
-    
+
     # Server
     "PORT"
-    
+
+    # Web UI Authentication
+    "WEB_SESSION_SECRET"
+    "WEB_TOTP_ENCRYPTION_KEY"
+
     # OpenTelemetry
     "OTEL_EXPORTER_OTLP_ENDPOINT"
     "APP_ENV"
     "APP_VERSION"
-    
+
     # Observability
     "GRAFANA_ADMIN_PASSWORD"
 )
@@ -121,6 +125,16 @@ fi
 # Check OTEL endpoint format
 if [[ -n "$OTEL_EXPORTER_OTLP_ENDPOINT" && ! "$OTEL_EXPORTER_OTLP_ENDPOINT" =~ :[0-9]+$ ]]; then
     echo -e "  ${YELLOW}⚠${NC} OTEL_EXPORTER_OTLP_ENDPOINT should include port (e.g., localhost:4317)"
+fi
+
+# Check WEB_SESSION_SECRET length (should be 32+ chars)
+if [[ -n "$WEB_SESSION_SECRET" && ${#WEB_SESSION_SECRET} -lt 32 ]]; then
+    echo -e "  ${YELLOW}⚠${NC} WEB_SESSION_SECRET should be at least 32 characters"
+fi
+
+# Check WEB_TOTP_ENCRYPTION_KEY length (must be exactly 32 chars for AES-256)
+if [[ -n "$WEB_TOTP_ENCRYPTION_KEY" && ${#WEB_TOTP_ENCRYPTION_KEY} -ne 32 ]]; then
+    echo -e "  ${RED}✗${NC} WEB_TOTP_ENCRYPTION_KEY must be exactly 32 characters (currently ${#WEB_TOTP_ENCRYPTION_KEY})"
 fi
 
 echo ""

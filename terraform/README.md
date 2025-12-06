@@ -22,7 +22,7 @@ The `hetzner/` directory contains:
 
 ### Infrastructure Components
 
-- **Server**: Hetzner CX22 (2 vCPU, 4GB RAM) running Ubuntu 22.04
+- **Server**: Hetzner CX23 (2 vCPU, 4GB RAM, 40GB disk) running Ubuntu 22.04
 - **Firewall**: Configured for HTTP/HTTPS/SSH/App access
 - **SSH Access**: Automated key deployment for GitHub Actions
 - **Cloud-Init**: Automated server setup with nginx reverse proxy

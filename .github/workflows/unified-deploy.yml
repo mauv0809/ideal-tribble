@@ -118,7 +118,17 @@ jobs:
               sleep 10
             done
           "
-          
+
+          # Wait for cloud-init to complete (up to 5 more minutes)
+          echo "Waiting for cloud-init to complete..."
+          timeout 300 bash -c "
+            until ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa_temp root@$SERVER_IP 'cloud-init status --wait'; do
+              echo 'Waiting for cloud-init...'
+              sleep 10
+            done
+          "
+          echo "Cloud-init completed"
+
           # Clean up temporary key
           rm -f ~/.ssh/id_rsa_temp
 
