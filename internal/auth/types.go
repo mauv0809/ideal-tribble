@@ -10,6 +10,7 @@ type User struct {
 	TOTPSecret   string // AES-GCM encrypted
 	TOTPEnabled  bool
 	IsAdmin      bool
+	Theme        string // catppuccin theme: mocha, latte, frappe, macchiato
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

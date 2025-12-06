@@ -236,6 +236,28 @@ func (h *ProfileHandlers) DisableTOTP(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/profile", http.StatusSeeOther)
 }
 
+// UpdateTheme handles theme preference changes via AJAX.
+func (h *ProfileHandlers) UpdateTheme(w http.ResponseWriter, r *http.Request) {
+	user := GetUser(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	theme := r.FormValue("theme")
+	if err := h.authStore.SetTheme(user.ID, theme); err != nil {
+		http.Error(w, "Failed to save theme", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func extractSecretFromURI(uri string) string {
 	const prefix = "secret="
 	start := 0

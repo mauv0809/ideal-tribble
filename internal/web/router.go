@@ -124,6 +124,9 @@ func (r *Router) setupRoutes() {
 	r.mux.Handle("POST /profile/totp/verify", r.middleware.RequireAuth(http.HandlerFunc(r.profileHandlers.VerifyTOTP)))
 	r.mux.Handle("POST /profile/totp/disable", r.middleware.RequireAuth(http.HandlerFunc(r.profileHandlers.DisableTOTP)))
 
+	// API routes
+	r.mux.Handle("POST /api/theme", r.middleware.RequireAuth(http.HandlerFunc(r.profileHandlers.UpdateTheme)))
+
 	// Admin routes - require auth + admin
 	adminMiddleware := func(h http.Handler) http.Handler {
 		return r.middleware.RequireAuth(r.middleware.RequireAdmin(h))

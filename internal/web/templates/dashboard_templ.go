@@ -402,7 +402,7 @@ func DashboardPage(data DashboardData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, " <section><h2>Quick Actions</h2><div style=\"display: flex; gap: 12px;\"><a href=\"/pairings\" role=\"button\" class=\"outline\">Manage Pairings</a> <a href=\"/pairings/new\" role=\"button\" class=\"outline\">Add New Pairing</a></div></section><section><h2>Fetch Matches</h2><article><div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\"><p style=\"margin: 0;\">Manually fetch matches from Playtomic. Use the days parameter to backfill historical data.</p><small style=\"color: var(--pico-muted-color);\">Last fetched: ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, " <section><h2>Fetch Matches</h2><article><div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\"><p style=\"margin: 0;\">Manually fetch matches from Playtomic. Use the days parameter to backfill historical data.</p><small style=\"color: var(--pico-muted-color);\">Last fetched: ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -414,7 +414,7 @@ func DashboardPage(data DashboardData) templ.Component {
 				var templ_7745c5c3_Var20 string
 				templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.LastFetchTimestamp))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 152, Col: 88}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 144, Col: 88}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 				if templ_7745c5c3_Err != nil {

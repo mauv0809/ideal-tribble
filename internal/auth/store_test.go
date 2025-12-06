@@ -23,6 +23,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 			totp_secret TEXT,
 			totp_enabled INTEGER NOT NULL DEFAULT 0,
 			is_admin INTEGER NOT NULL DEFAULT 0,
+			theme TEXT DEFAULT 'mocha',
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL
 		);

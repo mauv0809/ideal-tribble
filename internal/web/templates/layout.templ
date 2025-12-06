@@ -10,10 +10,18 @@ type PageData struct {
 	FlashSuccess string
 }
 
+// getTheme returns the user's theme or default
+func getTheme(data PageData) string {
+	if data.User != nil && data.User.Theme != "" {
+		return data.User.Theme
+	}
+	return "mocha"
+}
+
 // Layout renders the base HTML layout.
 templ Layout(data PageData) {
 	<!DOCTYPE html>
-	<html lang="en">
+	<html lang="en" data-theme={ getTheme(data) }>
 	<head>
 		<meta charset="UTF-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -25,9 +33,9 @@ templ Layout(data PageData) {
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 		<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 		<style>
-			/* Catppuccin Mocha + Linear-inspired Dark Theme */
+			/* Catppuccin Theme System */
 			:root {
-				/* Catppuccin Mocha Base Colors */
+				/* Default to Mocha (will be overridden by JS if theme is set) */
 				--ctp-rosewater: #f5e0dc;
 				--ctp-flamingo: #f2cdcd;
 				--ctp-pink: #f5c2e7;
@@ -79,6 +87,126 @@ templ Layout(data PageData) {
 				--radius-lg: 12px;
 
 				--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+			}
+
+			/* Catppuccin Latte (Light) */
+			[data-theme="latte"] {
+				--ctp-rosewater: #dc8a78;
+				--ctp-flamingo: #dd7878;
+				--ctp-pink: #ea76cb;
+				--ctp-mauve: #8839ef;
+				--ctp-red: #d20f39;
+				--ctp-maroon: #e64553;
+				--ctp-peach: #fe640b;
+				--ctp-yellow: #df8e1d;
+				--ctp-green: #40a02b;
+				--ctp-teal: #179299;
+				--ctp-sky: #04a5e5;
+				--ctp-sapphire: #209fb5;
+				--ctp-blue: #1e66f5;
+				--ctp-lavender: #7287fd;
+				--ctp-text: #4c4f69;
+				--ctp-subtext1: #5c5f77;
+				--ctp-subtext0: #6c6f85;
+				--ctp-overlay2: #7c7f93;
+				--ctp-overlay1: #8c8fa1;
+				--ctp-overlay0: #9ca0b0;
+				--ctp-surface2: #acb0be;
+				--ctp-surface1: #bcc0cc;
+				--ctp-surface0: #ccd0da;
+				--ctp-base: #eff1f5;
+				--ctp-mantle: #e6e9ef;
+				--ctp-crust: #dce0e8;
+			}
+
+			/* Catppuccin Frappé (Medium Dark) - placeholder until colors provided */
+			[data-theme="frappe"] {
+				--ctp-rosewater: #f2d5cf;
+				--ctp-flamingo: #eebebe;
+				--ctp-pink: #f4b8e4;
+				--ctp-mauve: #ca9ee6;
+				--ctp-red: #e78284;
+				--ctp-maroon: #ea999c;
+				--ctp-peach: #ef9f76;
+				--ctp-yellow: #e5c890;
+				--ctp-green: #a6d189;
+				--ctp-teal: #81c8be;
+				--ctp-sky: #99d1db;
+				--ctp-sapphire: #85c1dc;
+				--ctp-blue: #8caaee;
+				--ctp-lavender: #babbf1;
+				--ctp-text: #c6d0f5;
+				--ctp-subtext1: #b5bfe2;
+				--ctp-subtext0: #a5adce;
+				--ctp-overlay2: #949cbb;
+				--ctp-overlay1: #838ba7;
+				--ctp-overlay0: #737994;
+				--ctp-surface2: #626880;
+				--ctp-surface1: #51576d;
+				--ctp-surface0: #414559;
+				--ctp-base: #303446;
+				--ctp-mantle: #292c3c;
+				--ctp-crust: #232634;
+			}
+
+			/* Catppuccin Macchiato (Dark) - placeholder until colors provided */
+			[data-theme="macchiato"] {
+				--ctp-rosewater: #f4dbd6;
+				--ctp-flamingo: #f0c6c6;
+				--ctp-pink: #f5bde6;
+				--ctp-mauve: #c6a0f6;
+				--ctp-red: #ed8796;
+				--ctp-maroon: #ee99a0;
+				--ctp-peach: #f5a97f;
+				--ctp-yellow: #eed49f;
+				--ctp-green: #a6da95;
+				--ctp-teal: #8bd5ca;
+				--ctp-sky: #91d7e3;
+				--ctp-sapphire: #7dc4e4;
+				--ctp-blue: #8aadf4;
+				--ctp-lavender: #b7bdf8;
+				--ctp-text: #cad3f5;
+				--ctp-subtext1: #b8c0e0;
+				--ctp-subtext0: #a5adcb;
+				--ctp-overlay2: #939ab7;
+				--ctp-overlay1: #8087a2;
+				--ctp-overlay0: #6e738d;
+				--ctp-surface2: #5b6078;
+				--ctp-surface1: #494d64;
+				--ctp-surface0: #363a4f;
+				--ctp-base: #24273a;
+				--ctp-mantle: #1e2030;
+				--ctp-crust: #181926;
+			}
+
+			/* Catppuccin Mocha (Darkest) - explicit for completeness */
+			[data-theme="mocha"] {
+				--ctp-rosewater: #f5e0dc;
+				--ctp-flamingo: #f2cdcd;
+				--ctp-pink: #f5c2e7;
+				--ctp-mauve: #cba6f7;
+				--ctp-red: #f38ba8;
+				--ctp-maroon: #eba0ac;
+				--ctp-peach: #fab387;
+				--ctp-yellow: #f9e2af;
+				--ctp-green: #a6e3a1;
+				--ctp-teal: #94e2d5;
+				--ctp-sky: #89dceb;
+				--ctp-sapphire: #74c7ec;
+				--ctp-blue: #89b4fa;
+				--ctp-lavender: #b4befe;
+				--ctp-text: #cdd6f4;
+				--ctp-subtext1: #bac2de;
+				--ctp-subtext0: #a6adc8;
+				--ctp-overlay2: #9399b2;
+				--ctp-overlay1: #7f849c;
+				--ctp-overlay0: #6c7086;
+				--ctp-surface2: #585b70;
+				--ctp-surface1: #45475a;
+				--ctp-surface0: #313244;
+				--ctp-base: #1e1e2e;
+				--ctp-mantle: #181825;
+				--ctp-crust: #11111b;
 			}
 
 			*, *::before, *::after {
@@ -204,6 +332,32 @@ templ Layout(data PageData) {
 			.nav-links button.nav-logout:hover {
 				color: var(--ctp-red);
 				background: rgba(243, 139, 168, 0.15);
+			}
+
+			.theme-select {
+				padding: 6px 28px 6px 10px;
+				font-size: 13px;
+				background: var(--bg-elevated);
+				color: var(--text-secondary);
+				border: 1px solid var(--border-subtle);
+				border-radius: var(--radius-sm);
+				cursor: pointer;
+				appearance: none;
+				-webkit-appearance: none;
+				-moz-appearance: none;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+				background-repeat: no-repeat;
+				background-position: right 8px center;
+				background-size: 12px;
+			}
+
+			.theme-select:hover {
+				border-color: var(--border-default);
+			}
+
+			.theme-select:focus {
+				outline: none;
+				border-color: var(--accent-primary);
 			}
 
 			/* Main Content */
@@ -589,6 +743,12 @@ templ Layout(data PageData) {
 							<a href="/admin/users">Users</a>
 						}
 						<a href="/profile">Profile</a>
+						<select id="theme-select" class="theme-select" title="Theme">
+							<option value="latte" selected?={ data.User.Theme == "latte" }>Latte</option>
+							<option value="frappe" selected?={ data.User.Theme == "frappe" }>Frappé</option>
+							<option value="macchiato" selected?={ data.User.Theme == "macchiato" }>Macchiato</option>
+							<option value="mocha" selected?={ data.User.Theme == "mocha" || data.User.Theme == "" }>Mocha</option>
+						</select>
 						<form method="POST" action="/logout" style="margin: 0; display: inline;">
 							<button type="submit" class="nav-logout">Logout</button>
 						</form>
@@ -656,6 +816,27 @@ templ Layout(data PageData) {
 
 			// Run after htmx swaps content
 			document.body.addEventListener('htmx:afterSwap', formatLocalDates);
+
+			// Theme selector
+			const themeSelect = document.getElementById('theme-select');
+			if (themeSelect) {
+				themeSelect.addEventListener('change', async function() {
+					const theme = this.value;
+					// Apply immediately for instant feedback
+					document.documentElement.setAttribute('data-theme', theme);
+
+					// Save to server
+					try {
+						await fetch('/api/theme', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+							body: 'theme=' + encodeURIComponent(theme)
+						});
+					} catch (err) {
+						console.error('Failed to save theme:', err);
+					}
+				});
+			}
 		</script>
 	</body>
 	</html>

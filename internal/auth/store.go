@@ -68,14 +68,14 @@ func (s *Store) GetUserByID(id int64) (*User, error) {
 	var user User
 	var createdAt, updatedAt int64
 	var totpEnabled, isAdmin int
-	var totpSecret sql.NullString
+	var totpSecret, theme sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, email, password_hash, totp_secret, totp_enabled, is_admin, created_at, updated_at
+		SELECT id, email, password_hash, totp_secret, totp_enabled, is_admin, theme, created_at, updated_at
 		FROM users WHERE id = ?
 	`, id).Scan(
 		&user.ID, &user.Email, &user.PasswordHash,
-		&totpSecret, &totpEnabled, &isAdmin,
+		&totpSecret, &totpEnabled, &isAdmin, &theme,
 		&createdAt, &updatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -88,6 +88,10 @@ func (s *Store) GetUserByID(id int64) (*User, error) {
 	user.TOTPSecret = totpSecret.String
 	user.TOTPEnabled = totpEnabled == 1
 	user.IsAdmin = isAdmin == 1
+	user.Theme = theme.String
+	if user.Theme == "" {
+		user.Theme = "mocha" // default theme
+	}
 	user.CreatedAt = time.Unix(createdAt, 0)
 	user.UpdatedAt = time.Unix(updatedAt, 0)
 
@@ -99,14 +103,14 @@ func (s *Store) GetUserByEmail(email string) (*User, error) {
 	var user User
 	var createdAt, updatedAt int64
 	var totpEnabled, isAdmin int
-	var totpSecret sql.NullString
+	var totpSecret, theme sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, email, password_hash, totp_secret, totp_enabled, is_admin, created_at, updated_at
+		SELECT id, email, password_hash, totp_secret, totp_enabled, is_admin, theme, created_at, updated_at
 		FROM users WHERE email = ?
 	`, email).Scan(
 		&user.ID, &user.Email, &user.PasswordHash,
-		&totpSecret, &totpEnabled, &isAdmin,
+		&totpSecret, &totpEnabled, &isAdmin, &theme,
 		&createdAt, &updatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -119,6 +123,10 @@ func (s *Store) GetUserByEmail(email string) (*User, error) {
 	user.TOTPSecret = totpSecret.String
 	user.TOTPEnabled = totpEnabled == 1
 	user.IsAdmin = isAdmin == 1
+	user.Theme = theme.String
+	if user.Theme == "" {
+		user.Theme = "mocha" // default theme
+	}
 	user.CreatedAt = time.Unix(createdAt, 0)
 	user.UpdatedAt = time.Unix(updatedAt, 0)
 
@@ -143,6 +151,34 @@ func (s *Store) UpdatePassword(userID int64, newPassword string) error {
 	result, err := s.db.Exec(`
 		UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?
 	`, string(hash), now, userID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
+}
+
+// SetTheme sets the user's theme preference.
+func (s *Store) SetTheme(userID int64, theme string) error {
+	// Validate theme
+	validThemes := map[string]bool{"mocha": true, "latte": true, "frappe": true, "macchiato": true}
+	if !validThemes[theme] {
+		theme = "mocha"
+	}
+
+	now := time.Now().Unix()
+
+	result, err := s.db.Exec(`
+		UPDATE users SET theme = ?, updated_at = ? WHERE id = ?
+	`, theme, now, userID)
 	if err != nil {
 		return err
 	}
