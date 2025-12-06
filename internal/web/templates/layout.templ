@@ -518,6 +518,18 @@ templ Layout(data PageData) {
 			.text-warning { color: var(--accent-warning); }
 			.text-info { color: var(--accent-info); }
 
+			/* Form indicator dots */
+			.form-dots {
+				display: inline-flex;
+				gap: 4px;
+				font-size: 10px;
+			}
+			.form-dot {
+				line-height: 1;
+			}
+			.form-dot-win { color: var(--accent-success); }
+			.form-dot-loss { color: var(--accent-error); }
+
 			/* Win rate color classes */
 			.winrate-high { color: var(--ctp-green); }
 			.winrate-mid { color: var(--ctp-yellow); }

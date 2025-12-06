@@ -11,6 +11,7 @@ type PairingWithStats struct {
 	MatchesPlayed int
 	MatchesWon    int
 	WinPercentage float64
+	RecentForm    []bool // Last 5 results (oldest to newest), true = win
 }
 
 // PairingsListData holds data for the pairings list page.
@@ -68,7 +69,7 @@ templ PairingsListPage(data PairingsListData) {
 						rows.forEach(row => {
 							const player1 = row.cells[0]?.textContent.toLowerCase() || '';
 							const player2 = row.cells[1]?.textContent.toLowerCase() || '';
-							const status = row.cells[4]?.textContent.toLowerCase().trim() || '';
+							const status = row.cells[5]?.textContent.toLowerCase().trim() || '';
 
 							// Check search match
 							const matchesSearch = !searchTerm ||
@@ -148,6 +149,7 @@ templ PairingsTable(pairingsList []PairingWithStats) {
 				<th>Player 2</th>
 				<th>Matches</th>
 				<th>Win Rate</th>
+				<th>Form</th>
 				<th>Status</th>
 				<th style="text-align: right;">Actions</th>
 			</tr>
@@ -161,6 +163,21 @@ templ PairingsTable(pairingsList []PairingWithStats) {
 					<td>
 						if p.MatchesPlayed > 0 {
 							<span class={ winRateColorClass(p.WinPercentage) }>{ fmt.Sprintf("%.0f%%", p.WinPercentage) }</span>
+						} else {
+							<span style="color: var(--text-muted);">-</span>
+						}
+					</td>
+					<td>
+						if len(p.RecentForm) > 0 {
+							<span class="form-dots">
+								for _, won := range p.RecentForm {
+									if won {
+										<span class="form-dot form-dot-win" title="Win">●</span>
+									} else {
+										<span class="form-dot form-dot-loss" title="Loss">●</span>
+									}
+								}
+							</span>
 						} else {
 							<span style="color: var(--text-muted);">-</span>
 						}

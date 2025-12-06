@@ -131,6 +131,15 @@ func (h *Handlers) PairingsList(w http.ResponseWriter, r *http.Request) {
 			pairingsWithStats[i].MatchesWon = stats.MatchesWon
 			pairingsWithStats[i].WinPercentage = stats.WinPercentage
 		}
+		// Fetch recent form (last 5 matches)
+		if matches, err := h.pairingsStore.GetPairingRecentMatches(p.ID, 5); err == nil && len(matches) > 0 {
+			// Reverse to show oldest to newest (left to right)
+			form := make([]bool, len(matches))
+			for j := 0; j < len(matches); j++ {
+				form[j] = matches[len(matches)-1-j].PairingWon
+			}
+			pairingsWithStats[i].RecentForm = form
+		}
 	}
 
 	data := templates.PairingsListData{
@@ -166,6 +175,14 @@ func (h *Handlers) PairingsTablePartial(w http.ResponseWriter, r *http.Request) 
 			pairingsWithStats[i].MatchesPlayed = stats.MatchesPlayed
 			pairingsWithStats[i].MatchesWon = stats.MatchesWon
 			pairingsWithStats[i].WinPercentage = stats.WinPercentage
+		}
+		// Fetch recent form (last 5 matches)
+		if matches, err := h.pairingsStore.GetPairingRecentMatches(p.ID, 5); err == nil && len(matches) > 0 {
+			form := make([]bool, len(matches))
+			for j := 0; j < len(matches); j++ {
+				form[j] = matches[len(matches)-1-j].PairingWon
+			}
+			pairingsWithStats[i].RecentForm = form
 		}
 	}
 
