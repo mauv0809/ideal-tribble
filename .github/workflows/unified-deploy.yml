@@ -270,6 +270,7 @@ jobs:
           scp -o StrictHostKeyChecking=no -r scripts/ tribble@$SERVER_IP:/opt/ideal-tribble/ || true
           scp -o StrictHostKeyChecking=no -r migrations/ tribble@$SERVER_IP:/opt/ideal-tribble/ || true
           scp -o StrictHostKeyChecking=no -r observability/ tribble@$SERVER_IP:/opt/ideal-tribble/ || true
+          scp -o StrictHostKeyChecking=no -r nginx/ tribble@$SERVER_IP:/opt/ideal-tribble/ || true
           
           # Fix script permissions and run deployment script
           ssh -o StrictHostKeyChecking=no root@$SERVER_IP << 'EOF'
