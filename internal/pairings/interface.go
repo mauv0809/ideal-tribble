@@ -43,4 +43,8 @@ type PairingsStore interface {
 
 	// Player lookup
 	GetAllKnownPlayers() ([]KnownPlayer, error)
+
+	// App settings
+	GetLastFetchTimestamp() (int64, error)
+	SetLastFetchTimestamp(timestamp int64) error
 }

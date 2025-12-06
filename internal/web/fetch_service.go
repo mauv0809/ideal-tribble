@@ -143,6 +143,13 @@ func (s *DefaultFetchService) FetchMatches(days int) (clubMatches int, pairingMa
 		}
 	}
 
+	// Update last fetch timestamp
+	if s.pairingsStore != nil {
+		if err := s.pairingsStore.SetLastFetchTimestamp(time.Now().Unix()); err != nil {
+			log.Error("Failed to update last fetch timestamp", "error", err)
+		}
+	}
+
 	log.Info("Manual match fetch completed", "club_matches", clubMatches, "pairing_matches", pairingMatches)
 	return clubMatches, pairingMatches, nil
 }

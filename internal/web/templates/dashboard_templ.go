@@ -25,11 +25,12 @@ type DashboardMatch struct {
 // DashboardData holds data for the dashboard page.
 type DashboardData struct {
 	PageData
-	TotalPairings     int
-	ActivePairings    int
-	TotalMatches      int
-	RecentMatchCount  int
-	RecentMatchesList []DashboardMatch
+	TotalPairings      int
+	ActivePairings     int
+	TotalMatches       int
+	RecentMatchCount   int
+	RecentMatchesList  []DashboardMatch
+	LastFetchTimestamp int64
 }
 
 // DashboardPage renders the main dashboard.
@@ -73,7 +74,7 @@ func DashboardPage(data DashboardData) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.TotalPairings))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 34, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 35, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -86,7 +87,7 @@ func DashboardPage(data DashboardData) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.ActivePairings))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 38, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 39, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -99,7 +100,7 @@ func DashboardPage(data DashboardData) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.TotalMatches))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 42, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 43, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -112,7 +113,7 @@ func DashboardPage(data DashboardData) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.RecentMatchCount))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 46, Col: 63}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 47, Col: 63}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -135,7 +136,7 @@ func DashboardPage(data DashboardData) templ.Component {
 					var templ_7745c5c3_Var7 string
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/matches/%s?pairing=%d", match.MatchID, match.PairingID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 66, Col: 114}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 67, Col: 114}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
@@ -148,7 +149,7 @@ func DashboardPage(data DashboardData) templ.Component {
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(match.MatchDateUnix))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 67, Col: 89}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 68, Col: 89}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
@@ -161,7 +162,7 @@ func DashboardPage(data DashboardData) templ.Component {
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(match.PairingName)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 68, Col: 31}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 69, Col: 31}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 					if templ_7745c5c3_Err != nil {
@@ -189,7 +190,7 @@ func DashboardPage(data DashboardData) templ.Component {
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d-%d", match.SetsWon, match.SetsLost))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 76, Col: 65}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 77, Col: 65}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
@@ -202,7 +203,7 @@ func DashboardPage(data DashboardData) templ.Component {
 					var templ_7745c5c3_Var11 string
 					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(match.OpponentName)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 77, Col: 32}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 78, Col: 32}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 					if templ_7745c5c3_Err != nil {
@@ -218,7 +219,35 @@ func DashboardPage(data DashboardData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, " <section><h2>Quick Actions</h2><div style=\"display: flex; gap: 12px;\"><a href=\"/pairings\" role=\"button\" class=\"outline\">Manage Pairings</a> <a href=\"/pairings/new\" role=\"button\" class=\"outline\">Add New Pairing</a></div></section><section><h2>Fetch Matches</h2><article><p>Manually fetch matches from Playtomic. Use the days parameter to backfill historical data.</p><form method=\"POST\" action=\"/fetch-matches\" id=\"fetch-form\"><div style=\"display: flex; gap: 12px; align-items: flex-end;\"><div style=\"flex: 0 0 200px;\"><label for=\"days\">Days to fetch</label> <input type=\"number\" id=\"days\" name=\"days\" value=\"7\" min=\"1\" max=\"365\" required></div><button type=\"submit\" id=\"fetch-btn\"><span class=\"btn-text\">Fetch Matches</span> <span class=\"btn-loading\" style=\"display: none;\">Fetching...</span></button></div><small style=\"display: block; margin-top: 8px; color: var(--text-muted);\">Number of days to look back (1-365)</small></form><div id=\"fetch-result\" style=\"margin-top: 1rem;\"></div></article></section><script>\n\t\t\tdocument.getElementById('fetch-form').addEventListener('submit', async function(e) {\n\t\t\t\te.preventDefault();\n\t\t\t\tconst btn = document.getElementById('fetch-btn');\n\t\t\t\tconst btnText = btn.querySelector('.btn-text');\n\t\t\t\tconst btnLoading = btn.querySelector('.btn-loading');\n\t\t\t\tconst resultDiv = document.getElementById('fetch-result');\n\t\t\t\tconst days = document.getElementById('days').value;\n\n\t\t\t\t// Show loading state\n\t\t\t\tbtn.disabled = true;\n\t\t\t\tbtn.setAttribute('aria-busy', 'true');\n\t\t\t\tbtnText.style.display = 'none';\n\t\t\t\tbtnLoading.style.display = 'inline';\n\t\t\t\tresultDiv.innerHTML = '';\n\n\t\t\t\ttry {\n\t\t\t\t\tconst response = await fetch('/fetch-matches', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/x-www-form-urlencoded',\n\t\t\t\t\t\t},\n\t\t\t\t\t\tbody: 'days=' + encodeURIComponent(days)\n\t\t\t\t\t});\n\n\t\t\t\t\tconst result = await response.json();\n\n\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-success\">' + result.message + '</div>';\n\t\t\t\t\t\t// Reload page after 2 seconds to update stats\n\t\t\t\t\t\tsetTimeout(() => window.location.reload(), 2000);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-error\">' + (result.error || 'Failed to fetch matches') + '</div>';\n\t\t\t\t\t}\n\t\t\t\t} catch (err) {\n\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-error\">Network error: ' + err.message + '</div>';\n\t\t\t\t} finally {\n\t\t\t\t\t// Reset button state\n\t\t\t\t\tbtn.disabled = false;\n\t\t\t\t\tbtn.removeAttribute('aria-busy');\n\t\t\t\t\tbtnText.style.display = 'inline';\n\t\t\t\t\tbtnLoading.style.display = 'none';\n\t\t\t\t}\n\t\t\t});\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, " <section><h2>Quick Actions</h2><div style=\"display: flex; gap: 12px;\"><a href=\"/pairings\" role=\"button\" class=\"outline\">Manage Pairings</a> <a href=\"/pairings/new\" role=\"button\" class=\"outline\">Add New Pairing</a></div></section><section><h2>Fetch Matches</h2><article><div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\"><p style=\"margin: 0;\">Manually fetch matches from Playtomic. Use the days parameter to backfill historical data.</p><small style=\"color: var(--pico-muted-color);\">Last fetched: ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.LastFetchTimestamp > 0 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<span class=\"local-datetime\" data-timestamp=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var12 string
+				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(data.LastFetchTimestamp))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/dashboard.templ`, Line: 109, Col: 88}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\"></span>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			} else {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "Never")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</small></div><form method=\"POST\" action=\"/fetch-matches\" id=\"fetch-form\"><div style=\"display: flex; gap: 12px; align-items: flex-end;\"><div style=\"flex: 0 0 200px;\"><label for=\"days\">Days to fetch</label> <input type=\"number\" id=\"days\" name=\"days\" value=\"7\" min=\"1\" max=\"365\" required></div><button type=\"submit\" id=\"fetch-btn\"><span class=\"btn-text\">Fetch Matches</span> <span class=\"btn-loading\" style=\"display: none;\">Fetching...</span></button></div><small style=\"display: block; margin-top: 8px; color: var(--pico-muted-color);\">Number of days to look back (1-365)</small></form><div id=\"fetch-result\" style=\"margin-top: 1rem;\"></div></article></section><script>\n\t\t\tdocument.getElementById('fetch-form').addEventListener('submit', async function(e) {\n\t\t\t\te.preventDefault();\n\t\t\t\tconst btn = document.getElementById('fetch-btn');\n\t\t\t\tconst btnText = btn.querySelector('.btn-text');\n\t\t\t\tconst btnLoading = btn.querySelector('.btn-loading');\n\t\t\t\tconst resultDiv = document.getElementById('fetch-result');\n\t\t\t\tconst days = document.getElementById('days').value;\n\n\t\t\t\t// Show loading state\n\t\t\t\tbtn.disabled = true;\n\t\t\t\tbtn.setAttribute('aria-busy', 'true');\n\t\t\t\tbtnText.style.display = 'none';\n\t\t\t\tbtnLoading.style.display = 'inline';\n\t\t\t\tresultDiv.innerHTML = '';\n\n\t\t\t\ttry {\n\t\t\t\t\tconst response = await fetch('/fetch-matches', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/x-www-form-urlencoded',\n\t\t\t\t\t\t},\n\t\t\t\t\t\tbody: 'days=' + encodeURIComponent(days)\n\t\t\t\t\t});\n\n\t\t\t\t\tconst result = await response.json();\n\n\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-success\">' + result.message + '</div>';\n\t\t\t\t\t\t// Reload page after 2 seconds to update stats\n\t\t\t\t\t\tsetTimeout(() => window.location.reload(), 2000);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-error\">' + (result.error || 'Failed to fetch matches') + '</div>';\n\t\t\t\t\t}\n\t\t\t\t} catch (err) {\n\t\t\t\t\tresultDiv.innerHTML = '<div class=\"flash flash-error\">Network error: ' + err.message + '</div>';\n\t\t\t\t} finally {\n\t\t\t\t\t// Reset button state\n\t\t\t\t\tbtn.disabled = false;\n\t\t\t\t\tbtn.removeAttribute('aria-busy');\n\t\t\t\t\tbtnText.style.display = 'inline';\n\t\t\t\t\tbtnLoading.style.display = 'none';\n\t\t\t\t}\n\t\t\t});\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

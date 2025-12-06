@@ -40,6 +40,7 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 	totalMatches, _ := h.pairingsStore.GetTotalMatchCount()
 	recentMatchCount, _ := h.pairingsStore.GetRecentMatchCount(30)
 	recentMatches, _ := h.pairingsStore.GetRecentMatchesAllPairings(5)
+	lastFetchTimestamp, _ := h.pairingsStore.GetLastFetchTimestamp()
 
 	// Build a map of pairing ID to pairing name for display
 	pairingNames := make(map[int64]string)
@@ -67,11 +68,12 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 			Title: "Dashboard",
 			User:  user,
 		},
-		TotalPairings:     len(allPairings),
-		ActivePairings:    len(activePairings),
-		TotalMatches:      totalMatches,
-		RecentMatchCount:  recentMatchCount,
-		RecentMatchesList: dashboardMatches,
+		TotalPairings:      len(allPairings),
+		ActivePairings:     len(activePairings),
+		TotalMatches:       totalMatches,
+		RecentMatchCount:   recentMatchCount,
+		RecentMatchesList:  dashboardMatches,
+		LastFetchTimestamp: lastFetchTimestamp,
 	}
 
 	if flashes := h.middleware.GetFlash(w, r, "success"); len(flashes) > 0 {

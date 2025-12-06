@@ -1126,3 +1126,35 @@ func (s *store) GetAllKnownPlayers() ([]KnownPlayer, error) {
 	}
 	return players, nil
 }
+
+// GetLastFetchTimestamp returns the last time matches were fetched (Unix timestamp).
+func (s *store) GetLastFetchTimestamp() (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var value string
+	err := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = 'last_fetch_timestamp'`).Scan(&value)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get last fetch timestamp: %w", err)
+	}
+
+	var timestamp int64
+	fmt.Sscanf(value, "%d", &timestamp)
+	return timestamp, nil
+}
+
+// SetLastFetchTimestamp updates the last fetch timestamp.
+func (s *store) SetLastFetchTimestamp(timestamp int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`
+		INSERT INTO app_settings (key, value, updated_at)
+		VALUES ('last_fetch_timestamp', ?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+	`, fmt.Sprintf("%d", timestamp), timestamp)
+	if err != nil {
+		return fmt.Errorf("failed to set last fetch timestamp: %w", err)
+	}
+	return nil
+}

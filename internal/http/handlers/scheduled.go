@@ -137,6 +137,13 @@ func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg conf
 			}
 		}
 
+		// Update last fetch timestamp
+		if pairingsStore != nil && !isDryRun {
+			if err := pairingsStore.SetLastFetchTimestamp(time.Now().Unix()); err != nil {
+				log.Error("Failed to update last fetch timestamp", "error", err)
+			}
+		}
+
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "Match fetch completed.")
 		log.Info("Match fetch finished.", "total_api_matches", len(matches), "club_matches_found", len(clubMatchesToUpsert), "pairing_matches_found", pairingMatchCount)

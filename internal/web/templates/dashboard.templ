@@ -17,11 +17,12 @@ type DashboardMatch struct {
 // DashboardData holds data for the dashboard page.
 type DashboardData struct {
 	PageData
-	TotalPairings     int
-	ActivePairings    int
-	TotalMatches      int
-	RecentMatchCount  int
-	RecentMatchesList []DashboardMatch
+	TotalPairings      int
+	ActivePairings     int
+	TotalMatches       int
+	RecentMatchCount   int
+	RecentMatchesList  []DashboardMatch
+	LastFetchTimestamp int64
 }
 
 // DashboardPage renders the main dashboard.
@@ -100,7 +101,17 @@ templ DashboardPage(data DashboardData) {
 		<section>
 			<h2>Fetch Matches</h2>
 			<article>
-				<p>Manually fetch matches from Playtomic. Use the days parameter to backfill historical data.</p>
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+					<p style="margin: 0;">Manually fetch matches from Playtomic. Use the days parameter to backfill historical data.</p>
+					<small style="color: var(--pico-muted-color);">
+						Last fetched:
+						if data.LastFetchTimestamp > 0 {
+							<span class="local-datetime" data-timestamp={ fmt.Sprint(data.LastFetchTimestamp) }></span>
+						} else {
+							Never
+						}
+					</small>
+				</div>
 				<form method="POST" action="/fetch-matches" id="fetch-form">
 					<div style="display: flex; gap: 12px; align-items: flex-end;">
 						<div style="flex: 0 0 200px;">
@@ -112,7 +123,7 @@ templ DashboardPage(data DashboardData) {
 							<span class="btn-loading" style="display: none;">Fetching...</span>
 						</button>
 					</div>
-					<small style="display: block; margin-top: 8px; color: var(--text-muted);">Number of days to look back (1-365)</small>
+					<small style="display: block; margin-top: 8px; color: var(--pico-muted-color);">Number of days to look back (1-365)</small>
 				</form>
 				<div id="fetch-result" style="margin-top: 1rem;"></div>
 			</article>
