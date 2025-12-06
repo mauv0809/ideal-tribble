@@ -5,10 +5,18 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
 )
 
+// PairingWithStats represents a pairing with its statistics.
+type PairingWithStats struct {
+	pairings.TrackedPairing
+	MatchesPlayed int
+	MatchesWon    int
+	WinPercentage float64
+}
+
 // PairingsListData holds data for the pairings list page.
 type PairingsListData struct {
 	PageData
-	Pairings []pairings.TrackedPairing
+	Pairings []PairingWithStats
 }
 
 // PairingsListPage renders the list of tracked pairings.
@@ -60,7 +68,7 @@ templ PairingsListPage(data PairingsListData) {
 						rows.forEach(row => {
 							const player1 = row.cells[0]?.textContent.toLowerCase() || '';
 							const player2 = row.cells[1]?.textContent.toLowerCase() || '';
-							const status = row.cells[2]?.textContent.toLowerCase().trim() || '';
+							const status = row.cells[4]?.textContent.toLowerCase().trim() || '';
 
 							// Check search match
 							const matchesSearch = !searchTerm ||
@@ -132,12 +140,14 @@ templ PairingsListPage(data PairingsListData) {
 }
 
 // PairingsTable renders just the pairings table (for htmx updates).
-templ PairingsTable(pairingsList []pairings.TrackedPairing) {
+templ PairingsTable(pairingsList []PairingWithStats) {
 	<table class="clickable-rows">
 		<thead>
 			<tr>
 				<th>Player 1</th>
 				<th>Player 2</th>
+				<th>Matches</th>
+				<th>Win Rate</th>
 				<th>Status</th>
 				<th style="text-align: right;">Actions</th>
 			</tr>
@@ -147,6 +157,14 @@ templ PairingsTable(pairingsList []pairings.TrackedPairing) {
 				<tr id={ fmt.Sprintf("pairing-%d", p.ID) } class="clickable-row" data-href={ fmt.Sprintf("/pairings/%d", p.ID) }>
 					<td>{ p.Player1Name }</td>
 					<td>{ p.Player2Name }</td>
+					<td>{ fmt.Sprint(p.MatchesPlayed) }</td>
+					<td>
+						if p.MatchesPlayed > 0 {
+							<span class={ winRateColorClass(p.WinPercentage) }>{ fmt.Sprintf("%.0f%%", p.WinPercentage) }</span>
+						} else {
+							<span style="color: var(--text-muted);">-</span>
+						}
+					</td>
 					<td>
 						if p.Active {
 							<span class="text-success">Active</span>
@@ -192,6 +210,16 @@ templ PairingsTable(pairingsList []pairings.TrackedPairing) {
 			});
 		});
 	</script>
+}
+
+// winRateColorClass returns a CSS class based on win percentage.
+func winRateColorClass(winPct float64) string {
+	if winPct >= 60 {
+		return "text-success"
+	} else if winPct >= 40 {
+		return "text-warning"
+	}
+	return "text-error"
 }
 
 // NewPairingData holds data for the new pairing form.

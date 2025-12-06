@@ -119,12 +119,26 @@ func (h *Handlers) PairingsList(w http.ResponseWriter, r *http.Request) {
 
 	allPairings, _ := h.pairingsStore.GetTrackedPairings()
 
+	// Build pairings with stats
+	pairingsWithStats := make([]templates.PairingWithStats, len(allPairings))
+	for i, p := range allPairings {
+		pairingsWithStats[i] = templates.PairingWithStats{
+			TrackedPairing: p,
+		}
+		// Fetch stats for this pairing
+		if stats, err := h.pairingsStore.GetPairingOverallStats(p.ID); err == nil && stats != nil {
+			pairingsWithStats[i].MatchesPlayed = stats.MatchesPlayed
+			pairingsWithStats[i].MatchesWon = stats.MatchesWon
+			pairingsWithStats[i].WinPercentage = stats.WinPercentage
+		}
+	}
+
 	data := templates.PairingsListData{
 		PageData: templates.PageData{
 			Title: "Pairings",
 			User:  user,
 		},
-		Pairings: allPairings,
+		Pairings: pairingsWithStats,
 	}
 
 	if flashes := h.middleware.GetFlash(w, r, "success"); len(flashes) > 0 {
@@ -141,7 +155,21 @@ func (h *Handlers) PairingsList(w http.ResponseWriter, r *http.Request) {
 // PairingsTablePartial renders just the pairings table for htmx updates.
 func (h *Handlers) PairingsTablePartial(w http.ResponseWriter, r *http.Request) {
 	allPairings, _ := h.pairingsStore.GetTrackedPairings()
-	component := templates.PairingsTable(allPairings)
+
+	// Build pairings with stats
+	pairingsWithStats := make([]templates.PairingWithStats, len(allPairings))
+	for i, p := range allPairings {
+		pairingsWithStats[i] = templates.PairingWithStats{
+			TrackedPairing: p,
+		}
+		if stats, err := h.pairingsStore.GetPairingOverallStats(p.ID); err == nil && stats != nil {
+			pairingsWithStats[i].MatchesPlayed = stats.MatchesPlayed
+			pairingsWithStats[i].MatchesWon = stats.MatchesWon
+			pairingsWithStats[i].WinPercentage = stats.WinPercentage
+		}
+	}
+
+	component := templates.PairingsTable(pairingsWithStats)
 	_ = component.Render(r.Context(), w)
 }
 

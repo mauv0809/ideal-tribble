@@ -13,10 +13,18 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
 )
 
+// PairingWithStats represents a pairing with its statistics.
+type PairingWithStats struct {
+	pairings.TrackedPairing
+	MatchesPlayed int
+	MatchesWon    int
+	WinPercentage float64
+}
+
 // PairingsListData holds data for the pairings list page.
 type PairingsListData struct {
 	PageData
-	Pairings []pairings.TrackedPairing
+	Pairings []PairingWithStats
 }
 
 // PairingsListPage renders the list of tracked pairings.
@@ -71,7 +79,7 @@ func PairingsListPage(data PairingsListData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div><p id=\"no-results\" style=\"display: none; color: var(--pico-muted-color); text-align: center; padding: 2rem;\">No pairings match your search.</p><script>\n\t\t\t\t(function() {\n\t\t\t\t\tconst searchInput = document.getElementById('pairing-search');\n\t\t\t\t\tconst statusFilter = document.getElementById('status-filter');\n\t\t\t\t\tconst noResults = document.getElementById('no-results');\n\n\t\t\t\t\tfunction filterPairings() {\n\t\t\t\t\t\tconst searchTerm = searchInput.value.toLowerCase().trim();\n\t\t\t\t\t\tconst statusValue = statusFilter.value;\n\t\t\t\t\t\tconst rows = document.querySelectorAll('#pairings-list tbody tr');\n\t\t\t\t\t\tlet visibleCount = 0;\n\n\t\t\t\t\t\trows.forEach(row => {\n\t\t\t\t\t\t\tconst player1 = row.cells[0]?.textContent.toLowerCase() || '';\n\t\t\t\t\t\t\tconst player2 = row.cells[1]?.textContent.toLowerCase() || '';\n\t\t\t\t\t\t\tconst status = row.cells[2]?.textContent.toLowerCase().trim() || '';\n\n\t\t\t\t\t\t\t// Check search match\n\t\t\t\t\t\t\tconst matchesSearch = !searchTerm ||\n\t\t\t\t\t\t\t\tplayer1.includes(searchTerm) ||\n\t\t\t\t\t\t\t\tplayer2.includes(searchTerm);\n\n\t\t\t\t\t\t\t// Check status filter\n\t\t\t\t\t\t\tlet matchesStatus = true;\n\t\t\t\t\t\t\tif (statusValue === 'active') {\n\t\t\t\t\t\t\t\tmatchesStatus = status === 'active';\n\t\t\t\t\t\t\t} else if (statusValue === 'inactive') {\n\t\t\t\t\t\t\t\tmatchesStatus = status === 'inactive';\n\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\tif (matchesSearch && matchesStatus) {\n\t\t\t\t\t\t\t\trow.style.display = '';\n\t\t\t\t\t\t\t\tvisibleCount++;\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\trow.style.display = 'none';\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\t// Show/hide no results message\n\t\t\t\t\t\tnoResults.style.display = visibleCount === 0 ? 'block' : 'none';\n\t\t\t\t\t}\n\n\t\t\t\t\tsearchInput.addEventListener('input', filterPairings);\n\t\t\t\t\tstatusFilter.addEventListener('change', filterPairings);\n\t\t\t\t})();\n\t\t\t</script> <style>\n\t\t\t\t.search-filter-bar {\n\t\t\t\t\tdisplay: flex;\n\t\t\t\t\tgap: 1rem;\n\t\t\t\t\tmargin-bottom: 1rem;\n\t\t\t\t}\n\t\t\t\t.search-filter-bar input[type=\"search\"] {\n\t\t\t\t\tflex: 1;\n\t\t\t\t\tmargin-bottom: 0;\n\t\t\t\t}\n\t\t\t\t.search-filter-bar select {\n\t\t\t\t\twidth: auto;\n\t\t\t\t\tmin-width: 150px;\n\t\t\t\t\tmargin-bottom: 0;\n\t\t\t\t\tappearance: none;\n\t\t\t\t\t-webkit-appearance: none;\n\t\t\t\t\t-moz-appearance: none;\n\t\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t\t\tbackground-repeat: no-repeat;\n\t\t\t\t\tbackground-position: right 0.75rem center;\n\t\t\t\t\tbackground-size: 16px;\n\t\t\t\t\tpadding-right: 2.5rem;\n\t\t\t\t}\n\t\t\t\t.search-filter-bar select:hover,\n\t\t\t\t.search-filter-bar select:focus {\n\t\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t\t}\n\t\t\t\t@media (max-width: 576px) {\n\t\t\t\t\t.search-filter-bar {\n\t\t\t\t\t\tflex-direction: column;\n\t\t\t\t\t}\n\t\t\t\t\t.search-filter-bar select {\n\t\t\t\t\t\twidth: 100%;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t</style>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div><p id=\"no-results\" style=\"display: none; color: var(--pico-muted-color); text-align: center; padding: 2rem;\">No pairings match your search.</p><script>\n\t\t\t\t(function() {\n\t\t\t\t\tconst searchInput = document.getElementById('pairing-search');\n\t\t\t\t\tconst statusFilter = document.getElementById('status-filter');\n\t\t\t\t\tconst noResults = document.getElementById('no-results');\n\n\t\t\t\t\tfunction filterPairings() {\n\t\t\t\t\t\tconst searchTerm = searchInput.value.toLowerCase().trim();\n\t\t\t\t\t\tconst statusValue = statusFilter.value;\n\t\t\t\t\t\tconst rows = document.querySelectorAll('#pairings-list tbody tr');\n\t\t\t\t\t\tlet visibleCount = 0;\n\n\t\t\t\t\t\trows.forEach(row => {\n\t\t\t\t\t\t\tconst player1 = row.cells[0]?.textContent.toLowerCase() || '';\n\t\t\t\t\t\t\tconst player2 = row.cells[1]?.textContent.toLowerCase() || '';\n\t\t\t\t\t\t\tconst status = row.cells[4]?.textContent.toLowerCase().trim() || '';\n\n\t\t\t\t\t\t\t// Check search match\n\t\t\t\t\t\t\tconst matchesSearch = !searchTerm ||\n\t\t\t\t\t\t\t\tplayer1.includes(searchTerm) ||\n\t\t\t\t\t\t\t\tplayer2.includes(searchTerm);\n\n\t\t\t\t\t\t\t// Check status filter\n\t\t\t\t\t\t\tlet matchesStatus = true;\n\t\t\t\t\t\t\tif (statusValue === 'active') {\n\t\t\t\t\t\t\t\tmatchesStatus = status === 'active';\n\t\t\t\t\t\t\t} else if (statusValue === 'inactive') {\n\t\t\t\t\t\t\t\tmatchesStatus = status === 'inactive';\n\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\tif (matchesSearch && matchesStatus) {\n\t\t\t\t\t\t\t\trow.style.display = '';\n\t\t\t\t\t\t\t\tvisibleCount++;\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\trow.style.display = 'none';\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\t// Show/hide no results message\n\t\t\t\t\t\tnoResults.style.display = visibleCount === 0 ? 'block' : 'none';\n\t\t\t\t\t}\n\n\t\t\t\t\tsearchInput.addEventListener('input', filterPairings);\n\t\t\t\t\tstatusFilter.addEventListener('change', filterPairings);\n\t\t\t\t})();\n\t\t\t</script> <style>\n\t\t\t\t.search-filter-bar {\n\t\t\t\t\tdisplay: flex;\n\t\t\t\t\tgap: 1rem;\n\t\t\t\t\tmargin-bottom: 1rem;\n\t\t\t\t}\n\t\t\t\t.search-filter-bar input[type=\"search\"] {\n\t\t\t\t\tflex: 1;\n\t\t\t\t\tmargin-bottom: 0;\n\t\t\t\t}\n\t\t\t\t.search-filter-bar select {\n\t\t\t\t\twidth: auto;\n\t\t\t\t\tmin-width: 150px;\n\t\t\t\t\tmargin-bottom: 0;\n\t\t\t\t\tappearance: none;\n\t\t\t\t\t-webkit-appearance: none;\n\t\t\t\t\t-moz-appearance: none;\n\t\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t\t\tbackground-repeat: no-repeat;\n\t\t\t\t\tbackground-position: right 0.75rem center;\n\t\t\t\t\tbackground-size: 16px;\n\t\t\t\t\tpadding-right: 2.5rem;\n\t\t\t\t}\n\t\t\t\t.search-filter-bar select:hover,\n\t\t\t\t.search-filter-bar select:focus {\n\t\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t\t}\n\t\t\t\t@media (max-width: 576px) {\n\t\t\t\t\t.search-filter-bar {\n\t\t\t\t\t\tflex-direction: column;\n\t\t\t\t\t}\n\t\t\t\t\t.search-filter-bar select {\n\t\t\t\t\t\twidth: 100%;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t</style>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -87,7 +95,7 @@ func PairingsListPage(data PairingsListData) templ.Component {
 }
 
 // PairingsTable renders just the pairings table (for htmx updates).
-func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
+func PairingsTable(pairingsList []PairingWithStats) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -108,7 +116,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<table class=\"clickable-rows\"><thead><tr><th>Player 1</th><th>Player 2</th><th>Status</th><th style=\"text-align: right;\">Actions</th></tr></thead> <tbody>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<table class=\"clickable-rows\"><thead><tr><th>Player 1</th><th>Player 2</th><th>Matches</th><th>Win Rate</th><th>Status</th><th style=\"text-align: right;\">Actions</th></tr></thead> <tbody>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -120,7 +128,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("pairing-%d", p.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 147, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 157, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -133,7 +141,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d", p.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 147, Col: 114}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 157, Col: 114}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -146,7 +154,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(p.Player1Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 148, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 158, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -159,7 +167,7 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(p.Player2Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 149, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 159, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -169,82 +177,151 @@ func PairingsTable(pairingsList []pairings.TrackedPairing) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if p.Active {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<span class=\"text-success\">Active</span>")
+			var templ_7745c5c3_Var8 string
+			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(p.MatchesPlayed))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 160, Col: 38}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</td><td>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if p.MatchesPlayed > 0 {
+				var templ_7745c5c3_Var9 = []any{winRateColorClass(p.WinPercentage)}
+				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var9...)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<span class=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var10 string
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var9).String())
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 1, Col: 0}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var11 string
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.0f%%", p.WinPercentage))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 163, Col: 98}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<span style=\"color: var(--text-muted);\">Inactive</span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<span style=\"color: var(--text-muted);\">-</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</td><td class=\"table-actions\" style=\"justify-content: flex-end;\" onclick=\"event.stopPropagation();\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</td><td>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if p.Active {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<button class=\"warning\" hx-patch=\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var8 string
-				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d/deactivate", p.ID))
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 161, Col: 63}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\" hx-target=\"#pairings-list\" hx-swap=\"innerHTML\">Deactivate</button> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<span class=\"text-success\">Active</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<button class=\"success\" hx-patch=\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var9 string
-				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d/activate", p.ID))
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 169, Col: 61}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" hx-target=\"#pairings-list\" hx-swap=\"innerHTML\">Activate</button> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<span style=\"color: var(--text-muted);\">Inactive</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<button class=\"danger\" hx-delete=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</td><td class=\"table-actions\" style=\"justify-content: flex-end;\" onclick=\"event.stopPropagation();\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var10 string
-			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d", p.ID))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 177, Col: 52}
+			if p.Active {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<button class=\"warning\" hx-patch=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var12 string
+				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d/deactivate", p.ID))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 179, Col: 63}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" hx-target=\"#pairings-list\" hx-swap=\"innerHTML\">Deactivate</button> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			} else {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<button class=\"success\" hx-patch=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var13 string
+				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d/activate", p.ID))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 187, Col: 61}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "\" hx-target=\"#pairings-list\" hx-swap=\"innerHTML\">Activate</button> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<button class=\"danger\" hx-delete=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\" hx-target=\"#pairings-list\" hx-swap=\"innerHTML\" hx-confirm=\"Are you sure you want to delete this pairing?\">Delete</button></td></tr>")
+			var templ_7745c5c3_Var14 string
+			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/pairings/%d", p.ID))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 195, Col: 52}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\" hx-target=\"#pairings-list\" hx-swap=\"innerHTML\" hx-confirm=\"Are you sure you want to delete this pairing?\">Delete</button></td></tr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</tbody></table><script>\n\t\tdocument.querySelectorAll('.clickable-row').forEach(row => {\n\t\t\trow.addEventListener('click', () => {\n\t\t\t\twindow.location.href = row.dataset.href;\n\t\t\t});\n\t\t});\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</tbody></table><script>\n\t\tdocument.querySelectorAll('.clickable-row').forEach(row => {\n\t\t\trow.addEventListener('click', () => {\n\t\t\t\twindow.location.href = row.dataset.href;\n\t\t\t});\n\t\t});\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		return nil
 	})
+}
+
+// winRateColorClass returns a CSS class based on win percentage.
+func winRateColorClass(winPct float64) string {
+	if winPct >= 60 {
+		return "text-success"
+	} else if winPct >= 40 {
+		return "text-warning"
+	}
+	return "text-error"
 }
 
 // NewPairingData holds data for the new pairing form.
@@ -271,12 +348,12 @@ func NewPairingPage(data NewPairingData) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var11 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var11 == nil {
-			templ_7745c5c3_Var11 = templ.NopComponent
+		templ_7745c5c3_Var15 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var15 == nil {
+			templ_7745c5c3_Var15 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var12 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var16 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -288,81 +365,35 @@ func NewPairingPage(data NewPairingData) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<h1>Add New Pairing</h1><article><form method=\"POST\" action=\"/pairings\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<h1>Add New Pairing</h1><article><form method=\"POST\" action=\"/pairings\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if data.Error != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<div class=\"flash flash-error\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<div class=\"flash flash-error\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var13 string
-				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(data.Error)
+				var templ_7745c5c3_Var17 string
+				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(data.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 212, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 240, Col: 48}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div class=\"player-section\"><h3>Player 1</h3>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<div class=\"player-section\"><h3>Player 1</h3>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(data.Players) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<label for=\"player1_select\">Select Known Player <select id=\"player1_select\"><option value=\"\">-- Select or enter manually below --</option> ")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				for _, p := range data.Players {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<option value=\"")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					var templ_7745c5c3_Var14 string
-					templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerID)
-					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 223, Col: 35}
-					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\">")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					var templ_7745c5c3_Var15 string
-					templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerName)
-					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 223, Col: 52}
-					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</option>")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</select></label> ")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<label for=\"player1_name\">Player Name <input type=\"text\" id=\"player1_name\" name=\"player1_name\" placeholder=\"Display Name\" required></label> <label for=\"player1_id\">Player ID <input type=\"text\" id=\"player1_id\" name=\"player1_id\" placeholder=\"Playtomic User ID\" required></label></div><div class=\"player-section\"><h3>Player 2</h3>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if len(data.Players) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<label for=\"player2_select\">Select Known Player <select id=\"player2_select\"><option value=\"\">-- Select or enter manually below --</option> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<label for=\"player1_select\">Select Known Player <select id=\"player1_select\"><option value=\"\">-- Select or enter manually below --</option> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -371,12 +402,12 @@ func NewPairingPage(data NewPairingData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var16 string
-					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerID)
+					var templ_7745c5c3_Var18 string
+					templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 246, Col: 35}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 251, Col: 35}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -384,12 +415,12 @@ func NewPairingPage(data NewPairingData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var17 string
-					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerName)
+					var templ_7745c5c3_Var19 string
+					templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerName)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 246, Col: 52}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 251, Col: 52}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -403,23 +434,69 @@ func NewPairingPage(data NewPairingData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<label for=\"player2_name\">Player Name <input type=\"text\" id=\"player2_name\" name=\"player2_name\" placeholder=\"Display Name\" required></label> <label for=\"player2_id\">Player ID <input type=\"text\" id=\"player2_id\" name=\"player2_id\" placeholder=\"Playtomic User ID\" required></label></div><div class=\"grid\"><a href=\"/pairings\" role=\"button\" class=\"outline secondary\">Cancel</a> <button type=\"submit\">Add Pairing</button></div></form></article>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<label for=\"player1_name\">Player Name <input type=\"text\" id=\"player1_name\" name=\"player1_name\" placeholder=\"Display Name\" required></label> <label for=\"player1_id\">Player ID <input type=\"text\" id=\"player1_id\" name=\"player1_id\" placeholder=\"Playtomic User ID\" required></label></div><div class=\"player-section\"><h3>Player 2</h3>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(data.Players) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<script>\n\t\t\t\tdocument.getElementById('player1_select').addEventListener('change', function() {\n\t\t\t\t\tif (this.value) {\n\t\t\t\t\t\tdocument.getElementById('player1_id').value = this.value;\n\t\t\t\t\t\tdocument.getElementById('player1_name').value = this.options[this.selectedIndex].text;\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\tdocument.getElementById('player2_select').addEventListener('change', function() {\n\t\t\t\t\tif (this.value) {\n\t\t\t\t\t\tdocument.getElementById('player2_id').value = this.value;\n\t\t\t\t\t\tdocument.getElementById('player2_name').value = this.options[this.selectedIndex].text;\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t</script>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<label for=\"player2_select\">Select Known Player <select id=\"player2_select\"><option value=\"\">-- Select or enter manually below --</option> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				for _, p := range data.Players {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "<option value=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var20 string
+					templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerID)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 274, Col: 35}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var21 string
+					templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(p.PlayerName)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/pairings.templ`, Line: 274, Col: 52}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</option>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</select></label> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, " <style>\n\t\t\t.player-section {\n\t\t\t\tmargin-bottom: 1.5rem;\n\t\t\t\tpadding: 1rem;\n\t\t\t\tbackground: var(--bg-surface);\n\t\t\t\tborder-radius: 8px;\n\t\t\t}\n\t\t\t.player-section h3 {\n\t\t\t\tmargin-top: 0;\n\t\t\t\tmargin-bottom: 1rem;\n\t\t\t\tfont-size: 1rem;\n\t\t\t\tcolor: var(--text-muted);\n\t\t\t}\n\t\t\t/* Consistent select styling - hide browser default arrow on hover */\n\t\t\t.player-section select {\n\t\t\t\tappearance: none;\n\t\t\t\t-webkit-appearance: none;\n\t\t\t\t-moz-appearance: none;\n\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t\tbackground-repeat: no-repeat;\n\t\t\t\tbackground-position: right 0.75rem center;\n\t\t\t\tbackground-size: 16px;\n\t\t\t\tpadding-right: 2.5rem;\n\t\t\t}\n\t\t\t.player-section select:hover,\n\t\t\t.player-section select:focus {\n\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t}\n\t\t</style>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "<label for=\"player2_name\">Player Name <input type=\"text\" id=\"player2_name\" name=\"player2_name\" placeholder=\"Display Name\" required></label> <label for=\"player2_id\">Player ID <input type=\"text\" id=\"player2_id\" name=\"player2_id\" placeholder=\"Playtomic User ID\" required></label></div><div class=\"grid\"><a href=\"/pairings\" role=\"button\" class=\"outline secondary\">Cancel</a> <button type=\"submit\">Add Pairing</button></div></form></article>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if len(data.Players) > 0 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<script>\n\t\t\t\tdocument.getElementById('player1_select').addEventListener('change', function() {\n\t\t\t\t\tif (this.value) {\n\t\t\t\t\t\tdocument.getElementById('player1_id').value = this.value;\n\t\t\t\t\t\tdocument.getElementById('player1_name').value = this.options[this.selectedIndex].text;\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\tdocument.getElementById('player2_select').addEventListener('change', function() {\n\t\t\t\t\tif (this.value) {\n\t\t\t\t\t\tdocument.getElementById('player2_id').value = this.value;\n\t\t\t\t\t\tdocument.getElementById('player2_name').value = this.options[this.selectedIndex].text;\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t</script>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, " <style>\n\t\t\t.player-section {\n\t\t\t\tmargin-bottom: 1.5rem;\n\t\t\t\tpadding: 1rem;\n\t\t\t\tbackground: var(--bg-surface);\n\t\t\t\tborder-radius: 8px;\n\t\t\t}\n\t\t\t.player-section h3 {\n\t\t\t\tmargin-top: 0;\n\t\t\t\tmargin-bottom: 1rem;\n\t\t\t\tfont-size: 1rem;\n\t\t\t\tcolor: var(--text-muted);\n\t\t\t}\n\t\t\t/* Consistent select styling - hide browser default arrow on hover */\n\t\t\t.player-section select {\n\t\t\t\tappearance: none;\n\t\t\t\t-webkit-appearance: none;\n\t\t\t\t-moz-appearance: none;\n\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t\tbackground-repeat: no-repeat;\n\t\t\t\tbackground-position: right 0.75rem center;\n\t\t\t\tbackground-size: 16px;\n\t\t\t\tpadding-right: 2.5rem;\n\t\t\t}\n\t\t\t.player-section select:hover,\n\t\t\t.player-section select:focus {\n\t\t\t\tbackground-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\");\n\t\t\t}\n\t\t</style>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout(data.PageData).Render(templ.WithChildren(ctx, templ_7745c5c3_Var12), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout(data.PageData).Render(templ.WithChildren(ctx, templ_7745c5c3_Var16), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
