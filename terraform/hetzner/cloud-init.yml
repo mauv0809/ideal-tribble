@@ -11,6 +11,7 @@ packages:
   - nginx
   - certbot
   - python3-certbot-nginx
+  - python3-certbot-dns-cloudflare
   - ufw
   - htop
   - git

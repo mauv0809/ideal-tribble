@@ -119,9 +119,12 @@ if [ -f "$APP_DIR/.env" ]; then
     fi
 fi
 
-# Check if SSL certificate is configured
+# Check if SSL certificates are configured
 if ! certbot certificates 2>/dev/null | grep -q "Certificate Name: wally-api.utiger.dk"; then
-    NEXT_STEPS+=("Setup SSL: sudo certbot --nginx -d wally-api.utiger.dk")
+    NEXT_STEPS+=("Setup SSL for API: sudo certbot --nginx -d wally-api.utiger.dk")
+fi
+if ! certbot certificates 2>/dev/null | grep -q "Certificate Name: wally.utiger.dk"; then
+    NEXT_STEPS+=("Setup SSL for Web: sudo certbot --nginx -d wally.utiger.dk")
 fi
 
 # Show next steps only if there are any

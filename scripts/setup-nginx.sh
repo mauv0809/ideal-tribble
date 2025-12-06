@@ -1,10 +1,13 @@
 #!/bin/bash
 # setup-nginx.sh - Configure nginx with SSL support for ideal-tribble
+# Uses Cloudflare DNS-01 challenge for SSL certificates (works with proxied domains)
 
 set -e
 
-DOMAIN="wally-api.utiger.dk"
+API_DOMAIN="wally-api.utiger.dk"
+WEB_DOMAIN="wally.utiger.dk"
 APP_DIR="/opt/ideal-tribble"
+CLOUDFLARE_CREDENTIALS="/etc/letsencrypt/cloudflare.ini"
 
 echo "🌐 Setting up nginx configuration..."
 
@@ -45,24 +48,33 @@ else
     exit 1
 fi
 
-# Check if SSL certificate already exists
-if certbot certificates 2>/dev/null | grep -q "Certificate Name: $DOMAIN"; then
-    echo "🔒 SSL certificate for $DOMAIN already exists"
-    
+# Check if SSL certificates already exist for both domains
+API_SSL_EXISTS=$(certbot certificates 2>/dev/null | grep -q "Certificate Name: $API_DOMAIN" && echo "yes" || echo "no")
+WEB_SSL_EXISTS=$(certbot certificates 2>/dev/null | grep -q "Certificate Name: $WEB_DOMAIN" && echo "yes" || echo "no")
+
+if [ "$API_SSL_EXISTS" = "yes" ] && [ "$WEB_SSL_EXISTS" = "yes" ]; then
+    echo "🔒 SSL certificates for both domains already exist"
+
     # Update nginx config to use HTTPS
     if ! grep -q "listen 443 ssl" /etc/nginx/sites-available/ideal-tribble; then
         echo "🔧 Adding HTTPS configuration to nginx..."
-        
+
         # Create HTTPS version of the config
         cat > /etc/nginx/sites-available/ideal-tribble << 'EOF'
-# HTTP server - redirect to HTTPS
+# HTTP servers - redirect to HTTPS
 server {
     listen 80;
     server_name wally-api.utiger.dk;
     return 301 https://$server_name$request_uri;
 }
 
-# HTTPS server
+server {
+    listen 80;
+    server_name wally.utiger.dk;
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTPS API server (wally-api.utiger.dk)
 server {
     listen 443 ssl http2;
     server_name wally-api.utiger.dk;
@@ -115,8 +127,28 @@ server {
         return 404;
     }
 }
+
+# HTTPS Web dashboard (wally.utiger.dk)
+server {
+    listen 443 ssl http2;
+    server_name wally.utiger.dk;
+
+    ssl_certificate /etc/letsencrypt/live/wally.utiger.dk/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/wally.utiger.dk/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # All web UI routes
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
 EOF
-        
+
         # Test and reload
         if nginx -t; then
             systemctl reload nginx
@@ -128,37 +160,60 @@ EOF
     else
         echo "✅ HTTPS already configured"
     fi
-    
+
 else
-    echo "⚠️  No SSL certificate found for $DOMAIN"
-    echo "🚀 Attempting to obtain SSL certificate..."
-    
-    # Try to obtain SSL certificate
-    if command -v certbot >/dev/null 2>&1; then
-        # Check if domain resolves to this server
-        DOMAIN_IP=$(dig +short $DOMAIN 2>/dev/null || echo "")
-        SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || echo "")
-        
-        if [ "$DOMAIN_IP" = "$SERVER_IP" ]; then
-            echo "✅ Domain $DOMAIN resolves to this server ($SERVER_IP)"
-            echo "🔒 Obtaining SSL certificate..."
-            
-            if certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email admin@utiger.dk; then
-                echo "✅ SSL certificate obtained successfully"
-                echo "🔧 Certificate will be auto-renewed via cron"
+    echo "🔍 Checking SSL certificate status..."
+
+    # Check if Cloudflare credentials exist
+    if [ ! -f "$CLOUDFLARE_CREDENTIALS" ]; then
+        echo "⚠️  Cloudflare credentials not found at $CLOUDFLARE_CREDENTIALS"
+        echo "📋 Create the file with your Cloudflare API token:"
+        echo "   echo 'dns_cloudflare_api_token = YOUR_TOKEN' | sudo tee $CLOUDFLARE_CREDENTIALS"
+        echo "   sudo chmod 600 $CLOUDFLARE_CREDENTIALS"
+        exit 1
+    fi
+
+    # Try to obtain SSL certificates for domains that don't have them
+    for DOMAIN in $API_DOMAIN $WEB_DOMAIN; do
+        if ! certbot certificates 2>/dev/null | grep -q "Certificate Name: $DOMAIN"; then
+            echo "⚠️  No SSL certificate found for $DOMAIN"
+
+            if command -v certbot >/dev/null 2>&1; then
+                echo "🔒 Obtaining SSL certificate for $DOMAIN via Cloudflare DNS-01..."
+
+                if certbot certonly \
+                    --dns-cloudflare \
+                    --dns-cloudflare-credentials "$CLOUDFLARE_CREDENTIALS" \
+                    --dns-cloudflare-propagation-seconds 30 \
+                    -d "$DOMAIN" \
+                    --non-interactive \
+                    --agree-tos \
+                    --email admin@utiger.dk; then
+                    echo "✅ SSL certificate obtained for $DOMAIN"
+                else
+                    echo "⚠️  SSL certificate setup failed for $DOMAIN"
+                    echo "📋 Check Cloudflare API token permissions (Zone:DNS:Edit)"
+                fi
             else
-                echo "⚠️  SSL certificate setup failed"
-                echo "📋 You can manually run: sudo certbot --nginx -d $DOMAIN"
+                echo "⚠️  certbot not available"
+                echo "📋 Install certbot and python3-certbot-dns-cloudflare"
             fi
         else
-            echo "⚠️  Domain $DOMAIN does not resolve to this server"
-            echo "   Domain IP: $DOMAIN_IP"
-            echo "   Server IP: $SERVER_IP" 
-            echo "📋 Please update DNS and run: sudo certbot --nginx -d $DOMAIN"
+            echo "✅ SSL certificate for $DOMAIN already exists"
         fi
-    else
-        echo "⚠️  certbot not available"
-        echo "📋 Install certbot and run: sudo certbot --nginx -d $DOMAIN"
+    done
+
+    # After obtaining certs, update nginx to use HTTPS
+    # Re-check if both certs now exist
+    API_SSL_EXISTS=$(certbot certificates 2>/dev/null | grep -q "Certificate Name: $API_DOMAIN" && echo "yes" || echo "no")
+    WEB_SSL_EXISTS=$(certbot certificates 2>/dev/null | grep -q "Certificate Name: $WEB_DOMAIN" && echo "yes" || echo "no")
+
+    if [ "$API_SSL_EXISTS" = "yes" ] && [ "$WEB_SSL_EXISTS" = "yes" ]; then
+        if ! grep -q "listen 443 ssl" /etc/nginx/sites-available/ideal-tribble; then
+            echo "🔧 Adding HTTPS configuration to nginx..."
+            # Re-run this script to apply the HTTPS config
+            exec "$0"
+        fi
     fi
 fi
 
@@ -166,16 +221,21 @@ echo ""
 echo "🎉 Nginx setup completed!"
 echo ""
 echo "📊 Configuration summary:"
-echo "  Domain: $DOMAIN"
+echo "  API Domain: $API_DOMAIN"
+echo "  Web Domain: $WEB_DOMAIN"
 echo "  HTTP: Port 80 (redirects to HTTPS if SSL enabled)"
-echo "  HTTPS: Port 443 (if SSL certificate exists)"
-echo "  Public endpoints: /health, /slack/*, /grafana/*"
-echo "  Internal endpoints: /fetch, /process, /clear, /members, /matches, /leaderboard, /test, /metrics"
+echo "  HTTPS: Port 443 (if SSL certificates exist)"
+echo ""
+echo "  API endpoints ($API_DOMAIN):"
+echo "    Public: /health, /slack/*, /grafana/*"
+echo "    Internal: /fetch, /process, /clear, /members, /matches, /leaderboard, /test, /metrics"
+echo ""
+echo "  Web dashboard ($WEB_DOMAIN):"
+echo "    All routes proxied to application"
 echo ""
 echo "🧪 Test endpoints:"
-echo "  curl http://localhost/health                    # Should work"
-echo "  curl https://$DOMAIN/health                     # Should work (if SSL enabled)"
-echo "  curl https://$DOMAIN/members                    # Should return 403 Forbidden"
+echo "  curl https://$API_DOMAIN/health     # API health check"
+echo "  curl https://$WEB_DOMAIN/login      # Web login page"
 echo ""
 echo "🔍 Check status:"
 echo "  nginx -t                    # Test configuration"
