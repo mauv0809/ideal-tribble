@@ -18,6 +18,7 @@ type PairingsStore interface {
 
 	// Analytics queries
 	GetPairingOverallStats(pairingID int64) (*PairingStats, error)
+	GetSituationalStats(pairingID int64) (*SituationalStats, error)
 	GetPairingVsOpponentStats(pairingID int64) ([]OpponentStats, error)
 	GetPairingVsSpecificOpponent(pairingID int64, opponent1ID, opponent2ID string) (*OpponentStats, error)
 	GetPairingTimeStats(pairingID int64) (*TimeStats, error)

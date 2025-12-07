@@ -221,8 +221,10 @@ func (s *store) UpsertPairingMatch(match *PairingMatch) error {
 	_, err := s.db.Exec(`
 		INSERT INTO pairing_matches (pairing_id, match_id, match_date, day_of_week, hour_of_day,
 			opponent1_id, opponent1_name, opponent2_id, opponent2_name, pairing_won,
-			sets_won, sets_lost, games_won, games_lost, tenant_id, tenant_name)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			sets_won, sets_lost, games_won, games_lost, tenant_id, tenant_name,
+			set1_pairing_score, set1_opponent_score, set2_pairing_score, set2_opponent_score,
+			set3_pairing_score, set3_opponent_score)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(pairing_id, match_id) DO UPDATE SET
 			match_date = excluded.match_date,
 			day_of_week = excluded.day_of_week,
@@ -237,10 +239,18 @@ func (s *store) UpsertPairingMatch(match *PairingMatch) error {
 			games_won = excluded.games_won,
 			games_lost = excluded.games_lost,
 			tenant_id = excluded.tenant_id,
-			tenant_name = excluded.tenant_name
+			tenant_name = excluded.tenant_name,
+			set1_pairing_score = excluded.set1_pairing_score,
+			set1_opponent_score = excluded.set1_opponent_score,
+			set2_pairing_score = excluded.set2_pairing_score,
+			set2_opponent_score = excluded.set2_opponent_score,
+			set3_pairing_score = excluded.set3_pairing_score,
+			set3_opponent_score = excluded.set3_opponent_score
 	`, match.PairingID, match.MatchID, match.MatchDate, match.DayOfWeek, match.HourOfDay,
 		match.Opponent1ID, match.Opponent1Name, match.Opponent2ID, match.Opponent2Name, pairingWon,
-		match.SetsWon, match.SetsLost, match.GamesWon, match.GamesLost, match.TenantID, match.TenantName)
+		match.SetsWon, match.SetsLost, match.GamesWon, match.GamesLost, match.TenantID, match.TenantName,
+		match.Set1PairingScore, match.Set1OpponentScore, match.Set2PairingScore, match.Set2OpponentScore,
+		match.Set3PairingScore, match.Set3OpponentScore)
 	if err != nil {
 		return fmt.Errorf("failed to upsert pairing match: %w", err)
 	}
@@ -261,8 +271,10 @@ func (s *store) UpsertPairingMatches(matches []*PairingMatch) error {
 	stmt, err := tx.Prepare(`
 		INSERT INTO pairing_matches (pairing_id, match_id, match_date, day_of_week, hour_of_day,
 			opponent1_id, opponent1_name, opponent2_id, opponent2_name, pairing_won,
-			sets_won, sets_lost, games_won, games_lost, tenant_id, tenant_name)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			sets_won, sets_lost, games_won, games_lost, tenant_id, tenant_name,
+			set1_pairing_score, set1_opponent_score, set2_pairing_score, set2_opponent_score,
+			set3_pairing_score, set3_opponent_score)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(pairing_id, match_id) DO UPDATE SET
 			match_date = excluded.match_date,
 			day_of_week = excluded.day_of_week,
@@ -277,7 +289,13 @@ func (s *store) UpsertPairingMatches(matches []*PairingMatch) error {
 			games_won = excluded.games_won,
 			games_lost = excluded.games_lost,
 			tenant_id = excluded.tenant_id,
-			tenant_name = excluded.tenant_name
+			tenant_name = excluded.tenant_name,
+			set1_pairing_score = excluded.set1_pairing_score,
+			set1_opponent_score = excluded.set1_opponent_score,
+			set2_pairing_score = excluded.set2_pairing_score,
+			set2_opponent_score = excluded.set2_opponent_score,
+			set3_pairing_score = excluded.set3_pairing_score,
+			set3_opponent_score = excluded.set3_opponent_score
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
@@ -291,7 +309,9 @@ func (s *store) UpsertPairingMatches(matches []*PairingMatch) error {
 		}
 		_, err = stmt.Exec(match.PairingID, match.MatchID, match.MatchDate, match.DayOfWeek, match.HourOfDay,
 			match.Opponent1ID, match.Opponent1Name, match.Opponent2ID, match.Opponent2Name, pairingWon,
-			match.SetsWon, match.SetsLost, match.GamesWon, match.GamesLost, match.TenantID, match.TenantName)
+			match.SetsWon, match.SetsLost, match.GamesWon, match.GamesLost, match.TenantID, match.TenantName,
+			match.Set1PairingScore, match.Set1OpponentScore, match.Set2PairingScore, match.Set2OpponentScore,
+			match.Set3PairingScore, match.Set3OpponentScore)
 		if err != nil {
 			return fmt.Errorf("failed to upsert match %s: %w", match.MatchID, err)
 		}
@@ -416,6 +436,124 @@ func (s *store) calculateStreaks(pairingID int64) (*streakInfo, error) {
 		longestWin:  longestWin,
 		longestLoss: longestLoss,
 	}, nil
+}
+
+// GetSituationalStats returns performance stats for different match situations.
+func (s *store) GetSituationalStats(pairingID int64) (*SituationalStats, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	stats := &SituationalStats{}
+
+	// Query all matches with set scores
+	rows, err := s.db.Query(`
+		SELECT pairing_won, sets_won, sets_lost,
+			set1_pairing_score, set1_opponent_score,
+			set2_pairing_score, set2_opponent_score,
+			set3_pairing_score, set3_opponent_score
+		FROM pairing_matches
+		WHERE pairing_id = ?
+		AND set1_pairing_score IS NOT NULL
+	`, pairingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get situational stats: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var won int
+		var setsWon, setsLost int
+		var s1p, s1o, s2p, s2o, s3p, s3o sql.NullInt64
+
+		if err := rows.Scan(&won, &setsWon, &setsLost, &s1p, &s1o, &s2p, &s2o, &s3p, &s3o); err != nil {
+			log.Error("Failed to scan situational stats row", "error", err)
+			continue
+		}
+
+		pairingWon := won == 1
+
+		// Determine first set result
+		if s1p.Valid && s1o.Valid {
+			wonFirstSet := s1p.Int64 > s1o.Int64
+
+			if wonFirstSet {
+				stats.WonFirstSetMatches++
+				if pairingWon {
+					stats.WonFirstSetWins++
+				}
+			} else {
+				stats.LostFirstSetMatches++
+				if pairingWon {
+					stats.LostFirstSetWins++
+				}
+			}
+
+			// Check for tiebreak in first set
+			if (s1p.Int64 == 7 && s1o.Int64 == 6) || (s1p.Int64 == 6 && s1o.Int64 == 7) {
+				stats.TiebreakSetsPlayed++
+				if s1p.Int64 > s1o.Int64 {
+					stats.TiebreakSetsWon++
+				}
+			}
+		}
+
+		// Check second set for tiebreaks
+		if s2p.Valid && s2o.Valid {
+			if (s2p.Int64 == 7 && s2o.Int64 == 6) || (s2p.Int64 == 6 && s2o.Int64 == 7) {
+				stats.TiebreakSetsPlayed++
+				if s2p.Int64 > s2o.Int64 {
+					stats.TiebreakSetsWon++
+				}
+			}
+		}
+
+		// Three-set matches and third set tiebreaks
+		if s3p.Valid && s3o.Valid && (s3p.Int64 > 0 || s3o.Int64 > 0) {
+			stats.ThreeSetMatches++
+			if pairingWon {
+				stats.ThreeSetWins++
+			}
+
+			// Check for tiebreak in third set
+			if (s3p.Int64 == 7 && s3o.Int64 == 6) || (s3p.Int64 == 6 && s3o.Int64 == 7) {
+				stats.TiebreakSetsPlayed++
+				if s3p.Int64 > s3o.Int64 {
+					stats.TiebreakSetsWon++
+				}
+			}
+		}
+
+		// Win/loss breakdown by score
+		if pairingWon {
+			if setsWon == 2 && setsLost == 0 {
+				stats.TwoZeroWins++
+			} else if setsWon == 2 && setsLost == 1 {
+				stats.TwoOneWins++
+			}
+		} else {
+			if setsWon == 0 && setsLost == 2 {
+				stats.ZeroTwoLosses++
+			} else if setsWon == 1 && setsLost == 2 {
+				stats.OneTwoLosses++
+			}
+		}
+	}
+
+	// Calculate percentages
+	if stats.WonFirstSetMatches > 0 {
+		stats.WonFirstSetWinPct = float64(stats.WonFirstSetWins) / float64(stats.WonFirstSetMatches) * 100
+	}
+	if stats.LostFirstSetMatches > 0 {
+		stats.LostFirstSetWinPct = float64(stats.LostFirstSetWins) / float64(stats.LostFirstSetMatches) * 100
+	}
+	if stats.ThreeSetMatches > 0 {
+		stats.ThreeSetWinPct = float64(stats.ThreeSetWins) / float64(stats.ThreeSetMatches) * 100
+	}
+	if stats.TiebreakSetsPlayed > 0 {
+		stats.TiebreakWinPct = float64(stats.TiebreakSetsWon) / float64(stats.TiebreakSetsPlayed) * 100
+	}
+
+	return stats, nil
 }
 
 // GetPairingVsOpponentStats returns stats against each opponent pair.

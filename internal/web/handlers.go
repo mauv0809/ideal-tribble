@@ -355,6 +355,9 @@ func (h *Handlers) PairingDetail(w http.ResponseWriter, r *http.Request) {
 		stats = *statsPtr
 	}
 
+	// Get situational stats
+	situationalStats, _ := h.pairingsStore.GetSituationalStats(id)
+
 	// Pagination
 	const pageSize = 10
 	page := 1
@@ -381,12 +384,13 @@ func (h *Handlers) PairingDetail(w http.ResponseWriter, r *http.Request) {
 			Title: pairing.Player1Name + " & " + pairing.Player2Name,
 			User:  user,
 		},
-		Pairing:       *pairing,
-		Stats:         stats,
-		RecentMatches: recentMatches,
-		CurrentPage:   page,
-		TotalPages:    totalPages,
-		TotalMatches:  totalMatches,
+		Pairing:          *pairing,
+		Stats:            stats,
+		SituationalStats: situationalStats,
+		RecentMatches:    recentMatches,
+		CurrentPage:      page,
+		TotalPages:       totalPages,
+		TotalMatches:     totalMatches,
 	}
 
 	component := templates.PairingDetailPage(data)

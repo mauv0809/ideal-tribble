@@ -147,7 +147,7 @@ func buildPairingMatch(match *playtomic.PadelMatch, pairing *TrackedPairing, pai
 	dayOfWeek := int(matchTime.Weekday())
 	hourOfDay := matchTime.Hour()
 
-	return &PairingMatch{
+	pm := &PairingMatch{
 		PairingID:     pairing.ID,
 		MatchID:       match.MatchID,
 		MatchDate:     match.Start,
@@ -164,5 +164,43 @@ func buildPairingMatch(match *playtomic.PadelMatch, pairing *TrackedPairing, pai
 		GamesLost:     stats.GamesLost,
 		TenantID:      match.Tenant.ID,
 		TenantName:    match.Tenant.Name,
+	}
+
+	// Extract per-set scores for situational analytics
+	extractSetScores(pm, match, pairingTeam.ID, opponentTeam.ID)
+
+	return pm
+}
+
+// extractSetScores extracts individual set scores from match results.
+func extractSetScores(pm *PairingMatch, match *playtomic.PadelMatch, pairingTeamID, opponentTeamID string) {
+	for i, set := range match.Results {
+		if i >= 3 {
+			break // Only handle up to 3 sets
+		}
+
+		pairingScore, hasPairing := set.Scores[pairingTeamID]
+		opponentScore, hasOpponent := set.Scores[opponentTeamID]
+
+		if !hasPairing || !hasOpponent {
+			continue
+		}
+
+		// Skip unplayed sets (0-0)
+		if pairingScore == 0 && opponentScore == 0 {
+			continue
+		}
+
+		switch i {
+		case 0:
+			pm.Set1PairingScore = &pairingScore
+			pm.Set1OpponentScore = &opponentScore
+		case 1:
+			pm.Set2PairingScore = &pairingScore
+			pm.Set2OpponentScore = &opponentScore
+		case 2:
+			pm.Set3PairingScore = &pairingScore
+			pm.Set3OpponentScore = &opponentScore
+		}
 	}
 }

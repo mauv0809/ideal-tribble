@@ -30,9 +30,10 @@ type RecentMatch struct {
 // PairingDetailData holds data for the pairing detail page.
 type PairingDetailData struct {
 	PageData
-	Pairing       pairings.TrackedPairing
-	Stats         pairings.PairingStats
-	RecentMatches []RecentMatch
+	Pairing          pairings.TrackedPairing
+	Stats            pairings.PairingStats
+	SituationalStats *pairings.SituationalStats
+	RecentMatches    []RecentMatch
 	// Pagination
 	CurrentPage   int
 	TotalPages    int
@@ -140,6 +141,78 @@ templ PairingDetailPage(data PairingDetailData) {
 				</div>
 			</div>
 		</section>
+
+		// Situational Stats
+		if data.SituationalStats != nil && (data.SituationalStats.WonFirstSetMatches > 0 || data.SituationalStats.LostFirstSetMatches > 0) {
+			<section>
+				<h2>Situational Performance</h2>
+				<div class="stats-grid">
+					// First Set Performance
+					if data.SituationalStats.WonFirstSetMatches > 0 {
+						<div class="stat-card">
+							<div class={ "stat-value " + winRateClass(data.SituationalStats.WonFirstSetWinPct) }>
+								{ fmt.Sprintf("%.0f%%", data.SituationalStats.WonFirstSetWinPct) }
+							</div>
+							<div class="stat-label">Win Rate After Winning 1st Set</div>
+							<div class="stat-sublabel">{ fmt.Sprintf("%d/%d matches", data.SituationalStats.WonFirstSetWins, data.SituationalStats.WonFirstSetMatches) }</div>
+						</div>
+					}
+					// Comeback Ability
+					if data.SituationalStats.LostFirstSetMatches > 0 {
+						<div class="stat-card">
+							<div class={ "stat-value " + winRateClass(data.SituationalStats.LostFirstSetWinPct) }>
+								{ fmt.Sprintf("%.0f%%", data.SituationalStats.LostFirstSetWinPct) }
+							</div>
+							<div class="stat-label">Comeback Rate (Lost 1st Set)</div>
+							<div class="stat-sublabel">{ fmt.Sprintf("%d/%d matches", data.SituationalStats.LostFirstSetWins, data.SituationalStats.LostFirstSetMatches) }</div>
+						</div>
+					}
+					// Three-Set Performance
+					if data.SituationalStats.ThreeSetMatches > 0 {
+						<div class="stat-card">
+							<div class={ "stat-value " + winRateClass(data.SituationalStats.ThreeSetWinPct) }>
+								{ fmt.Sprintf("%.0f%%", data.SituationalStats.ThreeSetWinPct) }
+							</div>
+							<div class="stat-label">Win Rate in 3-Set Matches</div>
+							<div class="stat-sublabel">{ fmt.Sprintf("%d/%d matches", data.SituationalStats.ThreeSetWins, data.SituationalStats.ThreeSetMatches) }</div>
+						</div>
+					}
+					// Tiebreak Performance
+					if data.SituationalStats.TiebreakSetsPlayed > 0 {
+						<div class="stat-card">
+							<div class={ "stat-value " + winRateClass(data.SituationalStats.TiebreakWinPct) }>
+								{ fmt.Sprintf("%.0f%%", data.SituationalStats.TiebreakWinPct) }
+							</div>
+							<div class="stat-label">Tiebreak Win Rate</div>
+							<div class="stat-sublabel">{ fmt.Sprintf("%d/%d tiebreaks", data.SituationalStats.TiebreakSetsWon, data.SituationalStats.TiebreakSetsPlayed) }</div>
+						</div>
+					}
+				</div>
+
+				// Win/Loss Breakdown
+				if (data.SituationalStats.TwoZeroWins + data.SituationalStats.TwoOneWins) > 0 || (data.SituationalStats.ZeroTwoLosses + data.SituationalStats.OneTwoLosses) > 0 {
+					<h3 style="margin-top: 1.5rem;">Score Breakdown</h3>
+					<div class="stats-grid">
+						<div class="stat-card">
+							<div class="stat-value text-success">{ fmt.Sprint(data.SituationalStats.TwoZeroWins) }</div>
+							<div class="stat-label">2-0 Wins</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-value text-success">{ fmt.Sprint(data.SituationalStats.TwoOneWins) }</div>
+							<div class="stat-label">2-1 Wins</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-value text-error">{ fmt.Sprint(data.SituationalStats.OneTwoLosses) }</div>
+							<div class="stat-label">1-2 Losses</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-value text-error">{ fmt.Sprint(data.SituationalStats.ZeroTwoLosses) }</div>
+							<div class="stat-label">0-2 Losses</div>
+						</div>
+					</div>
+				}
+			</section>
+		}
 
 		// Navigation to detailed analytics
 		<section>

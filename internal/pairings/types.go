@@ -30,6 +30,13 @@ type PairingMatch struct {
 	GamesLost     int    `json:"games_lost"`
 	TenantID      string `json:"tenant_id"`
 	TenantName    string `json:"tenant_name"`
+	// Per-set scores for situational analytics
+	Set1PairingScore  *int `json:"set1_pairing_score,omitempty"`
+	Set1OpponentScore *int `json:"set1_opponent_score,omitempty"`
+	Set2PairingScore  *int `json:"set2_pairing_score,omitempty"`
+	Set2OpponentScore *int `json:"set2_opponent_score,omitempty"`
+	Set3PairingScore  *int `json:"set3_pairing_score,omitempty"`
+	Set3OpponentScore *int `json:"set3_opponent_score,omitempty"`
 }
 
 // PairingStats represents overall statistics for a tracked pairing.
@@ -137,4 +144,35 @@ type PairingHighlight struct {
 	MatchesPlayed int     `json:"matches_played"`
 	MatchesWon    int     `json:"matches_won"`
 	WinPercentage float64 `json:"win_percentage"`
+}
+
+// SituationalStats represents performance in different match situations.
+type SituationalStats struct {
+	// After winning first set
+	WonFirstSetMatches    int     `json:"won_first_set_matches"`
+	WonFirstSetWins       int     `json:"won_first_set_wins"`
+	WonFirstSetWinPct     float64 `json:"won_first_set_win_pct"`
+
+	// After losing first set (comeback ability)
+	LostFirstSetMatches   int     `json:"lost_first_set_matches"`
+	LostFirstSetWins      int     `json:"lost_first_set_wins"`
+	LostFirstSetWinPct    float64 `json:"lost_first_set_win_pct"`
+
+	// Three-set matches (decider performance)
+	ThreeSetMatches       int     `json:"three_set_matches"`
+	ThreeSetWins          int     `json:"three_set_wins"`
+	ThreeSetWinPct        float64 `json:"three_set_win_pct"`
+
+	// Dominant wins (2-0)
+	TwoZeroWins           int     `json:"two_zero_wins"`
+	TwoOneWins            int     `json:"two_one_wins"`
+
+	// Loss breakdown
+	ZeroTwoLosses         int     `json:"zero_two_losses"`
+	OneTwoLosses          int     `json:"one_two_losses"`
+
+	// Tiebreak sets (7-6 or 6-7)
+	TiebreakSetsPlayed    int     `json:"tiebreak_sets_played"`
+	TiebreakSetsWon       int     `json:"tiebreak_sets_won"`
+	TiebreakWinPct        float64 `json:"tiebreak_win_pct"`
 }
