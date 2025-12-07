@@ -11,4 +11,8 @@ type Service struct {
 	SlackNotifSent     prometheus.Counter
 	SlackNotifFailed   prometheus.Counter
 	StartupTimeSeconds prometheus.Gauge
+
+	// HTTP metrics
+	HTTPRequestsTotal   *prometheus.CounterVec
+	HTTPRequestDuration *prometheus.HistogramVec
 }

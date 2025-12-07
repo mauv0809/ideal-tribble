@@ -217,9 +217,12 @@ func main() {
 	// Wrap the combined handler with OpenTelemetry middleware
 	wrappedHandler := otelhttp.NewHandler(combinedHandler, "ideal-tribble")
 
+	// Add HTTP metrics middleware
+	metricsWrappedHandler := metricsSvc.HTTPMiddleware(wrappedHandler)
+
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: wrappedHandler,
+		Handler: metricsWrappedHandler,
 	}
 
 	// Channel to listen for errors coming from the server

@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/log"
 	handlers "github.com/mauv0809/ideal-tribble/internal/http/handlers"
 	"github.com/slack-go/slack"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Middleware defines the standard signature for an HTTP middleware.
@@ -49,9 +51,16 @@ func paramsMiddleware(next http.Handler) http.Handler {
 // VerifySlackSignature is a middleware that verifies the Slack request signature.
 func (s *Server) VerifySlackSignature(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, span := otel.Tracer("middleware").Start(r.Context(), "VerifySlackSignature")
+		defer span.End()
+
 		verifier, err := slack.NewSecretsVerifier(r.Header, s.Cfg.Slack.SigningSecret)
 		if err != nil {
 			log.Error("failed to create secrets verifier", "error", err)
+			span.SetAttributes(
+				attribute.Bool("verified", false),
+				attribute.String("error", err.Error()),
+			)
 
 			// Return 401 if error relates to signature or headers
 			if strings.Contains(err.Error(), "missing headers") ||
@@ -69,6 +78,7 @@ func (s *Server) VerifySlackSignature(next http.Handler) http.Handler {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			log.Error("failed to read request body", "error", err)
+			span.SetAttributes(attribute.String("error", "failed to read body"))
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
@@ -76,6 +86,7 @@ func (s *Server) VerifySlackSignature(next http.Handler) http.Handler {
 		// Write the body to the verifier for signature calculation
 		if _, err := verifier.Write(body); err != nil {
 			log.Error("failed to write body to verifier", "error", err)
+			span.SetAttributes(attribute.String("error", "failed to write to verifier"))
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
@@ -83,13 +94,19 @@ func (s *Server) VerifySlackSignature(next http.Handler) http.Handler {
 		// Verify the signature BEFORE calling the handler
 		if err = verifier.Ensure(); err != nil {
 			log.Error("Slack signature verification failed", "error", err)
+			span.SetAttributes(
+				attribute.Bool("verified", false),
+				attribute.String("error", "signature mismatch"),
+			)
 			http.Error(w, "Unauthorized: Slack signature verification failed", http.StatusUnauthorized)
 			return
 		}
 
+		span.SetAttributes(attribute.Bool("verified", true))
+
 		// Restore the body for the handler to read
 		r.Body = io.NopCloser(strings.NewReader(string(body)))
 
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -1,6 +1,9 @@
 package metrics
 
-import "sync"
+import (
+	"net/http"
+	"sync"
+)
 
 // Mock is a mock implementation of the Metrics interface for testing.
 // It is safe for concurrent use.
@@ -12,6 +15,7 @@ type Mock struct {
 	slackNotifSent      int
 	slackNotifFailed    int
 	startupTime         float64
+	httpRequests        int
 }
 
 // NewMock creates a new mock instance.
@@ -83,4 +87,23 @@ func (m *Mock) SlackNotifFailed() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.slackNotifFailed
+}
+
+// RecordHTTPRequest is a no-op for the mock.
+func (m *Mock) RecordHTTPRequest(method, path string, statusCode int, duration float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.httpRequests++
+}
+
+// HTTPMiddleware returns a pass-through middleware for testing.
+func (m *Mock) HTTPMiddleware(next http.Handler) http.Handler {
+	return next
+}
+
+// HTTPRequests returns the number of HTTP requests recorded.
+func (m *Mock) HTTPRequests() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.httpRequests
 }

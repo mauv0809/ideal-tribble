@@ -69,6 +69,8 @@ services:
     volumes:
       - /var/lib/observability/grafana:/var/lib/grafana:rw
       - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana.ini:/etc/grafana/grafana.ini:ro
     ports:
       - "3000:3000"   # Grafana HTTP (internal only)
@@ -77,6 +79,30 @@ services:
       - loki
     networks:
       - observability
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - /var/lib/observability/prometheus:/prometheus:rw
+    ports:
+      - "9090:9090"   # Prometheus HTTP
+    networks:
+      - observability
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         limits:
