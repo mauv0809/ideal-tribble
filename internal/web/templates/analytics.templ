@@ -2,6 +2,7 @@ package templates
 
 import (
 	"fmt"
+	"html/template"
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
 )
 
@@ -81,6 +82,8 @@ type OpponentDetailData struct {
 	OpponentStats pairings.OpponentStats
 	Matches       []OpponentMatch
 	RecentForm    []bool // last 5 results, true = win
+	// Charts
+	H2HTrendChart template.HTML
 }
 
 // OpponentMatch represents a match against this opponent for display.
@@ -138,6 +141,18 @@ templ OpponentDetailPage(data OpponentDetailData) {
 					}
 				</div>
 				<small style="color: var(--text-muted); margin-top: 8px; display: block;">Most recent on the right</small>
+			</section>
+		}
+
+		// H2H Trend Chart
+		if data.H2HTrendChart != "" {
+			<section>
+				<h2>Head-to-Head Trend</h2>
+				@ChartStyles()
+				<div class="chart-grid">
+					@ChartCard("Win Rate Trend (3-Match Avg)", "h2h-trend", data.H2HTrendChart)
+				</div>
+				@ChartTooltipScript()
 			</section>
 		}
 
@@ -258,6 +273,9 @@ type IndividualPlayerDetailData struct {
 	Partners    []pairings.PlayerPartnerStats
 	Matches     []IndividualPlayerMatch
 	RecentForm  []bool // last 5 results, true = win
+	// Charts
+	H2HTrendChart        template.HTML
+	PartnerEffectChart   template.HTML
 }
 
 // IndividualPlayerDetailPage renders the individual player detail page.
@@ -306,6 +324,23 @@ templ IndividualPlayerDetailPage(data IndividualPlayerDetailData) {
 					}
 				</div>
 				<small style="color: var(--text-muted); margin-top: 8px; display: block;">Most recent on the right</small>
+			</section>
+		}
+
+		// Performance Charts
+		if data.H2HTrendChart != "" || data.PartnerEffectChart != "" {
+			<section>
+				<h2>Performance Analysis</h2>
+				@ChartStyles()
+				<div class="chart-grid">
+					if data.H2HTrendChart != "" {
+						@ChartCard("Win Rate Trend (3-Match Avg)", "player-h2h-trend", data.H2HTrendChart)
+					}
+					if data.PartnerEffectChart != "" {
+						@ChartCard("Record by Their Partner", "partner-effect", data.PartnerEffectChart)
+					}
+				</div>
+				@ChartTooltipScript()
 			</section>
 		}
 

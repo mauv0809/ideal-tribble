@@ -2,6 +2,7 @@ package templates
 
 import (
 	"fmt"
+	"html/template"
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
 )
 
@@ -40,6 +41,10 @@ type PairingDetailData struct {
 	TotalMatches  int
 	// Filter
 	Filter        string // "", "wins", "losses"
+	// Charts
+	WinRateTrendChart   template.HTML
+	DayOfWeekChart      template.HTML
+	HourOfDayChart      template.HTML
 }
 
 // MatchHistoryData holds data for the match history partial.
@@ -211,6 +216,26 @@ templ PairingDetailPage(data PairingDetailData) {
 						</div>
 					</div>
 				}
+			</section>
+		}
+
+		// Performance Charts
+		if data.WinRateTrendChart != "" || data.DayOfWeekChart != "" || data.HourOfDayChart != "" {
+			<section>
+				<h2>Performance Trends</h2>
+				@ChartStyles()
+				<div class="chart-grid">
+					if data.WinRateTrendChart != "" {
+						@ChartCard("Win Rate Trend (5-Match Rolling Avg)", "win-rate-trend", data.WinRateTrendChart)
+					}
+					if data.DayOfWeekChart != "" {
+						@ChartCard("Results by Day of Week", "day-of-week", data.DayOfWeekChart)
+					}
+					if data.HourOfDayChart != "" {
+						@ChartCard("Results by Time of Day", "hour-of-day", data.HourOfDayChart)
+					}
+				</div>
+				@ChartTooltipScript()
 			</section>
 		}
 

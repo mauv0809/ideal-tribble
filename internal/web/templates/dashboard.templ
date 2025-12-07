@@ -1,6 +1,8 @@
 package templates
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // DashboardMatch represents a recent match for the dashboard.
 type DashboardMatch struct {
@@ -34,8 +36,8 @@ type DashboardData struct {
 	LastFetchTimestamp    int64
 	MostActivePairing     *PairingHighlight
 	BestPerformingPairing *PairingHighlight
-	SelectedPeriod        int    // Days: 7, 30, 90, 0 = all time
-	PeriodLabel           string // "Last 7 Days", "Last 30 Days", etc.
+	SelectedPeriod int    // Days: 7, 30, 90, 0 = all time
+	PeriodLabel    string // "Last 7 Days", "Last 30 Days", etc.
 }
 
 // DashboardPage renders the main dashboard.
@@ -91,6 +93,7 @@ templ DashboardPage(data DashboardData) {
 				</div>
 			</section>
 		}
+
 
 		if len(data.RecentMatchesList) > 0 {
 			<section>

@@ -1,0 +1,147 @@
+package templates
+
+import "html/template"
+
+// ChartContainer wraps a chart SVG with optional styling and interactivity hooks.
+templ ChartContainer(id string, svg template.HTML) {
+	<div
+		id={ id }
+		class="chart-container"
+		style="width: 100%; aspect-ratio: 16/10; min-height: 200px;"
+	>
+		@templ.Raw(string(svg))
+	</div>
+}
+
+// ChartCard wraps a chart in a card with title.
+templ ChartCard(title string, id string, svg template.HTML) {
+	<article class="chart-card">
+		if title != "" {
+			<header style="padding-bottom: 0.5rem;">
+				<h3 style="margin: 0; font-size: 1rem;">{ title }</h3>
+			</header>
+		}
+		<div
+			id={ id }
+			class="chart-container"
+			style="width: 100%; aspect-ratio: 16/10; min-height: 200px;"
+		>
+			@templ.Raw(string(svg))
+		</div>
+	</article>
+}
+
+// ChartGrid creates a responsive grid of charts.
+templ ChartGrid() {
+	<div class="chart-grid">
+		{ children... }
+	</div>
+}
+
+// ChartStyles adds CSS for chart components.
+// Include this once in your layout or page.
+templ ChartStyles() {
+	<style>
+		.chart-container {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.chart-container svg {
+			width: 100%;
+			height: auto;
+		}
+		.chart-card {
+			margin-bottom: 1rem;
+		}
+		.chart-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+			gap: 1rem;
+		}
+		/* Hover effects for interactive charts */
+		.chart-point, .chart-bar {
+			transition: opacity 0.15s ease;
+			cursor: pointer;
+		}
+		.chart-point:hover, .chart-bar:hover {
+			opacity: 0.8;
+		}
+		/* Tooltip styles (for future JS enhancement) */
+		.chart-tooltip {
+			position: absolute;
+			background: var(--bg-surface, #1e1e2e);
+			border: 1px solid var(--border-color, #313244);
+			border-radius: 6px;
+			padding: 8px 12px;
+			font-size: 12px;
+			color: var(--text-primary, #cdd6f4);
+			pointer-events: none;
+			z-index: 1000;
+			box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+		}
+		.chart-tooltip-label {
+			font-weight: 600;
+			margin-bottom: 4px;
+		}
+		.chart-tooltip-value {
+			color: var(--text-muted, #6c7086);
+		}
+	</style>
+}
+
+// ChartTooltipScript adds optional JavaScript for tooltips.
+// Only include if you want hover tooltips on charts.
+templ ChartTooltipScript() {
+	<script>
+		(function() {
+			// Create tooltip element
+			const tooltip = document.createElement('div');
+			tooltip.className = 'chart-tooltip';
+			tooltip.style.display = 'none';
+			document.body.appendChild(tooltip);
+
+			// Show tooltip on hover
+			document.addEventListener('mouseover', function(e) {
+				const el = e.target;
+				if (el.classList.contains('chart-point') || el.classList.contains('chart-bar')) {
+					const label = el.dataset.label || '';
+					const value = el.dataset.value || '';
+					const series = el.dataset.series || '';
+
+					let html = '';
+					if (label) html += `<div class="chart-tooltip-label">${label}</div>`;
+					if (series) html += `<div class="chart-tooltip-value">${series}: ${value}</div>`;
+					else if (value) html += `<div class="chart-tooltip-value">${value}</div>`;
+
+					if (html) {
+						tooltip.innerHTML = html;
+						tooltip.style.display = 'block';
+						positionTooltip(e);
+					}
+				}
+			});
+
+			// Hide tooltip
+			document.addEventListener('mouseout', function(e) {
+				if (e.target.classList.contains('chart-point') || e.target.classList.contains('chart-bar')) {
+					tooltip.style.display = 'none';
+				}
+			});
+
+			// Move tooltip with mouse
+			document.addEventListener('mousemove', function(e) {
+				if (tooltip.style.display === 'block') {
+					positionTooltip(e);
+				}
+			});
+
+			function positionTooltip(e) {
+				const x = e.pageX + 10;
+				const y = e.pageY - 10;
+				tooltip.style.left = x + 'px';
+				tooltip.style.top = y + 'px';
+			}
+		})();
+	</script>
+}

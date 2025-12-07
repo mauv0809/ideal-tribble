@@ -2,9 +2,12 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
+	"html/template"
 	"net/http"
 	"strconv"
 
+	"github.com/mauv0809/ideal-tribble/internal/charts"
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
 	"github.com/mauv0809/ideal-tribble/internal/web/templates"
 )
@@ -379,22 +382,201 @@ func (h *Handlers) PairingDetail(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * pageSize
 	recentMatches := h.getMatchesPaginated(id, pageSize, offset)
 
+	// Build charts
+	winRateTrendChart := h.buildWinRateTrendChart(id)
+	dayOfWeekChart := h.buildDayOfWeekChart(id)
+	hourOfDayChart := h.buildHourOfDayChart(id)
+
 	data := templates.PairingDetailData{
 		PageData: templates.PageData{
 			Title: pairing.Player1Name + " & " + pairing.Player2Name,
 			User:  user,
 		},
-		Pairing:          *pairing,
-		Stats:            stats,
-		SituationalStats: situationalStats,
-		RecentMatches:    recentMatches,
-		CurrentPage:      page,
-		TotalPages:       totalPages,
-		TotalMatches:     totalMatches,
+		Pairing:           *pairing,
+		Stats:             stats,
+		SituationalStats:  situationalStats,
+		RecentMatches:     recentMatches,
+		CurrentPage:       page,
+		TotalPages:        totalPages,
+		TotalMatches:      totalMatches,
+		WinRateTrendChart: winRateTrendChart,
+		DayOfWeekChart:    dayOfWeekChart,
+		HourOfDayChart:    hourOfDayChart,
 	}
 
 	component := templates.PairingDetailPage(data)
 	_ = component.Render(r.Context(), w)
+}
+
+// buildWinRateTrendChart creates a line chart showing rolling win rate over recent matches.
+func (h *Handlers) buildWinRateTrendChart(pairingID int64) template.HTML {
+	// Get last 20 matches (oldest first for chronological order)
+	matches, err := h.pairingsStore.GetPairingRecentMatches(pairingID, 20)
+	if err != nil || len(matches) < 8 {
+		return "" // Need at least 8 matches for a meaningful trend chart
+	}
+
+	// Reverse to get chronological order (oldest first)
+	for i, j := 0, len(matches)-1; i < j; i, j = i+1, j-1 {
+		matches[i], matches[j] = matches[j], matches[i]
+	}
+
+	// Calculate rolling win rate - use smaller window for smaller datasets
+	windowSize := 5
+	if len(matches) < 12 {
+		windowSize = 3 // Use 3-match window for smaller datasets
+	}
+
+	points := make([]charts.DataPoint, 0)
+	var wins int
+
+	for i, m := range matches {
+		if m.PairingWon {
+			wins++
+		}
+
+		// Start tracking after we have enough for a window
+		if i >= windowSize-1 {
+			// Remove oldest match from window if we're past the initial window
+			if i >= windowSize && matches[i-windowSize].PairingWon {
+				wins--
+			}
+
+			winRate := float64(wins) / float64(windowSize) * 100
+			points = append(points, charts.DataPoint{
+				Label: fmt.Sprintf("%d", i+1),
+				Value: winRate,
+				Meta: map[string]string{
+					"match": fmt.Sprintf("Match %d", i+1),
+				},
+			})
+		}
+	}
+
+	if len(points) < 5 {
+		return "" // Need at least 5 data points for a meaningful trend
+	}
+
+	config := charts.DefaultConfig()
+	config.Width = 400
+	config.Height = 200
+	config.PaddingTop = 20
+	config.PaddingBottom = 30
+	config.PaddingLeft = 40
+	config.PaddingRight = 20
+	config.ShowLegend = false
+
+	chart := charts.NewLineChart().
+		SetConfig(config).
+		WithArea(true).
+		WithSmooth(true).
+		AddDataPoints("Win Rate %", points)
+
+	svg, err := chart.Render()
+	if err != nil {
+		return ""
+	}
+	return svg
+}
+
+// buildDayOfWeekChart creates a bar chart showing wins/losses by day of week.
+func (h *Handlers) buildDayOfWeekChart(pairingID int64) template.HTML {
+	timeStats, err := h.pairingsStore.GetPairingTimeStats(pairingID)
+	if err != nil || timeStats == nil {
+		return ""
+	}
+
+	dayNames := []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
+	wins := make([]int, 7)
+	losses := make([]int, 7)
+	hasData := false
+
+	for day := 0; day < 7; day++ {
+		if stats, ok := timeStats.ByDayOfWeek[day]; ok && stats.MatchesPlayed > 0 {
+			wins[day] = stats.MatchesWon
+			losses[day] = stats.MatchesLost
+			hasData = true
+		}
+	}
+
+	if !hasData {
+		return ""
+	}
+
+	config := charts.DefaultConfig()
+	config.Width = 400
+	config.Height = 220
+	config.PaddingTop = 20
+	config.PaddingBottom = 30
+	config.PaddingLeft = 40
+	config.PaddingRight = 20
+	config.ShowLegend = true
+
+	chart := charts.NewWinLossBarChart()
+	chart.SetConfig(config)
+	chart.SetWinLossData(dayNames, wins, losses)
+
+	svg, err := chart.Render()
+	if err != nil {
+		return ""
+	}
+	return svg
+}
+
+// buildHourOfDayChart creates a bar chart showing wins/losses by time of day.
+func (h *Handlers) buildHourOfDayChart(pairingID int64) template.HTML {
+	timeStats, err := h.pairingsStore.GetPairingTimeStats(pairingID)
+	if err != nil || timeStats == nil {
+		return ""
+	}
+
+	// Morning (6-12), Afternoon (12-18), Evening (18-24)
+	timeRanges := []string{"Morning", "Afternoon", "Evening"}
+	wins := make([]int, 3)
+	losses := make([]int, 3)
+	hasData := false
+
+	for hourRange, stats := range timeStats.ByHourRange {
+		if stats.MatchesPlayed > 0 {
+			hasData = true
+			idx := -1
+			switch hourRange {
+			case "morning":
+				idx = 0
+			case "afternoon":
+				idx = 1
+			case "evening":
+				idx = 2
+			}
+			if idx >= 0 {
+				wins[idx] = stats.MatchesWon
+				losses[idx] = stats.MatchesLost
+			}
+		}
+	}
+
+	if !hasData {
+		return ""
+	}
+
+	config := charts.DefaultConfig()
+	config.Width = 400
+	config.Height = 220
+	config.PaddingTop = 20
+	config.PaddingBottom = 30
+	config.PaddingLeft = 40
+	config.PaddingRight = 20
+	config.ShowLegend = true
+
+	chart := charts.NewWinLossBarChart()
+	chart.SetConfig(config)
+	chart.SetWinLossData(timeRanges, wins, losses)
+
+	svg, err := chart.Render()
+	if err != nil {
+		return ""
+	}
+	return svg
 }
 
 // MatchHistoryPartial returns the match history partial for HTMX requests.
@@ -642,6 +824,9 @@ func (h *Handlers) OpponentDetail(w http.ResponseWriter, r *http.Request) {
 		recentForm = append(recentForm, matches[i].PairingWon)
 	}
 
+	// Build H2H trend chart
+	h2hTrendChart := h.buildH2HTrendChart(matches)
+
 	data := templates.OpponentDetailData{
 		PageData: templates.PageData{
 			Title: "vs " + oppStats.Opponent1Name + " & " + oppStats.Opponent2Name,
@@ -651,6 +836,7 @@ func (h *Handlers) OpponentDetail(w http.ResponseWriter, r *http.Request) {
 		OpponentStats: *oppStats,
 		Matches:       oppMatches,
 		RecentForm:    recentForm,
+		H2HTrendChart: h2hTrendChart,
 	}
 
 	component := templates.OpponentDetailPage(data)
@@ -750,20 +936,134 @@ func (h *Handlers) IndividualPlayerDetail(w http.ResponseWriter, r *http.Request
 		recentForm = append(recentForm, matches[i].PairingWon)
 	}
 
+	// Build charts
+	h2hTrendChart := h.buildH2HTrendChart(matches)
+	partnerEffectChart := h.buildPartnerEffectChart(partners)
+
 	data := templates.IndividualPlayerDetailData{
 		PageData: templates.PageData{
 			Title: "vs " + playerStats.PlayerName,
 			User:  user,
 		},
-		Pairing:     *pairing,
-		PlayerStats: *playerStats,
-		Partners:    partners,
-		Matches:     playerMatches,
-		RecentForm:  recentForm,
+		Pairing:            *pairing,
+		PlayerStats:        *playerStats,
+		Partners:           partners,
+		Matches:            playerMatches,
+		RecentForm:         recentForm,
+		H2HTrendChart:      h2hTrendChart,
+		PartnerEffectChart: partnerEffectChart,
 	}
 
 	component := templates.IndividualPlayerDetailPage(data)
 	_ = component.Render(r.Context(), w)
+}
+
+// buildPartnerEffectChart creates a bar chart showing win rate against a player by their partner.
+func (h *Handlers) buildPartnerEffectChart(partners []pairings.PlayerPartnerStats) template.HTML {
+	if len(partners) < 2 {
+		return "" // Need at least 2 partners for comparison
+	}
+
+	// Limit to top 6 partners by matches played
+	maxPartners := 6
+	if len(partners) < maxPartners {
+		maxPartners = len(partners)
+	}
+
+	labels := make([]string, maxPartners)
+	wins := make([]int, maxPartners)
+	losses := make([]int, maxPartners)
+
+	for i := 0; i < maxPartners; i++ {
+		// Truncate long names
+		name := partners[i].PartnerName
+		if len(name) > 10 {
+			name = name[:8] + ".."
+		}
+		labels[i] = name
+		wins[i] = partners[i].MatchesWon
+		losses[i] = partners[i].MatchesLost
+	}
+
+	config := charts.DefaultConfig()
+	config.Width = 400
+	config.Height = 220
+	config.PaddingTop = 20
+	config.PaddingBottom = 30
+	config.PaddingLeft = 40
+	config.PaddingRight = 20
+	config.ShowLegend = true
+
+	chart := charts.NewWinLossBarChart()
+	chart.SetConfig(config)
+	chart.SetWinLossData(labels, wins, losses)
+
+	svg, err := chart.Render()
+	if err != nil {
+		return ""
+	}
+	return svg
+}
+
+// buildH2HTrendChart creates a line chart showing rolling win rate over time.
+func (h *Handlers) buildH2HTrendChart(matches []pairings.PairingMatch) template.HTML {
+	if len(matches) < 3 {
+		return "" // Not enough data for a meaningful chart
+	}
+
+	// Matches are returned newest first, reverse for chronological order
+	reversed := make([]pairings.PairingMatch, len(matches))
+	for i, m := range matches {
+		reversed[len(matches)-1-i] = m
+	}
+
+	// Use 3-match rolling window for win rate
+	windowSize := 3
+	points := make([]charts.DataPoint, 0, len(reversed)-windowSize+1)
+
+	for i := windowSize - 1; i < len(reversed); i++ {
+		// Calculate win rate for the window ending at position i
+		wins := 0
+		for j := i - windowSize + 1; j <= i; j++ {
+			if reversed[j].PairingWon {
+				wins++
+			}
+		}
+		winRate := float64(wins) / float64(windowSize) * 100
+
+		points = append(points, charts.DataPoint{
+			Label: fmt.Sprintf("%d", i+1),
+			Value: winRate,
+			Meta: map[string]string{
+				"match": fmt.Sprintf("Match %d", i+1),
+			},
+		})
+	}
+
+	if len(points) < 2 {
+		return "" // Need at least 2 points for a line
+	}
+
+	config := charts.DefaultConfig()
+	config.Width = 400
+	config.Height = 200
+	config.PaddingTop = 20
+	config.PaddingBottom = 30
+	config.PaddingLeft = 40
+	config.PaddingRight = 20
+	config.ShowLegend = false
+
+	chart := charts.NewLineChart().
+		SetConfig(config).
+		WithArea(true).
+		WithSmooth(true).
+		AddDataPoints("Win Rate", points)
+
+	svg, err := chart.Render()
+	if err != nil {
+		return ""
+	}
+	return svg
 }
 
 // FetchMatches handles manual match fetching from Playtomic.
