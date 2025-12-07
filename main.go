@@ -196,7 +196,7 @@ func main() {
 		// Web UI routes
 		switch {
 		case r.URL.Path == "/" ||
-			r.URL.Path == "/login" ||
+			hasPrefix(r.URL.Path, "/login") ||
 			r.URL.Path == "/logout" ||
 			r.URL.Path == "/dashboard" ||
 			r.URL.Path == "/profile" ||
