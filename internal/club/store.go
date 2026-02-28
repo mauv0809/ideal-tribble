@@ -2004,3 +2004,16 @@ func (s *store) GetDistinctVenues(query string, limit int) ([]string, error) {
 
 	return venues, nil
 }
+
+// Ping checks database connectivity by executing a simple query.
+func (s *store) Ping() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result int
+	err := s.db.QueryRow("SELECT 1").Scan(&result)
+	if err != nil {
+		return fmt.Errorf("database ping failed: %w", err)
+	}
+	return nil
+}

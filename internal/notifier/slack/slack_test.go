@@ -17,6 +17,7 @@ import (
 // mockSlackAPI is a mock implementation of the parts of the slack.Client that we use.
 type mockSlackAPI struct {
 	postMessageContextFunc func(ctx context.Context, channelID string, options ...slackapi.MsgOption) (string, string, error)
+	authTestContextFunc    func(ctx context.Context) (*slackapi.AuthTestResponse, error)
 }
 
 func (m *mockSlackAPI) PostMessageContext(ctx context.Context, channelID string, options ...slackapi.MsgOption) (string, string, error) {
@@ -24,6 +25,13 @@ func (m *mockSlackAPI) PostMessageContext(ctx context.Context, channelID string,
 		return m.postMessageContextFunc(ctx, channelID, options...)
 	}
 	return "C12345", "123456789.12345", nil
+}
+
+func (m *mockSlackAPI) AuthTestContext(ctx context.Context) (*slackapi.AuthTestResponse, error) {
+	if m.authTestContextFunc != nil {
+		return m.authTestContextFunc(ctx)
+	}
+	return &slackapi.AuthTestResponse{}, nil
 }
 
 func TestSendMessage_DryRun(t *testing.T) {

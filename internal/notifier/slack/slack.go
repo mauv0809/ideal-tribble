@@ -21,6 +21,7 @@ import (
 // This allows for easy mocking in tests.
 type slackClient interface {
 	PostMessageContext(ctx context.Context, channelID string, options ...slack.MsgOption) (string, string, error)
+	AuthTestContext(ctx context.Context) (*slack.AuthTestResponse, error)
 }
 
 var _ notifier.Notifier = &Notifier{}
@@ -777,4 +778,16 @@ func (s *Notifier) formatMatchRequestResponse(request *matchmaking.MatchRequest)
 	}
 
 	return slack.NewBlockMessage(blocks...)
+}
+
+// Ping checks Slack API connectivity by calling auth.test.
+func (s *Notifier) Ping() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := s.api.AuthTestContext(ctx)
+	if err != nil {
+		return fmt.Errorf("slack auth test failed: %w", err)
+	}
+	return nil
 }

@@ -34,4 +34,7 @@ type Notifier interface {
 
 	// For direct messages
 	SendDirectMessage(userID string, text string) (string, string, error)
+
+	// Health check
+	Ping() error
 }

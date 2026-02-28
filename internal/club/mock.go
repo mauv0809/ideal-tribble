@@ -263,3 +263,72 @@ func (m *MockStore) UpdateNotificationTimestamp(matchID string, notificationType
 	}
 	return nil
 }
+
+func (m *MockStore) Ping() error {
+	return nil
+}
+
+// Slack mapping methods
+func (m *MockStore) GetPlayerBySlackUserID(slackUserID string) (*PlayerInfo, error) {
+	return nil, nil
+}
+
+func (m *MockStore) GetUnmappedPlayers() ([]PlayerInfo, error) {
+	return nil, nil
+}
+
+func (m *MockStore) UpdatePlayerSlackMapping(playerID, slackUserID, slackUsername, slackDisplayName, status string, confidence float64) error {
+	return nil
+}
+
+func (m *MockStore) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, error) {
+	return nil, nil
+}
+
+// Player alias methods
+func (m *MockStore) CreatePlayerAlias(manualID, manualName string) (*PlayerAlias, error) {
+	return nil, nil
+}
+
+func (m *MockStore) GetPlayerAlias(manualID string) (*PlayerAlias, error) {
+	return nil, nil
+}
+
+func (m *MockStore) GetAllPlayerAliases() ([]PlayerAlias, error) {
+	return nil, nil
+}
+
+func (m *MockStore) GetUnlinkedAliases() ([]PlayerAlias, error) {
+	return nil, nil
+}
+
+func (m *MockStore) LinkPlayerAlias(manualID, playtomicID, playtomicName string, confirmed bool, confidence float64) error {
+	return nil
+}
+
+func (m *MockStore) UnlinkPlayerAlias(manualID string) error {
+	return nil
+}
+
+func (m *MockStore) ResolvePlayerID(playerID string) string {
+	return playerID
+}
+
+// Player suggestion
+func (m *MockStore) SuggestPlayersForName(name string, limit int) ([]PlayerSuggestion, error) {
+	return nil, nil
+}
+
+// Manual match methods
+func (m *MockStore) CreateManualMatch(input *ManualMatchInput, createdBy string) (*playtomic.PadelMatch, error) {
+	return nil, nil
+}
+
+func (m *MockStore) GetManualMatches() ([]*playtomic.PadelMatch, error) {
+	return nil, nil
+}
+
+// Venue suggestions
+func (m *MockStore) GetDistinctVenues(query string, limit int) ([]string, error) {
+	return nil, nil
+}

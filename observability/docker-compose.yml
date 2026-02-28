@@ -64,8 +64,8 @@ services:
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana/
-      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      # Note: root_url and serve_from_sub_path are configured in grafana.ini
+      # Do NOT set GF_SERVER_ROOT_URL here - the %(...)s syntax only works in INI files
     volumes:
       - /var/lib/observability/grafana:/var/lib/grafana:rw
       - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro

@@ -194,3 +194,7 @@ func (m *Mock) SendMatchProposal(request any, proposal any, dryRun bool) error {
 	}
 	return nil
 }
+
+func (m *Mock) Ping() error {
+	return nil
+}

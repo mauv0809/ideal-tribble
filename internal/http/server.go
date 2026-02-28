@@ -45,6 +45,7 @@ func (s *Server) routes() {
 
 	// Health and operational endpoints
 	s.Router.Handle("/health", Chain(handlers.HealthCheckHandler(s.Store), paramsMiddleware))
+	s.Router.Handle("/health/deep", Chain(handlers.DeepHealthCheckHandler(s.Store, s.Notifier), paramsMiddleware))
 	s.Router.Handle("/clear", Chain(handlers.ClearStoreHandler(s.Store), paramsMiddleware))
 
 	// REST API endpoints

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -18,12 +19,16 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// InitOtel initializes OpenTelemetry with OTLP gRPC exporter
+// InitOtel initializes OpenTelemetry with OTLP gRPC exporter.
+// Set OTEL_EXPORTER_OTLP_ENDPOINT to "disabled" or "none" to skip initialization.
 func InitOtel(ctx context.Context) (func(), error) {
 	// Get the OTel Collector endpoint from environment
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "localhost:4317"
+
+	// Allow disabling OTel for local development
+	if endpoint == "" || endpoint == "disabled" || endpoint == "none" {
+		log.Info("OpenTelemetry disabled (OTEL_EXPORTER_OTLP_ENDPOINT not set or disabled)")
+		return func() {}, nil
 	}
 
 	// Initialize the OTLP gRPC trace exporter
@@ -91,4 +96,41 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// InitLogging configures the charmbracelet/log logger based on environment variables.
+//
+// Environment variables:
+//   - LOG_FORMAT: "json" (default) or "text" - controls output format
+//   - LOG_LEVEL: "debug", "info" (default), "warn", or "error"
+//
+// JSON format is recommended for production as it enables:
+//   - Structured log parsing in Loki/Grafana
+//   - Easy correlation with trace_id and span_id
+//   - Machine-readable log aggregation
+func InitLogging() {
+	// Configure log format
+	format := strings.ToLower(getEnvOrDefault("LOG_FORMAT", "json"))
+	switch format {
+	case "text":
+		log.SetFormatter(log.TextFormatter)
+	default:
+		log.SetFormatter(log.JSONFormatter)
+	}
+
+	// Configure log level
+	level := strings.ToLower(getEnvOrDefault("LOG_LEVEL", "info"))
+	switch level {
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "warn", "warning":
+		log.SetLevel(log.WarnLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	default:
+		log.SetLevel(log.InfoLevel)
+	}
+
+	// Log the configuration (only visible if level allows)
+	log.Debug("Logging initialized", "format", format, "level", level)
 }

@@ -31,8 +31,10 @@ import (
 func main() {
 	// Start profiling timer
 	startTime := time.Now()
-	log.SetFormatter(log.JSONFormatter)
-	
+
+	// Initialize logging (configurable via LOG_FORMAT and LOG_LEVEL env vars)
+	telemetry.InitLogging()
+
 	// Initialize OpenTelemetry
 	otelShutdown, err := telemetry.InitOtel(context.Background())
 	if err != nil {

@@ -49,4 +49,7 @@ type ClubStore interface {
 
 	// Venue suggestions
 	GetDistinctVenues(query string, limit int) ([]string, error)
+
+	// Health check
+	Ping() error
 }
