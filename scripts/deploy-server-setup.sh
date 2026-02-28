@@ -40,6 +40,12 @@ if [ ! -f "/etc/systemd/system/observability.service" ]; then
     echo "✅ Observability stack configured"
 else
     echo "✅ Observability stack already configured"
+    # Restart observability to pick up config changes
+    echo "🔄 Restarting observability stack to apply any config changes..."
+    cd /opt/ideal-tribble/observability
+    docker compose up -d --force-recreate
+    cd /opt/ideal-tribble
+    echo "✅ Observability stack restarted"
 fi
 
 # Setup cron jobs (only if not already configured)
