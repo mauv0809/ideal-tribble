@@ -70,7 +70,7 @@ services:
       - /var/lib/observability/grafana:/var/lib/grafana:rw
       - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - ./grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
-      - ./dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
       - ./grafana.ini:/etc/grafana/grafana.ini:ro
     ports:
       - "3000:3000"   # Grafana HTTP (internal only)
