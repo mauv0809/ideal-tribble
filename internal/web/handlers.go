@@ -6,9 +6,12 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/mauv0809/ideal-tribble/internal/charts"
+	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
+	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 	"github.com/mauv0809/ideal-tribble/internal/web/templates"
 )
 
@@ -21,14 +24,16 @@ type FetchService interface {
 type Handlers struct {
 	middleware    *Middleware
 	pairingsStore pairings.PairingsStore
+	clubStore     club.ClubStore
 	fetchService  FetchService
 }
 
 // NewHandlers creates a new web handlers instance.
-func NewHandlers(middleware *Middleware, pairingsStore pairings.PairingsStore, fetchService FetchService) *Handlers {
+func NewHandlers(middleware *Middleware, pairingsStore pairings.PairingsStore, clubStore club.ClubStore, fetchService FetchService) *Handlers {
 	return &Handlers{
 		middleware:    middleware,
 		pairingsStore: pairingsStore,
+		clubStore:     clubStore,
 		fetchService:  fetchService,
 	}
 }
@@ -1106,4 +1111,325 @@ func (h *Handlers) FetchMatches(w http.ResponseWriter, r *http.Request) {
 		"pairing_matches": pairingMatches,
 		"days":           days,
 	})
+}
+
+// NewMatchForm renders the manual match entry form.
+func (h *Handlers) NewMatchForm(w http.ResponseWriter, r *http.Request) {
+	user := GetUser(r)
+
+	// Get all known players for suggestions
+	allPlayers, _ := h.clubStore.GetAllPlayers()
+
+	data := templates.MatchEntryData{
+		PageData: templates.PageData{
+			Title: "Enter Match",
+			User:  user,
+		},
+		AllPlayers: allPlayers,
+	}
+
+	// Check for pairing pre-fill
+	if pairingIDStr := r.URL.Query().Get("pairing"); pairingIDStr != "" {
+		if pairingID, err := strconv.ParseInt(pairingIDStr, 10, 64); err == nil {
+			if pairing, err := h.pairingsStore.GetPairingByID(pairingID); err == nil && pairing != nil {
+				data.PairingID = pairingID
+				data.Team1Player1 = &templates.PrefilledPlayer{
+					ID:   pairing.Player1ID,
+					Name: pairing.Player1Name,
+				}
+				data.Team1Player2 = &templates.PrefilledPlayer{
+					ID:   pairing.Player2ID,
+					Name: pairing.Player2Name,
+				}
+			}
+		}
+	}
+
+	component := templates.MatchEntryPage(data)
+	_ = component.Render(r.Context(), w)
+}
+
+// CreateManualMatch handles the form submission for manual match entry.
+func (h *Handlers) CreateManualMatch(w http.ResponseWriter, r *http.Request) {
+	user := GetUser(r)
+
+	if err := r.ParseForm(); err != nil {
+		h.renderMatchFormWithError(w, r, "Invalid form data")
+		return
+	}
+
+	// Parse date and time
+	dateStr := r.FormValue("match_date")
+	timeStr := r.FormValue("match_time")
+	if dateStr == "" {
+		h.renderMatchFormWithError(w, r, "Match date is required")
+		return
+	}
+
+	dateTimeStr := dateStr
+	if timeStr != "" {
+		dateTimeStr = dateStr + " " + timeStr
+	} else {
+		dateTimeStr = dateStr + " 12:00"
+	}
+
+	matchDate, err := time.Parse("2006-01-02 15:04", dateTimeStr)
+	if err != nil {
+		h.renderMatchFormWithError(w, r, "Invalid date format")
+		return
+	}
+
+	// Parse match type
+	matchType := r.FormValue("match_type")
+	var matchTypeEnum playtomic.MatchTypeEnum
+	switch matchType {
+	case "singles":
+		matchTypeEnum = playtomic.MatchTypeEnumSingles
+	case "doubles":
+		matchTypeEnum = playtomic.MatchTypeEnumDoubles
+	default:
+		matchTypeEnum = playtomic.MatchTypeEnumDoubles
+	}
+
+	competitionMode := r.FormValue("competition_mode")
+	if competitionMode != "COMPETITIVE" && competitionMode != "FRIENDLY" {
+		competitionMode = "FRIENDLY"
+	}
+
+	venueName := r.FormValue("venue_name")
+
+	// Parse players
+	team1Players := []club.ManualPlayerInput{
+		{ID: r.FormValue("team1_player1_id"), Name: r.FormValue("team1_player1_name")},
+	}
+	team2Players := []club.ManualPlayerInput{
+		{ID: r.FormValue("team2_player1_id"), Name: r.FormValue("team2_player1_name")},
+	}
+
+	if matchTypeEnum == playtomic.MatchTypeEnumDoubles {
+		team1Players = append(team1Players, club.ManualPlayerInput{
+			ID: r.FormValue("team1_player2_id"), Name: r.FormValue("team1_player2_name"),
+		})
+		team2Players = append(team2Players, club.ManualPlayerInput{
+			ID: r.FormValue("team2_player2_id"), Name: r.FormValue("team2_player2_name"),
+		})
+	}
+
+	// Validate player names
+	for i, p := range team1Players {
+		if p.Name == "" {
+			h.renderMatchFormWithError(w, r, "Team 1 player "+(string(rune('1'+i)))+" name is required")
+			return
+		}
+	}
+	for i, p := range team2Players {
+		if p.Name == "" {
+			h.renderMatchFormWithError(w, r, "Team 2 player "+(string(rune('1'+i)))+" name is required")
+			return
+		}
+	}
+
+	// Parse sets
+	var sets []club.SetScoreInput
+	for i := 1; i <= 3; i++ {
+		t1Str := r.FormValue("set" + strconv.Itoa(i) + "_team1")
+		t2Str := r.FormValue("set" + strconv.Itoa(i) + "_team2")
+
+		if t1Str == "" && t2Str == "" {
+			continue // Skip empty sets
+		}
+
+		t1, err1 := strconv.Atoi(t1Str)
+		t2, err2 := strconv.Atoi(t2Str)
+		if err1 != nil || err2 != nil {
+			continue // Skip invalid sets
+		}
+
+		if t1 < 0 || t1 > 7 || t2 < 0 || t2 > 7 {
+			h.renderMatchFormWithError(w, r, "Set scores must be between 0 and 7")
+			return
+		}
+
+		sets = append(sets, club.SetScoreInput{
+			Team1Games: t1,
+			Team2Games: t2,
+		})
+	}
+
+	if len(sets) == 0 {
+		h.renderMatchFormWithError(w, r, "At least one set score is required")
+		return
+	}
+
+	// Create the manual match input
+	input := &club.ManualMatchInput{
+		MatchDate:       matchDate,
+		VenueName:       venueName,
+		MatchTypeEnum:   matchTypeEnum,
+		CompetitionMode: competitionMode,
+		Team1Players:    team1Players,
+		Team2Players:    team2Players,
+		Sets:            sets,
+	}
+
+	// Create the match
+	match, err := h.clubStore.CreateManualMatch(input, user.Email)
+	if err != nil {
+		h.renderMatchFormWithError(w, r, "Failed to create match: "+err.Error())
+		return
+	}
+
+	// Update player stats for this match
+	h.clubStore.UpdatePlayerStats(match)
+	h.clubStore.UpdateWeeklyStats(match)
+
+	// Set flash message and redirect
+	h.middleware.SetFlash(w, r, "success", "Match created successfully")
+	http.Redirect(w, r, "/matches/manual", http.StatusSeeOther)
+}
+
+func (h *Handlers) renderMatchFormWithError(w http.ResponseWriter, r *http.Request, errorMsg string) {
+	user := GetUser(r)
+	allPlayers, _ := h.clubStore.GetAllPlayers()
+
+	data := templates.MatchEntryData{
+		PageData: templates.PageData{
+			Title: "Enter Match",
+			User:  user,
+		},
+		AllPlayers: allPlayers,
+		Error:      errorMsg,
+	}
+
+	component := templates.MatchEntryPage(data)
+	_ = component.Render(r.Context(), w)
+}
+
+// ManualMatchesList shows all manually entered matches.
+func (h *Handlers) ManualMatchesList(w http.ResponseWriter, r *http.Request) {
+	user := GetUser(r)
+
+	matches, _ := h.clubStore.GetManualMatches()
+
+	data := templates.ManualMatchesData{
+		PageData: templates.PageData{
+			Title: "Manual Matches",
+			User:  user,
+		},
+		Matches: matches,
+	}
+
+	component := templates.ManualMatchesPage(data)
+	_ = component.Render(r.Context(), w)
+}
+
+// SuggestPlayers returns player suggestions for autocomplete.
+func (h *Handlers) SuggestPlayers(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" || len(query) < 2 {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(""))
+		return
+	}
+
+	suggestions, err := h.clubStore.SuggestPlayersForName(query, 5)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(""))
+		return
+	}
+
+	component := templates.PlayerSuggestions(suggestions)
+	w.Header().Set("Content-Type", "text/html")
+	_ = component.Render(r.Context(), w)
+}
+
+// SuggestVenues returns venue name suggestions for autocomplete.
+func (h *Handlers) SuggestVenues(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(""))
+		return
+	}
+
+	venues, err := h.clubStore.GetDistinctVenues(query, 8)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(""))
+		return
+	}
+
+	component := templates.VenueSuggestions(venues)
+	w.Header().Set("Content-Type", "text/html")
+	_ = component.Render(r.Context(), w)
+}
+
+// PlayersList shows all players with their alias status.
+func (h *Handlers) PlayersList(w http.ResponseWriter, r *http.Request) {
+	user := GetUser(r)
+
+	// Get Playtomic players
+	playtomicPlayers, _ := h.clubStore.GetAllPlayers()
+
+	// Get manual player aliases
+	aliases, _ := h.clubStore.GetAllPlayerAliases()
+
+	data := templates.PlayersListData{
+		PageData: templates.PageData{
+			Title: "Players",
+			User:  user,
+		},
+		PlaytomicPlayers: playtomicPlayers,
+		ManualAliases:    aliases,
+	}
+
+	component := templates.PlayersListPage(data)
+	_ = component.Render(r.Context(), w)
+}
+
+// LinkPlayer links a manual player to a Playtomic player.
+func (h *Handlers) LinkPlayer(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	manualID := r.PathValue("id")
+	playtomicID := r.FormValue("playtomic_id")
+	playtomicName := r.FormValue("playtomic_name")
+
+	if manualID == "" || playtomicID == "" {
+		http.Error(w, "Missing player IDs", http.StatusBadRequest)
+		return
+	}
+
+	err := h.clubStore.LinkPlayerAlias(manualID, playtomicID, playtomicName, true, 1.0)
+	if err != nil {
+		http.Error(w, "Failed to link player: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return success for HTMX
+	w.Header().Set("HX-Redirect", "/players")
+	w.WriteHeader(http.StatusOK)
+}
+
+// UnlinkPlayer removes the link between a manual and Playtomic player.
+func (h *Handlers) UnlinkPlayer(w http.ResponseWriter, r *http.Request) {
+	manualID := r.PathValue("id")
+	if manualID == "" {
+		http.Error(w, "Missing player ID", http.StatusBadRequest)
+		return
+	}
+
+	err := h.clubStore.UnlinkPlayerAlias(manualID)
+	if err != nil {
+		http.Error(w, "Failed to unlink player: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return success for HTMX
+	w.Header().Set("HX-Redirect", "/players")
+	w.WriteHeader(http.StatusOK)
 }

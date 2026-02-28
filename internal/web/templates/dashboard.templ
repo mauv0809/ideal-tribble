@@ -45,12 +45,18 @@ templ DashboardPage(data DashboardData) {
 	@Layout(data.PageData) {
 		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
 			<h1 style="margin-bottom: 0;">Dashboard</h1>
-			<select id="period-select" class="period-select">
-				<option value="7" selected?={ data.SelectedPeriod == 7 }>Last 7 Days</option>
-				<option value="30" selected?={ data.SelectedPeriod == 30 }>Last 30 Days</option>
-				<option value="90" selected?={ data.SelectedPeriod == 90 }>Last 90 Days</option>
-				<option value="0" selected?={ data.SelectedPeriod == 0 }>All Time</option>
-			</select>
+			<div style="display: flex; gap: 0.75rem; align-items: center;">
+				<a href="/matches/new" role="button" class="enter-match-btn">
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+					Enter Match
+				</a>
+				<select id="period-select" class="period-select">
+					<option value="7" selected?={ data.SelectedPeriod == 7 }>Last 7 Days</option>
+					<option value="30" selected?={ data.SelectedPeriod == 30 }>Last 30 Days</option>
+					<option value="90" selected?={ data.SelectedPeriod == 90 }>Last 90 Days</option>
+					<option value="0" selected?={ data.SelectedPeriod == 0 }>All Time</option>
+				</select>
+			</div>
 		</div>
 
 		<div class="stats-grid">
@@ -222,6 +228,21 @@ templ DashboardPage(data DashboardData) {
 		</script>
 
 		<style>
+			.enter-match-btn {
+				display: inline-flex;
+				align-items: center;
+				background: var(--accent-primary);
+				color: var(--ctp-base);
+				font-weight: 500;
+				padding: 0.5rem 1rem;
+				border-radius: var(--radius-md);
+				text-decoration: none;
+				transition: background 0.2s, transform 0.1s;
+			}
+			.enter-match-btn:hover {
+				background: var(--accent-hover);
+				transform: translateY(-1px);
+			}
 			.period-select {
 				width: auto;
 				min-width: 140px;

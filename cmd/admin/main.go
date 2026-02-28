@@ -54,6 +54,27 @@ Example:
 	},
 }
 
+var listUsersCmd = &cobra.Command{
+	Use:   "list-users",
+	Short: "List all users in the database",
+	Long:  `List all users to verify database connectivity and user existence.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return listUsers()
+	},
+}
+
+var resetPasswordCmd = &cobra.Command{
+	Use:   "reset-password",
+	Short: "Reset a user's password",
+	Long: `Reset the password for an existing user.
+
+Example:
+  tribble-admin reset-password --email admin@example.com --password newpassword123`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return resetPassword()
+	},
+}
+
 var secretLength int
 
 func init() {
@@ -75,8 +96,16 @@ func init() {
 	// Generate secret flags
 	generateSecretCmd.Flags().IntVar(&secretLength, "length", 32, "Secret length in bytes")
 
+	// Reset password flags
+	resetPasswordCmd.Flags().StringVar(&email, "email", "", "User email address (required)")
+	resetPasswordCmd.Flags().StringVar(&password, "password", "", "New password (required, min 8 chars)")
+	resetPasswordCmd.MarkFlagRequired("email")
+	resetPasswordCmd.MarkFlagRequired("password")
+
 	rootCmd.AddCommand(createUserCmd)
 	rootCmd.AddCommand(generateSecretCmd)
+	rootCmd.AddCommand(listUsersCmd)
+	rootCmd.AddCommand(resetPasswordCmd)
 }
 
 func main() {
@@ -144,5 +173,78 @@ func generateSecret() error {
 		fmt.Printf("  %s\n", secret[:32])
 	}
 
+	return nil
+}
+
+func listUsers() error {
+	// Initialize database
+	db, teardown, err := database.InitDB(dbName, tursoURL, tursoToken, "./migrations")
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer teardown()
+
+	// Create auth store
+	authStore := auth.NewStore(db)
+
+	users, err := authStore.ListUsers()
+	if err != nil {
+		return fmt.Errorf("failed to list users: %w", err)
+	}
+
+	if len(users) == 0 {
+		fmt.Println("No users found in the database.")
+		return nil
+	}
+
+	fmt.Printf("Found %d user(s):\n\n", len(users))
+	for _, user := range users {
+		role := "user"
+		if user.IsAdmin {
+			role = "admin"
+		}
+		totp := "disabled"
+		if user.TOTPEnabled {
+			totp = "enabled"
+		}
+		fmt.Printf("  ID: %d\n", user.ID)
+		fmt.Printf("  Email: %s\n", user.Email)
+		fmt.Printf("  Role: %s\n", role)
+		fmt.Printf("  TOTP: %s\n", totp)
+		fmt.Printf("  Created: %s\n", user.CreatedAt.Format("2006-01-02 15:04:05"))
+		fmt.Println()
+	}
+
+	return nil
+}
+
+func resetPassword() error {
+	// Validate inputs
+	if len(password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters")
+	}
+
+	// Initialize database
+	db, teardown, err := database.InitDB(dbName, tursoURL, tursoToken, "./migrations")
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer teardown()
+
+	// Create auth store
+	authStore := auth.NewStore(db)
+
+	// Find user
+	user, err := authStore.GetUserByEmail(email)
+	if err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	// Update password
+	if err := authStore.UpdatePassword(user.ID, password); err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	fmt.Printf("✓ Password reset successfully for %s\n", email)
 	return nil
 }

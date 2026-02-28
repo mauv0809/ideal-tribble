@@ -1,0 +1,380 @@
+package templates
+
+import (
+	"fmt"
+	"github.com/mauv0809/ideal-tribble/internal/club"
+)
+
+// PrefilledPlayer holds pre-filled player data.
+type PrefilledPlayer struct {
+	ID   string
+	Name string
+}
+
+// MatchEntryData holds data for the match entry form.
+type MatchEntryData struct {
+	PageData
+	AllPlayers     []club.PlayerInfo
+	Error          string
+	PairingID      int64
+	Team1Player1   *PrefilledPlayer
+	Team1Player2   *PrefilledPlayer
+}
+
+// MatchEntryPage renders the manual match entry form.
+templ MatchEntryPage(data MatchEntryData) {
+	@Layout(data.PageData) {
+		<div style="max-width: 800px; margin: 0 auto;">
+			<h1>Enter Match</h1>
+			<p style="color: var(--text-secondary); margin-bottom: 2rem;">
+				Manually record a match played outside of Playtomic-managed courts.
+			</p>
+
+			if data.Error != "" {
+				<div class="flash flash-error" style="margin-bottom: 1rem; padding: 1rem; background: var(--accent-error); color: var(--ctp-base); border-radius: var(--radius-md);">
+					{ data.Error }
+				</div>
+			}
+
+			<form method="POST" action="/matches/new">
+				<!-- Match Details -->
+				<article style="margin-bottom: 1.5rem;">
+					<header><h3 style="margin: 0;">Match Details</h3></header>
+					<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+						<label>
+							Date *
+							<input type="date" name="match_date" required/>
+						</label>
+						<label>
+							Time
+							<input type="time" name="match_time"/>
+						</label>
+						<div class="venue-autocomplete">
+							<label>
+								Venue
+								<input
+									type="text"
+									name="venue_name"
+									id="venue_name"
+									placeholder="Start typing venue name..."
+									autocomplete="off"
+									hx-get="/api/venues/suggest"
+									hx-trigger="keyup changed delay:200ms"
+									hx-target="#venue_suggestions"
+									hx-params="none"
+									hx-on::config-request="event.detail.parameters['q'] = this.value"
+								/>
+							</label>
+							<div id="venue_suggestions" class="venue-suggestions"></div>
+						</div>
+					</div>
+					<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
+						<label>
+							Match Type
+							<select name="match_type" id="match_type" onchange="toggleDoubles()">
+								<option value="doubles" selected>Doubles (2v2)</option>
+								<option value="singles">Singles (1v1)</option>
+							</select>
+						</label>
+						<label>
+							Competition Mode
+							<select name="competition_mode">
+								<option value="FRIENDLY" selected>Friendly</option>
+								<option value="COMPETITIVE">Competitive</option>
+							</select>
+						</label>
+					</div>
+				</article>
+
+				<!-- Team 1 -->
+				<article style="margin-bottom: 1.5rem; border-left: 4px solid var(--accent-primary);">
+					<header>
+						<h3 style="margin: 0;">
+							Team 1
+							if data.PairingID > 0 {
+								<small style="font-weight: normal; color: var(--text-muted);"> (Your pairing)</small>
+							}
+						</h3>
+					</header>
+					<div class="player-section">
+						@PlayerInput("team1_player1", "Player 1 *", data.AllPlayers, data.Team1Player1)
+					</div>
+					<div class="player-section doubles-only" id="team1_player2_section">
+						@PlayerInput("team1_player2", "Player 2 *", data.AllPlayers, data.Team1Player2)
+					</div>
+				</article>
+
+				<!-- Team 2 -->
+				<article style="margin-bottom: 1.5rem; border-left: 4px solid var(--accent-info);">
+					<header><h3 style="margin: 0;">Team 2</h3></header>
+					<div class="player-section">
+						@PlayerInput("team2_player1", "Player 1 *", data.AllPlayers, nil)
+					</div>
+					<div class="player-section doubles-only" id="team2_player2_section">
+						@PlayerInput("team2_player2", "Player 2 *", data.AllPlayers, nil)
+					</div>
+				</article>
+
+				<!-- Set Scores -->
+				<article style="margin-bottom: 1.5rem;">
+					<header><h3 style="margin: 0;">Set Scores</h3></header>
+					<p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+						Enter game scores for each set (0-7 games per team).
+					</p>
+					<div style="display: grid; gap: 1rem;">
+						@SetScoreInput(1, true)
+						@SetScoreInput(2, true)
+						@SetScoreInput(3, false)
+					</div>
+				</article>
+
+				<!-- Submit -->
+				<div style="display: flex; gap: 1rem; justify-content: flex-end;">
+					<a href="/matches/manual" role="button" class="outline">Cancel</a>
+					<button type="submit">Save Match</button>
+				</div>
+			</form>
+		</div>
+
+		<style>
+			.player-section {
+				margin-bottom: 1rem;
+			}
+			.player-autocomplete, .venue-autocomplete {
+				position: relative;
+			}
+			.player-suggestions, .venue-suggestions {
+				position: absolute;
+				top: 100%;
+				left: 0;
+				right: 0;
+				background: var(--bg-elevated);
+				border: 1px solid var(--border-default);
+				border-radius: var(--radius-md);
+				max-height: 200px;
+				overflow-y: auto;
+				z-index: 100;
+				display: none;
+			}
+			.player-suggestions.show, .venue-suggestions.show {
+				display: block;
+			}
+			.player-suggestion, .venue-suggestion {
+				padding: 0.5rem 1rem;
+				cursor: pointer;
+				border-bottom: 1px solid var(--border-subtle);
+			}
+			.player-suggestion:hover, .venue-suggestion:hover {
+				background: var(--bg-hover);
+			}
+			.player-suggestion:last-child, .venue-suggestion:last-child {
+				border-bottom: none;
+			}
+			.player-suggestion .confidence {
+				font-size: 0.8rem;
+				color: var(--text-muted);
+			}
+			.set-score-container {
+				padding: 0.75rem;
+				background: var(--bg-subtle);
+				border-radius: var(--radius-md);
+			}
+			.set-title {
+				font-weight: 600;
+				margin-bottom: 0.5rem;
+				color: var(--text-primary);
+			}
+			.set-score-row {
+				display: flex;
+				gap: 1rem;
+				align-items: center;
+			}
+			.set-score-row > div {
+				display: flex;
+				align-items: center;
+				gap: 0.5rem;
+			}
+			.set-score-row label {
+				margin: 0;
+				font-size: 0.9rem;
+				color: var(--text-secondary);
+			}
+			.set-score-row input[type="number"] {
+				width: 70px;
+				text-align: center;
+				margin: 0;
+			}
+			.score-separator {
+				color: var(--text-muted);
+				font-weight: 500;
+			}
+		</style>
+
+		<script>
+			function toggleDoubles() {
+				const matchType = document.getElementById('match_type').value;
+				const doublesOnly = document.querySelectorAll('.doubles-only');
+				doublesOnly.forEach(el => {
+					el.style.display = matchType === 'doubles' ? 'block' : 'none';
+					// Toggle required attribute on inputs
+					const inputs = el.querySelectorAll('input');
+					inputs.forEach(input => {
+						if (matchType === 'doubles') {
+							if (input.name.includes('_name')) {
+								input.required = true;
+							}
+						} else {
+							input.required = false;
+						}
+					});
+				});
+			}
+			// Initialize on load
+			toggleDoubles();
+
+			// Venue autocomplete
+			(function() {
+				const venueInput = document.getElementById('venue_name');
+				const suggestions = document.getElementById('venue_suggestions');
+
+				// Hide suggestions on blur (with delay for click)
+				venueInput.addEventListener('blur', function() {
+					setTimeout(() => suggestions.classList.remove('show'), 200);
+				});
+
+				// Handle clicking a suggestion
+				suggestions.addEventListener('click', function(e) {
+					const item = e.target.closest('.venue-suggestion');
+					if (item) {
+						venueInput.value = item.dataset.venue;
+						suggestions.classList.remove('show');
+					}
+				});
+			})();
+
+			// Player autocomplete (using event delegation for all player inputs)
+			(function() {
+				// Handle blur on all player name inputs
+				document.querySelectorAll('.player-autocomplete').forEach(container => {
+					const prefix = container.dataset.prefix;
+					const nameInput = container.querySelector('input[type="text"]');
+					const suggestions = container.querySelector('.player-suggestions');
+
+					nameInput.addEventListener('blur', function() {
+						setTimeout(() => suggestions.classList.remove('show'), 200);
+					});
+
+					suggestions.addEventListener('click', function(e) {
+						const item = e.target.closest('.player-suggestion');
+						if (item) {
+							nameInput.value = item.dataset.name;
+							container.querySelector('input[type="hidden"]').value = item.dataset.id;
+							suggestions.classList.remove('show');
+						}
+					});
+				});
+			})();
+
+			// Show suggestions when HTMX swaps content
+			document.body.addEventListener('htmx:afterSwap', function(e) {
+				const target = e.detail.target;
+				if (target.classList.contains('player-suggestions') || target.classList.contains('venue-suggestions')) {
+					target.classList.toggle('show', target.innerHTML.trim() !== '');
+				}
+			});
+		</script>
+	}
+}
+
+// PlayerInput renders a player input with autocomplete.
+templ PlayerInput(prefix string, label string, allPlayers []club.PlayerInfo, prefilled *PrefilledPlayer) {
+	<div class="player-autocomplete" data-prefix={ prefix }>
+		<label>
+			{ label }
+			<input
+				type="text"
+				name={ prefix + "_name" }
+				id={ prefix + "_name" }
+				placeholder="Start typing player name..."
+				autocomplete="off"
+				if prefilled != nil {
+					value={ prefilled.Name }
+				}
+				hx-get="/api/players/suggest"
+				hx-trigger="keyup changed delay:300ms"
+				hx-target={ "#" + prefix + "_suggestions" }
+				hx-params="none"
+				hx-on::config-request="event.detail.parameters['q'] = this.value"
+			/>
+		</label>
+		if prefilled != nil {
+			<input type="hidden" name={ prefix + "_id" } id={ prefix + "_id" } value={ prefilled.ID }/>
+		} else {
+			<input type="hidden" name={ prefix + "_id" } id={ prefix + "_id" }/>
+		}
+		<div id={ prefix + "_suggestions" } class="player-suggestions"></div>
+	</div>
+}
+
+// SetScoreInput renders a set score input row.
+templ SetScoreInput(setNum int, required bool) {
+	<div class="set-score-container">
+		<div class="set-title">Set { fmt.Sprintf("%d", setNum) }</div>
+		<div class="set-score-row">
+			<div>
+				<label>Team 1:</label>
+				<input
+					type="number"
+					name={ fmt.Sprintf("set%d_team1", setNum) }
+					min="0"
+					max="7"
+					placeholder="0"
+					if required {
+						required
+					}
+				/>
+			</div>
+			<span class="score-separator">-</span>
+			<div>
+				<label>Team 2:</label>
+				<input
+					type="number"
+					name={ fmt.Sprintf("set%d_team2", setNum) }
+					min="0"
+					max="7"
+					placeholder="0"
+					if required {
+						required
+					}
+				/>
+			</div>
+		</div>
+	</div>
+}
+
+// PlayerSuggestions renders the autocomplete dropdown.
+templ PlayerSuggestions(suggestions []club.PlayerSuggestion) {
+	for _, s := range suggestions {
+		<div class="player-suggestion" data-id={ s.Player.ID } data-name={ s.Player.Name }>
+			<div>{ s.Player.Name }</div>
+			<div class="confidence">
+				{ fmt.Sprintf("%.0f%% match", s.Confidence * 100) }
+				if len(s.Reasons) > 0 {
+					- { s.Reasons[0] }
+				}
+			</div>
+		</div>
+	}
+	<div class="player-suggestion" data-id="" data-name="" style="color: var(--accent-primary);">
+		+ Create new player
+	</div>
+}
+
+// VenueSuggestions renders the venue autocomplete dropdown.
+templ VenueSuggestions(venues []string) {
+	for _, venue := range venues {
+		<div class="venue-suggestion" data-venue={ venue }>
+			{ venue }
+		</div>
+	}
+}

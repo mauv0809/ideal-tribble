@@ -69,6 +69,34 @@ templ ProfilePage(data PageData) {
 				<a href="/profile/totp/setup" role="button">Enable 2FA</a>
 			}
 		</article>
+
+		<article>
+			<header>
+				<h2>Appearance</h2>
+			</header>
+			<label for="theme-select">
+				Theme
+				<select id="theme-select" name="theme">
+					<option value="latte" selected?={ data.User.Theme == "latte" }>Latte (Light)</option>
+					<option value="frappe" selected?={ data.User.Theme == "frappe" }>Frappé</option>
+					<option value="macchiato" selected?={ data.User.Theme == "macchiato" }>Macchiato</option>
+					<option value="mocha" selected?={ data.User.Theme == "mocha" || data.User.Theme == "" }>Mocha (Dark)</option>
+				</select>
+				<small>Choose your preferred color scheme</small>
+			</label>
+		</article>
+
+		<script>
+			document.getElementById('theme-select').addEventListener('change', function(e) {
+				const theme = e.target.value;
+				document.documentElement.setAttribute('data-theme', theme);
+				fetch('/api/theme', {
+					method: 'POST',
+					headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+					body: 'theme=' + encodeURIComponent(theme)
+				});
+			});
+		</script>
 	}
 }
 

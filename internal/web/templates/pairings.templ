@@ -190,6 +190,13 @@ templ PairingsTable(pairingsList []PairingWithStats) {
 						}
 					</td>
 					<td class="table-actions" style="justify-content: flex-end;" onclick="event.stopPropagation();">
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/matches/new?pairing=%d", p.ID)) }
+							role="button"
+							class="outline"
+							title="Enter a match for this pairing">
+							+
+						</a>
 						if p.Active {
 							<button
 								class="warning"

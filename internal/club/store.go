@@ -330,11 +330,17 @@ func (s *store) updatePlayerStatsLocked(match *playtomic.PadelMatch) {
 	defer stmt.Close()
 
 	for playerID, stats := range playerStats {
-		_, err := stmt.Exec(playerID, stats["matches_played"], stats["matches_won"], stats["matches_lost"], stats["sets_won"], stats["sets_lost"], stats["games_won"], stats["games_lost"])
+		// Resolve alias to canonical ID (for manual players linked to Playtomic players)
+		resolvedID := s.resolvePlayerIDLocked(playerID)
+		_, err := stmt.Exec(resolvedID, stats["matches_played"], stats["matches_won"], stats["matches_lost"], stats["sets_won"], stats["sets_lost"], stats["games_won"], stats["games_lost"])
 		if err != nil {
-			log.Error("Failed to execute player_stats statement", "error", err, "playerID", playerID, "table", tableName)
+			log.Error("Failed to execute player_stats statement", "error", err, "playerID", resolvedID, "table", tableName)
 		} else {
-			log.Info("Updated player stats", "playerID", playerID, "matchType", matchType, "table", tableName)
+			if resolvedID != playerID {
+				log.Info("Updated player stats (resolved alias)", "originalID", playerID, "resolvedID", resolvedID, "matchType", matchType, "table", tableName)
+			} else {
+				log.Info("Updated player stats", "playerID", resolvedID, "matchType", matchType, "table", tableName)
+			}
 		}
 	}
 
@@ -391,9 +397,11 @@ func (s *store) UpdateWeeklyStats(match *playtomic.PadelMatch) {
 	defer stmt.Close()
 
 	for playerID, stats := range playerStats {
+		// Resolve alias to canonical ID (for manual players linked to Playtomic players)
+		resolvedID := s.resolvePlayerIDLocked(playerID)
 		_, err := stmt.Exec(
 			weekStartDate,
-			playerID,
+			resolvedID,
 			matchTypeEnum,
 			stats["matches_played"],
 			stats["matches_won"],
@@ -404,9 +412,9 @@ func (s *store) UpdateWeeklyStats(match *playtomic.PadelMatch) {
 			stats["games_lost"],
 		)
 		if err != nil {
-			log.Error("Failed to execute weekly_player_stats statement", "error", err, "playerID", playerID, "week", weekStartDate)
+			log.Error("Failed to execute weekly_player_stats statement", "error", err, "playerID", resolvedID, "week", weekStartDate)
 		} else {
-			log.Info("Updated weekly player stats", "playerID", playerID, "week", weekStartDate, "matchType", matchTypeEnum)
+			log.Info("Updated weekly player stats", "playerID", resolvedID, "week", weekStartDate, "matchType", matchTypeEnum)
 		}
 	}
 
@@ -1221,4 +1229,778 @@ func (s *store) FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, er
 	}
 
 	return players, nil
+}
+
+// Player alias methods for manual player mapping
+
+// CreatePlayerAlias creates a new player alias record for a manual player
+func (s *store) CreatePlayerAlias(manualID, manualName string) (*PlayerAlias, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().Unix()
+	result, err := s.db.Exec(`
+		INSERT INTO player_aliases (manual_player_id, manual_player_name, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, manualID, manualName, now, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create player alias: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last insert id: %w", err)
+	}
+
+	return &PlayerAlias{
+		ID:               id,
+		ManualPlayerID:   manualID,
+		ManualPlayerName: manualName,
+		Confirmed:        false,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}, nil
+}
+
+// GetPlayerAlias retrieves a player alias by manual player ID
+func (s *store) GetPlayerAlias(manualID string) (*PlayerAlias, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var alias PlayerAlias
+	var playtomicID, playtomicName sql.NullString
+	var confidence sql.NullFloat64
+	var confirmed int
+
+	err := s.db.QueryRow(`
+		SELECT id, manual_player_id, manual_player_name, playtomic_player_id, playtomic_player_name, confirmed, confidence, created_at, updated_at
+		FROM player_aliases
+		WHERE manual_player_id = ?
+	`, manualID).Scan(
+		&alias.ID,
+		&alias.ManualPlayerID,
+		&alias.ManualPlayerName,
+		&playtomicID,
+		&playtomicName,
+		&confirmed,
+		&confidence,
+		&alias.CreatedAt,
+		&alias.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get player alias: %w", err)
+	}
+
+	alias.Confirmed = confirmed == 1
+	if playtomicID.Valid {
+		alias.PlaytomicPlayerID = &playtomicID.String
+	}
+	if playtomicName.Valid {
+		alias.PlaytomicPlayerName = &playtomicName.String
+	}
+	if confidence.Valid {
+		alias.Confidence = &confidence.Float64
+	}
+
+	return &alias, nil
+}
+
+// GetAllPlayerAliases retrieves all player aliases
+func (s *store) GetAllPlayerAliases() ([]PlayerAlias, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rows, err := s.db.Query(`
+		SELECT id, manual_player_id, manual_player_name, playtomic_player_id, playtomic_player_name, confirmed, confidence, created_at, updated_at
+		FROM player_aliases
+		ORDER BY manual_player_name COLLATE NOCASE
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all player aliases: %w", err)
+	}
+	defer rows.Close()
+
+	var aliases []PlayerAlias
+	for rows.Next() {
+		var alias PlayerAlias
+		var playtomicID, playtomicName sql.NullString
+		var confidence sql.NullFloat64
+		var confirmed int
+
+		err := rows.Scan(
+			&alias.ID,
+			&alias.ManualPlayerID,
+			&alias.ManualPlayerName,
+			&playtomicID,
+			&playtomicName,
+			&confirmed,
+			&confidence,
+			&alias.CreatedAt,
+			&alias.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan player alias: %w", err)
+		}
+
+		alias.Confirmed = confirmed == 1
+		if playtomicID.Valid {
+			alias.PlaytomicPlayerID = &playtomicID.String
+		}
+		if playtomicName.Valid {
+			alias.PlaytomicPlayerName = &playtomicName.String
+		}
+		if confidence.Valid {
+			alias.Confidence = &confidence.Float64
+		}
+
+		aliases = append(aliases, alias)
+	}
+
+	return aliases, nil
+}
+
+// GetUnlinkedAliases retrieves all player aliases that are not linked to a Playtomic player
+func (s *store) GetUnlinkedAliases() ([]PlayerAlias, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rows, err := s.db.Query(`
+		SELECT id, manual_player_id, manual_player_name, playtomic_player_id, playtomic_player_name, confirmed, confidence, created_at, updated_at
+		FROM player_aliases
+		WHERE playtomic_player_id IS NULL OR confirmed = 0
+		ORDER BY manual_player_name COLLATE NOCASE
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unlinked aliases: %w", err)
+	}
+	defer rows.Close()
+
+	var aliases []PlayerAlias
+	for rows.Next() {
+		var alias PlayerAlias
+		var playtomicID, playtomicName sql.NullString
+		var confidence sql.NullFloat64
+		var confirmed int
+
+		err := rows.Scan(
+			&alias.ID,
+			&alias.ManualPlayerID,
+			&alias.ManualPlayerName,
+			&playtomicID,
+			&playtomicName,
+			&confirmed,
+			&confidence,
+			&alias.CreatedAt,
+			&alias.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan unlinked alias: %w", err)
+		}
+
+		alias.Confirmed = confirmed == 1
+		if playtomicID.Valid {
+			alias.PlaytomicPlayerID = &playtomicID.String
+		}
+		if playtomicName.Valid {
+			alias.PlaytomicPlayerName = &playtomicName.String
+		}
+		if confidence.Valid {
+			alias.Confidence = &confidence.Float64
+		}
+
+		aliases = append(aliases, alias)
+	}
+
+	return aliases, nil
+}
+
+// LinkPlayerAlias links a manual player to a Playtomic player
+func (s *store) LinkPlayerAlias(manualID, playtomicID, playtomicName string, confirmed bool, confidence float64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	confirmedInt := 0
+	if confirmed {
+		confirmedInt = 1
+	}
+
+	now := time.Now().Unix()
+	result, err := s.db.Exec(`
+		UPDATE player_aliases
+		SET playtomic_player_id = ?, playtomic_player_name = ?, confirmed = ?, confidence = ?, updated_at = ?
+		WHERE manual_player_id = ?
+	`, playtomicID, playtomicName, confirmedInt, confidence, now, manualID)
+	if err != nil {
+		return fmt.Errorf("failed to link player alias: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("no alias found with manual_player_id: %s", manualID)
+	}
+
+	log.Info("Linked player alias", "manualID", manualID, "playtomicID", playtomicID, "confirmed", confirmed)
+	return nil
+}
+
+// UnlinkPlayerAlias removes the link between a manual player and a Playtomic player
+func (s *store) UnlinkPlayerAlias(manualID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().Unix()
+	result, err := s.db.Exec(`
+		UPDATE player_aliases
+		SET playtomic_player_id = NULL, playtomic_player_name = NULL, confirmed = 0, confidence = NULL, updated_at = ?
+		WHERE manual_player_id = ?
+	`, now, manualID)
+	if err != nil {
+		return fmt.Errorf("failed to unlink player alias: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("no alias found with manual_player_id: %s", manualID)
+	}
+
+	log.Info("Unlinked player alias", "manualID", manualID)
+	return nil
+}
+
+// ResolvePlayerID returns the canonical player ID for stats aggregation.
+// If the playerID is a manual player with a confirmed alias, return the linked Playtomic ID.
+// Otherwise, return the original playerID.
+func (s *store) ResolvePlayerID(playerID string) string {
+	if !strings.HasPrefix(playerID, "manual_") {
+		return playerID // Not a manual player, no resolution needed
+	}
+
+	alias, err := s.GetPlayerAlias(playerID)
+	if err != nil || alias == nil || !alias.Confirmed || alias.PlaytomicPlayerID == nil {
+		return playerID // Keep manual ID
+	}
+	return *alias.PlaytomicPlayerID // Return linked Playtomic ID
+}
+
+// resolvePlayerIDLocked resolves a player ID without acquiring locks (caller must hold lock)
+func (s *store) resolvePlayerIDLocked(playerID string) string {
+	if !strings.HasPrefix(playerID, "manual_") {
+		return playerID // Not a manual player, no resolution needed
+	}
+
+	var playtomicID sql.NullString
+	var confirmed int
+	err := s.db.QueryRow(`
+		SELECT playtomic_player_id, confirmed
+		FROM player_aliases
+		WHERE manual_player_id = ?
+	`, playerID).Scan(&playtomicID, &confirmed)
+
+	if err != nil || !playtomicID.Valid || confirmed != 1 {
+		return playerID // Keep manual ID
+	}
+	return playtomicID.String // Return linked Playtomic ID
+}
+
+// SuggestPlayersForName finds players with names similar to the input and returns suggestions
+func (s *store) SuggestPlayersForName(name string, limit int) ([]PlayerSuggestion, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if name == "" || limit <= 0 {
+		return nil, nil
+	}
+
+	// Get all players (Playtomic players)
+	allPlayers, err := s.getAllPlayersLocked()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all players: %w", err)
+	}
+
+	// Get all manual players (from aliases)
+	aliases, err := s.getAllPlayerAliasesLocked()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all aliases: %w", err)
+	}
+
+	// Calculate similarity for each player
+	var suggestions []PlayerSuggestion
+	normalizedInput := normalizeName(name)
+
+	// Check Playtomic players
+	for _, player := range allPlayers {
+		normalizedPlayer := normalizeName(player.Name)
+		confidence := stringSimilarity(normalizedInput, normalizedPlayer)
+		if confidence > 0.3 { // Minimum threshold
+			suggestions = append(suggestions, PlayerSuggestion{
+				Player:     player,
+				Confidence: confidence,
+				Reasons:    getMatchReasons(normalizedInput, normalizedPlayer),
+			})
+		}
+	}
+
+	// Check manual players (aliases)
+	for _, alias := range aliases {
+		normalizedAlias := normalizeName(alias.ManualPlayerName)
+		confidence := stringSimilarity(normalizedInput, normalizedAlias)
+		if confidence > 0.3 { // Minimum threshold
+			// Create a PlayerInfo from the alias
+			player := PlayerInfo{
+				ID:   alias.ManualPlayerID,
+				Name: alias.ManualPlayerName,
+			}
+			suggestions = append(suggestions, PlayerSuggestion{
+				Player:     player,
+				Confidence: confidence,
+				Reasons:    getMatchReasons(normalizedInput, normalizedAlias),
+			})
+		}
+	}
+
+	// Sort by confidence descending
+	for i := 0; i < len(suggestions)-1; i++ {
+		for j := i + 1; j < len(suggestions); j++ {
+			if suggestions[j].Confidence > suggestions[i].Confidence {
+				suggestions[i], suggestions[j] = suggestions[j], suggestions[i]
+			}
+		}
+	}
+
+	// Return top N
+	if len(suggestions) > limit {
+		suggestions = suggestions[:limit]
+	}
+
+	return suggestions, nil
+}
+
+// getAllPlayersLocked retrieves all players without acquiring lock (caller must hold lock)
+func (s *store) getAllPlayersLocked() ([]PlayerInfo, error) {
+	rows, err := s.db.Query("SELECT id, name, level FROM players ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var players []PlayerInfo
+	for rows.Next() {
+		var p PlayerInfo
+		var name sql.NullString
+		var level sql.NullFloat64
+		if err := rows.Scan(&p.ID, &name, &level); err != nil {
+			continue
+		}
+		p.Name = name.String
+		p.Level = level.Float64
+		players = append(players, p)
+	}
+	return players, nil
+}
+
+// getAllPlayerAliasesLocked retrieves all aliases without acquiring lock (caller must hold lock)
+func (s *store) getAllPlayerAliasesLocked() ([]PlayerAlias, error) {
+	rows, err := s.db.Query(`
+		SELECT id, manual_player_id, manual_player_name, playtomic_player_id, playtomic_player_name, confirmed, confidence, created_at, updated_at
+		FROM player_aliases
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var aliases []PlayerAlias
+	for rows.Next() {
+		var alias PlayerAlias
+		var playtomicID, playtomicName sql.NullString
+		var confidence sql.NullFloat64
+		var confirmed int
+
+		if err := rows.Scan(
+			&alias.ID,
+			&alias.ManualPlayerID,
+			&alias.ManualPlayerName,
+			&playtomicID,
+			&playtomicName,
+			&confirmed,
+			&confidence,
+			&alias.CreatedAt,
+			&alias.UpdatedAt,
+		); err != nil {
+			continue
+		}
+
+		alias.Confirmed = confirmed == 1
+		if playtomicID.Valid {
+			alias.PlaytomicPlayerID = &playtomicID.String
+		}
+		if playtomicName.Valid {
+			alias.PlaytomicPlayerName = &playtomicName.String
+		}
+		if confidence.Valid {
+			alias.Confidence = &confidence.Float64
+		}
+
+		aliases = append(aliases, alias)
+	}
+
+	return aliases, nil
+}
+
+// normalizeName normalizes a name for comparison (lowercase, remove special chars)
+func normalizeName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ToLower(name)
+	var result strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || r == ' ' {
+			result.WriteRune(r)
+		}
+	}
+	return strings.Join(strings.Fields(result.String()), " ")
+}
+
+// stringSimilarity calculates similarity between two strings using Levenshtein distance
+func stringSimilarity(s1, s2 string) float64 {
+	if s1 == s2 {
+		return 1.0
+	}
+	if s1 == "" || s2 == "" {
+		return 0.0
+	}
+
+	distance := levenshteinDistance(s1, s2)
+	maxLen := len(s1)
+	if len(s2) > maxLen {
+		maxLen = len(s2)
+	}
+	if maxLen == 0 {
+		return 1.0
+	}
+
+	return 1.0 - float64(distance)/float64(maxLen)
+}
+
+// levenshteinDistance calculates the Levenshtein distance between two strings
+func levenshteinDistance(s1, s2 string) int {
+	if s1 == s2 {
+		return 0
+	}
+	if len(s1) == 0 {
+		return len(s2)
+	}
+	if len(s2) == 0 {
+		return len(s1)
+	}
+
+	matrix := make([][]int, len(s1)+1)
+	for i := range matrix {
+		matrix[i] = make([]int, len(s2)+1)
+	}
+
+	for i := 0; i <= len(s1); i++ {
+		matrix[i][0] = i
+	}
+	for j := 0; j <= len(s2); j++ {
+		matrix[0][j] = j
+	}
+
+	for i := 1; i <= len(s1); i++ {
+		for j := 1; j <= len(s2); j++ {
+			cost := 0
+			if s1[i-1] != s2[j-1] {
+				cost = 1
+			}
+			deletion := matrix[i-1][j] + 1
+			insertion := matrix[i][j-1] + 1
+			substitution := matrix[i-1][j-1] + cost
+			matrix[i][j] = minInt(deletion, minInt(insertion, substitution))
+		}
+	}
+
+	return matrix[len(s1)][len(s2)]
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// getMatchReasons provides human-readable reasons for the match
+func getMatchReasons(input, target string) []string {
+	var reasons []string
+	if input == target {
+		reasons = append(reasons, "Exact match")
+	} else if strings.HasPrefix(target, input) || strings.HasPrefix(input, target) {
+		reasons = append(reasons, "Name starts with")
+	} else if strings.Contains(target, input) || strings.Contains(input, target) {
+		reasons = append(reasons, "Name contains")
+	} else {
+		reasons = append(reasons, "Similar name")
+	}
+	return reasons
+}
+
+// CreateManualMatch creates a new manually entered match
+func (s *store) CreateManualMatch(input *ManualMatchInput, createdBy string) (*playtomic.PadelMatch, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Generate a unique match ID with manual_ prefix
+	matchID := fmt.Sprintf("manual_%d", time.Now().UnixNano())
+
+	// Process players and create aliases for new ones
+	team1Players := make([]playtomic.Player, len(input.Team1Players))
+	team2Players := make([]playtomic.Player, len(input.Team2Players))
+
+	for i, p := range input.Team1Players {
+		playerID, err := s.getOrCreateManualPlayerLocked(p.ID, p.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process team1 player %d: %w", i, err)
+		}
+		team1Players[i] = playtomic.Player{
+			UserID: playerID,
+			Name:   p.Name,
+		}
+	}
+
+	for i, p := range input.Team2Players {
+		playerID, err := s.getOrCreateManualPlayerLocked(p.ID, p.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process team2 player %d: %w", i, err)
+		}
+		team2Players[i] = playtomic.Player{
+			UserID: playerID,
+			Name:   p.Name,
+		}
+	}
+
+	// Determine winner based on sets won
+	team1SetsWon := 0
+	team2SetsWon := 0
+	for _, set := range input.Sets {
+		if set.Team1Games > set.Team2Games {
+			team1SetsWon++
+		} else if set.Team2Games > set.Team1Games {
+			team2SetsWon++
+		}
+	}
+
+	team1Result := "LOST"
+	team2Result := "LOST"
+	if team1SetsWon > team2SetsWon {
+		team1Result = "WON"
+	} else if team2SetsWon > team1SetsWon {
+		team2Result = "WON"
+	}
+
+	// Build teams
+	team1ID := fmt.Sprintf("team1_%s", matchID)
+	team2ID := fmt.Sprintf("team2_%s", matchID)
+
+	teams := []playtomic.Team{
+		{
+			ID:         team1ID,
+			Players:    team1Players,
+			TeamResult: team1Result,
+		},
+		{
+			ID:         team2ID,
+			Players:    team2Players,
+			TeamResult: team2Result,
+		},
+	}
+
+	// Build results
+	results := make([]playtomic.SetResult, len(input.Sets))
+	for i, set := range input.Sets {
+		results[i] = playtomic.SetResult{
+			Name: fmt.Sprintf("Set %d", i+1),
+			Scores: map[string]int{
+				team1ID: set.Team1Games,
+				team2ID: set.Team2Games,
+			},
+		}
+	}
+
+	// Determine results status
+	resultsStatus := playtomic.ResultsStatusConfirmed
+	if len(input.Sets) == 0 {
+		resultsStatus = playtomic.ResultsStatusWaitingFor
+	}
+
+	// Build the match
+	match := &playtomic.PadelMatch{
+		MatchID:       matchID,
+		OwnerID:       team1Players[0].UserID,
+		OwnerName:     team1Players[0].Name,
+		Start:         input.MatchDate.Unix(),
+		End:           input.MatchDate.Unix() + 3600, // Assume 1 hour match
+		CreatedAt:     time.Now().Unix(),
+		Status:        "PLAYED",
+		GameStatus:    playtomic.GameStatusPlayed,
+		ResultsStatus: resultsStatus,
+		ResourceName:  input.VenueName,
+		Tenant: playtomic.Tenant{
+			ID:   "manual",
+			Name: input.VenueName,
+		},
+		MatchType:        playtomic.MatchType(input.CompetitionMode),
+		MatchTypeEnum:    input.MatchTypeEnum,
+		Teams:            teams,
+		Results:          results,
+		ProcessingStatus: playtomic.StatusNew,
+	}
+
+	// Serialize teams and results
+	teamsBlob, err := msgpack.Marshal(teams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal teams: %w", err)
+	}
+	resultsBlob, err := msgpack.Marshal(results)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal results: %w", err)
+	}
+
+	// Set owner to first player of team 1 (required for FK constraint)
+	ownerID := team1Players[0].UserID
+	ownerName := team1Players[0].Name
+
+	// Insert the match
+	_, err = s.db.Exec(`
+		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, processing_status, match_type_enum, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, matchID, ownerID, ownerName, match.Start, match.End, match.CreatedAt, match.Status, match.GameStatus, match.ResultsStatus, match.ResourceName, "", "", match.Tenant.ID, match.Tenant.Name, match.MatchType, teamsBlob, resultsBlob, playtomic.StatusNew, match.MatchTypeEnum, "manual")
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert manual match: %w", err)
+	}
+
+	log.Info("Created manual match", "matchID", matchID, "venue", input.VenueName, "type", input.MatchTypeEnum)
+	return match, nil
+}
+
+// getOrCreateManualPlayerLocked gets or creates a manual player (caller must hold lock)
+func (s *store) getOrCreateManualPlayerLocked(playerID, playerName string) (string, error) {
+	if playerID != "" {
+		// Check if it's an existing player
+		var exists bool
+		err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM players WHERE id = ?)", playerID).Scan(&exists)
+		if err != nil {
+			return "", fmt.Errorf("failed to check player existence: %w", err)
+		}
+		if exists {
+			return playerID, nil
+		}
+
+		// Check if it's an existing alias
+		var aliasExists bool
+		err = s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM player_aliases WHERE manual_player_id = ?)", playerID).Scan(&aliasExists)
+		if err != nil {
+			return "", fmt.Errorf("failed to check alias existence: %w", err)
+		}
+		if aliasExists {
+			return playerID, nil
+		}
+	}
+
+	// Create new manual player
+	manualID := fmt.Sprintf("manual_%d", time.Now().UnixNano())
+	now := time.Now().Unix()
+
+	// Insert into players table first (required for foreign key constraints)
+	_, err := s.db.Exec(`
+		INSERT INTO players (id, name, level) VALUES (?, ?, 0)
+	`, manualID, playerName)
+	if err != nil {
+		return "", fmt.Errorf("failed to create player record: %w", err)
+	}
+
+	// Then insert into player_aliases table
+	_, err = s.db.Exec(`
+		INSERT INTO player_aliases (manual_player_id, manual_player_name, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, manualID, playerName, now, now)
+	if err != nil {
+		return "", fmt.Errorf("failed to create player alias: %w", err)
+	}
+
+	log.Info("Created new manual player", "manualID", manualID, "name", playerName)
+	return manualID, nil
+}
+
+// GetManualMatches retrieves all manually entered matches
+func (s *store) GetManualMatches() ([]*playtomic.PadelMatch, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rows, err := s.db.Query(`
+		SELECT id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, access_code, price, tenant_id, tenant_name, match_type, teams_blob, results_blob, ball_bringer_id, ball_bringer_name, processing_status, booking_notified_ts, result_notified_ts, match_type_enum
+		FROM matches
+		WHERE source = 'manual'
+		ORDER BY start_time DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query manual matches: %w", err)
+	}
+	defer rows.Close()
+
+	var matches []*playtomic.PadelMatch
+	for rows.Next() {
+		match, err := s.scanMatch(rows)
+		if err != nil {
+			log.Error("Failed to scan manual match row", "error", err)
+			continue
+		}
+		matches = append(matches, match)
+	}
+
+	return matches, nil
+}
+
+// GetDistinctVenues returns distinct venue names that match the query
+func (s *store) GetDistinctVenues(query string, limit int) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 10
+	}
+
+	// Query distinct tenant names (venues) that match the search query
+	// Using LIKE for case-insensitive prefix matching
+	rows, err := s.db.Query(`
+		SELECT DISTINCT tenant_name
+		FROM matches
+		WHERE tenant_name != ''
+		  AND tenant_name LIKE ?
+		ORDER BY tenant_name
+		LIMIT ?
+	`, query+"%", limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query venues: %w", err)
+	}
+	defer rows.Close()
+
+	var venues []string
+	for rows.Next() {
+		var venue string
+		if err := rows.Scan(&venue); err != nil {
+			continue
+		}
+		venues = append(venues, venue)
+	}
+
+	return venues, nil
 }

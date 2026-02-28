@@ -45,6 +45,7 @@ go.work.sum
 ideal-tribble
 tribble-cli
 tribble-admin
+admin
 
 # Image assets (logos, etc)
 *.png

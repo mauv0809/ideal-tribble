@@ -119,7 +119,8 @@ func FetchMatchesHandler(store club.ClubStore, metrics metrics.Metrics, cfg conf
 			if err != nil {
 				log.Error("Failed to get tracked pairings", "error", err)
 			} else if len(trackedPairings) > 0 {
-				pairingMatches := pairings.DetectPairingMatches(allFetchedMatches, trackedPairings)
+				// Use resolver to handle manual player aliases
+			pairingMatches := pairings.DetectPairingMatchesWithResolver(allFetchedMatches, trackedPairings, store.ResolvePlayerID)
 				if len(pairingMatches) > 0 {
 					if !isDryRun {
 						log.Info("Upserting pairing matches", "count", len(pairingMatches))

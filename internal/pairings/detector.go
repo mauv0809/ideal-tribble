@@ -7,9 +7,23 @@ import (
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 )
 
+// PlayerIDResolver is a function that resolves a player ID to its canonical form.
+// For manual players linked to Playtomic players, this returns the Playtomic ID.
+// For unlinked or Playtomic players, it returns the input ID unchanged.
+type PlayerIDResolver func(playerID string) string
+
+// DefaultResolver is a no-op resolver that returns IDs unchanged.
+var DefaultResolver PlayerIDResolver = func(playerID string) string { return playerID }
+
 // DetectPairingMatches checks matches against tracked pairings and returns
 // PairingMatch records for any matches where a tracked pair plays together on the same team.
 func DetectPairingMatches(matches []*playtomic.PadelMatch, trackedPairings []TrackedPairing) []*PairingMatch {
+	return DetectPairingMatchesWithResolver(matches, trackedPairings, DefaultResolver)
+}
+
+// DetectPairingMatchesWithResolver is like DetectPairingMatches but accepts a resolver
+// for mapping player IDs (e.g., resolving manual player aliases to Playtomic IDs).
+func DetectPairingMatchesWithResolver(matches []*playtomic.PadelMatch, trackedPairings []TrackedPairing, resolver PlayerIDResolver) []*PairingMatch {
 	log.Info("Starting pairing match detection",
 		"totalMatches", len(matches),
 		"trackedPairings", len(trackedPairings))
@@ -68,8 +82,12 @@ func DetectPairingMatches(matches []*playtomic.PadelMatch, trackedPairings []Tra
 				continue
 			}
 
+			// Resolve player IDs (for manual players linked to Playtomic players)
+			resolvedID1 := resolver(team.Players[0].UserID)
+			resolvedID2 := resolver(team.Players[1].UserID)
+
 			// Check if this team is a tracked pairing
-			key := normalizePairingKey(team.Players[0].UserID, team.Players[1].UserID)
+			key := normalizePairingKey(resolvedID1, resolvedID2)
 			pairing, found := pairingMap[key]
 			if !found {
 				continue

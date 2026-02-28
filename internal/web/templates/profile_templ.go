@@ -100,7 +100,47 @@ func ProfilePage(data PageData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</article>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</article><article><header><h2>Appearance</h2></header><label for=\"theme-select\">Theme <select id=\"theme-select\" name=\"theme\"><option value=\"latte\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.User.Theme == "latte" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, ">Latte (Light)</option> <option value=\"frappe\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.User.Theme == "frappe" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, ">Frappé</option> <option value=\"macchiato\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.User.Theme == "macchiato" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, ">Macchiato</option> <option value=\"mocha\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.User.Theme == "mocha" || data.User.Theme == "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, ">Mocha (Dark)</option></select> <small>Choose your preferred color scheme</small></label></article><script>\n\t\t\tdocument.getElementById('theme-select').addEventListener('change', function(e) {\n\t\t\t\tconst theme = e.target.value;\n\t\t\t\tdocument.documentElement.setAttribute('data-theme', theme);\n\t\t\t\tfetch('/api/theme', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: {'Content-Type': 'application/x-www-form-urlencoded'},\n\t\t\t\t\tbody: 'theme=' + encodeURIComponent(theme)\n\t\t\t\t});\n\t\t\t});\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -155,33 +195,33 @@ func TOTPSetupPage(data TOTPSetupData) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<h1>Set Up Two-Factor Authentication</h1><article><header><h2>Step 1: Scan QR Code</h2></header><p>Scan this QR code with your authenticator app (e.g., Google Authenticator, Authy):</p><div style=\"text-align: center; padding: 1rem; background: white; display: inline-block;\"><img src=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<h1>Set Up Two-Factor Authentication</h1><article><header><h2>Step 1: Scan QR Code</h2></header><p>Scan this QR code with your authenticator app (e.g., Google Authenticator, Authy):</p><div style=\"text-align: center; padding: 1rem; background: white; display: inline-block;\"><img src=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs("/profile/totp/qr")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/profile.templ`, Line: 93, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/profile.templ`, Line: 121, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" alt=\"TOTP QR Code\" style=\"max-width: 200px;\"></div><p>Or manually enter this secret:</p><code style=\"display: block; padding: 1rem; background: var(--pico-code-background-color); word-break: break-all;\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" alt=\"TOTP QR Code\" style=\"max-width: 200px;\"></div><p>Or manually enter this secret:</p><code style=\"display: block; padding: 1rem; background: var(--pico-code-background-color); word-break: break-all;\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(data.Secret)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/profile.templ`, Line: 97, Col: 17}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/profile.templ`, Line: 125, Col: 17}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</code></article><article><header><h2>Step 2: Verify Code</h2></header><p>Enter the 6-digit code from your authenticator app to verify setup:</p><form method=\"POST\" action=\"/profile/totp/verify\"><label for=\"code\">Verification Code <input type=\"text\" id=\"code\" name=\"code\" placeholder=\"123456\" pattern=\"[0-9]{6}\" maxlength=\"6\" inputmode=\"numeric\" autocomplete=\"one-time-code\" required autofocus></label><div class=\"grid\"><a href=\"/profile\" role=\"button\" class=\"outline secondary\">Cancel</a> <button type=\"submit\">Verify & Enable 2FA</button></div></form></article>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</code></article><article><header><h2>Step 2: Verify Code</h2></header><p>Enter the 6-digit code from your authenticator app to verify setup:</p><form method=\"POST\" action=\"/profile/totp/verify\"><label for=\"code\">Verification Code <input type=\"text\" id=\"code\" name=\"code\" placeholder=\"123456\" pattern=\"[0-9]{6}\" maxlength=\"6\" inputmode=\"numeric\" autocomplete=\"one-time-code\" required autofocus></label><div class=\"grid\"><a href=\"/profile\" role=\"button\" class=\"outline secondary\">Cancel</a> <button type=\"submit\">Verify & Enable 2FA</button></div></form></article>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

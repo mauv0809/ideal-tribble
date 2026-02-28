@@ -97,6 +97,7 @@ func main() {
 		authStore,
 		sessionManager,
 		pairingsStore,
+		clubStore,
 		fetchService,
 	)
 	if err != nil {
@@ -202,9 +203,12 @@ func main() {
 			r.URL.Path == "/profile" ||
 			r.URL.Path == "/fetch-matches" ||
 			r.URL.Path == "/api/theme" ||
+			r.URL.Path == "/api/players/suggest" ||
+			r.URL.Path == "/api/venues/suggest" ||
 			hasPrefix(r.URL.Path, "/static/") ||
 			hasPrefix(r.URL.Path, "/pairings") ||
-			hasPrefix(r.URL.Path, "/matches/") ||
+			hasPrefix(r.URL.Path, "/matches") ||
+			hasPrefix(r.URL.Path, "/players") ||
 			hasPrefix(r.URL.Path, "/admin") ||
 			hasPrefix(r.URL.Path, "/profile/"):
 			webRouter.ServeHTTP(w, r)

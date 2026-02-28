@@ -1,0 +1,243 @@
+package templates
+
+import (
+	"fmt"
+	"strings"
+	"github.com/mauv0809/ideal-tribble/internal/club"
+)
+
+// PlayersListData holds data for the players list page.
+type PlayersListData struct {
+	PageData
+	PlaytomicPlayers []club.PlayerInfo
+	ManualAliases    []club.PlayerAlias
+}
+
+// PlayersListPage renders the players management page.
+templ PlayersListPage(data PlayersListData) {
+	@Layout(data.PageData) {
+		<h1>Players</h1>
+		<p style="color: var(--text-secondary); margin-bottom: 2rem;">
+			View all players and manage links between manual and Playtomic players.
+		</p>
+
+		<!-- Manual Players Section -->
+		<article style="margin-bottom: 2rem;">
+			<header>
+				<h3 style="margin: 0;">Manual Players</h3>
+			</header>
+			<p style="color: var(--text-muted); font-size: 0.9rem;">
+				Players created from manual match entry. Link them to Playtomic players to merge their statistics.
+			</p>
+
+			if len(data.ManualAliases) == 0 {
+				<p style="text-align: center; color: var(--text-muted); padding: 1rem;">
+					No manual players yet. They will appear here when you enter matches with new players.
+				</p>
+			} else {
+				<div style="overflow-x: auto;">
+					<table>
+						<thead>
+							<tr>
+								<th>Name</th>
+								<th>Linked To</th>
+								<th>Status</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, alias := range data.ManualAliases {
+								<tr>
+									<td>{ alias.ManualPlayerName }</td>
+									<td>
+										if alias.PlaytomicPlayerID != nil && *alias.PlaytomicPlayerID != "" {
+											<span style="color: var(--accent-success);">
+												{ *alias.PlaytomicPlayerName }
+											</span>
+										} else {
+											<span style="color: var(--text-muted);">Not linked</span>
+										}
+									</td>
+									<td>
+										if alias.Confirmed {
+											<span class="badge badge-confirmed">Confirmed</span>
+										} else if alias.PlaytomicPlayerID != nil {
+											<span class="badge badge-suggested">Suggested</span>
+										} else {
+											<span class="badge badge-unlinked">Unlinked</span>
+										}
+									</td>
+									<td>
+										if alias.Confirmed && alias.PlaytomicPlayerID != nil {
+											<button
+												class="outline small"
+												hx-delete={ fmt.Sprintf("/players/%s/link", alias.ManualPlayerID) }
+												hx-confirm="Remove link? Stats will no longer be merged."
+											>
+												Unlink
+											</button>
+										} else {
+											<button
+												class="small"
+												onclick={ showLinkModal(alias) }
+											>
+												Link
+											</button>
+										}
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</article>
+
+		<!-- Playtomic Players Section -->
+		<article>
+			<header>
+				<h3 style="margin: 0;">Playtomic Players ({ fmt.Sprintf("%d", len(data.PlaytomicPlayers)) })</h3>
+			</header>
+			<p style="color: var(--text-muted); font-size: 0.9rem;">
+				Players imported from Playtomic matches.
+			</p>
+
+			if len(data.PlaytomicPlayers) == 0 {
+				<p style="text-align: center; color: var(--text-muted); padding: 1rem;">
+					No Playtomic players yet. They will appear after fetching matches.
+				</p>
+			} else {
+				<div style="overflow-x: auto; max-height: 400px;">
+					<table>
+						<thead>
+							<tr>
+								<th>Name</th>
+								<th>Level</th>
+								<th>ID</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, player := range data.PlaytomicPlayers {
+								<tr>
+									<td>{ player.Name }</td>
+									<td>
+										if player.Level > 0 {
+											{ fmt.Sprintf("%.1f", player.Level) }
+										} else {
+											<span style="color: var(--text-muted);">-</span>
+										}
+									</td>
+									<td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">
+										{ truncateID(player.ID) }
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</article>
+
+		<!-- Link Modal -->
+		<dialog id="link-modal">
+			<article style="max-width: 500px;">
+				<header>
+					<h3 style="margin: 0;">Link Player</h3>
+				</header>
+				<p>
+					Link <strong id="modal-manual-name"></strong> to a Playtomic player:
+				</p>
+				<form method="POST" id="link-form">
+					<input type="hidden" name="playtomic_id" id="modal-playtomic-id"/>
+					<input type="hidden" name="playtomic_name" id="modal-playtomic-name"/>
+					<select id="playtomic-select" style="width: 100%;" onchange="updateHiddenFields()">
+						<option value="">Select a Playtomic player...</option>
+						for _, player := range data.PlaytomicPlayers {
+							<option value={ player.ID } data-name={ player.Name }>
+								{ player.Name }
+								if player.Level > 0 {
+									({ fmt.Sprintf("Level %.1f", player.Level) })
+								}
+							</option>
+						}
+					</select>
+					<footer style="margin-top: 1rem;">
+						<button type="button" class="outline" onclick="closeModal()">Cancel</button>
+						<button type="submit">Link Player</button>
+					</footer>
+				</form>
+			</article>
+		</dialog>
+
+		<style>
+			.badge {
+				display: inline-block;
+				padding: 0.2rem 0.5rem;
+				border-radius: var(--radius-sm);
+				font-size: 0.75rem;
+				font-weight: 500;
+			}
+			.badge-confirmed {
+				background: var(--accent-success);
+				color: var(--ctp-base);
+			}
+			.badge-suggested {
+				background: var(--accent-warning);
+				color: var(--ctp-base);
+			}
+			.badge-unlinked {
+				background: var(--ctp-surface1);
+				color: var(--text-secondary);
+			}
+			button.small {
+				padding: 0.25rem 0.75rem;
+				font-size: 0.85rem;
+			}
+			dialog {
+				border: 1px solid var(--border-default);
+				border-radius: var(--radius-lg);
+				background: var(--bg-surface);
+			}
+			dialog::backdrop {
+				background: rgba(0, 0, 0, 0.5);
+			}
+		</style>
+
+		<script>
+			function showLinkModal(manualID, manualName) {
+				document.getElementById('modal-manual-name').textContent = manualName;
+				document.getElementById('link-form').action = '/players/' + manualID + '/link';
+				document.getElementById('playtomic-select').value = '';
+				document.getElementById('modal-playtomic-id').value = '';
+				document.getElementById('modal-playtomic-name').value = '';
+				document.getElementById('link-modal').showModal();
+			}
+
+			function closeModal() {
+				document.getElementById('link-modal').close();
+			}
+
+			function updateHiddenFields() {
+				const select = document.getElementById('playtomic-select');
+				const option = select.options[select.selectedIndex];
+				document.getElementById('modal-playtomic-id').value = option.value;
+				document.getElementById('modal-playtomic-name').value = option.dataset.name || '';
+			}
+		</script>
+	}
+}
+
+script showLinkModal(alias club.PlayerAlias) {
+	showLinkModal(alias.ManualPlayerID, alias.ManualPlayerName);
+}
+
+func truncateID(id string) string {
+	if len(id) > 12 {
+		return id[:12] + "..."
+	}
+	return id
+}
+
+func isManualPlayer(id string) bool {
+	return strings.HasPrefix(id, "manual_")
+}

@@ -2,7 +2,9 @@ package club_test
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/database"
@@ -659,4 +661,451 @@ func TestAssignBallBringerWithTimeBasedLogic(t *testing.T) {
 		assert.True(t, singlesDate.Valid, "Singles date should now be set")
 		assert.Equal(t, int64(1727900000), doublesDate.Int64, "Doubles date should remain unchanged")
 	})
+}
+
+// =============================================================================
+// Manual Match Feature Tests
+// =============================================================================
+
+func TestCreateAndGetPlayerAlias(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	t.Run("creates new player alias", func(t *testing.T) {
+		alias, err := store.CreatePlayerAlias("manual_abc123", "John Doe")
+		require.NoError(t, err)
+		require.NotNil(t, alias)
+
+		assert.Equal(t, "manual_abc123", alias.ManualPlayerID)
+		assert.Equal(t, "John Doe", alias.ManualPlayerName)
+		assert.Nil(t, alias.PlaytomicPlayerID)
+		assert.False(t, alias.Confirmed)
+		assert.NotZero(t, alias.CreatedAt)
+	})
+
+	t.Run("gets existing player alias", func(t *testing.T) {
+		alias, err := store.GetPlayerAlias("manual_abc123")
+		require.NoError(t, err)
+		require.NotNil(t, alias)
+
+		assert.Equal(t, "manual_abc123", alias.ManualPlayerID)
+		assert.Equal(t, "John Doe", alias.ManualPlayerName)
+	})
+
+	t.Run("returns nil for non-existent alias", func(t *testing.T) {
+		alias, err := store.GetPlayerAlias("manual_nonexistent")
+		require.NoError(t, err)
+		assert.Nil(t, alias)
+	})
+
+	t.Run("fails when creating duplicate alias", func(t *testing.T) {
+		// Trying to create same ID again should fail
+		_, err := store.CreatePlayerAlias("manual_abc123", "John Smith")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "UNIQUE constraint failed")
+	})
+}
+
+func TestGetAllPlayerAliases(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Create some aliases
+	_, err := store.CreatePlayerAlias("manual_1", "Player One")
+	require.NoError(t, err)
+	_, err = store.CreatePlayerAlias("manual_2", "Player Two")
+	require.NoError(t, err)
+	_, err = store.CreatePlayerAlias("manual_3", "Player Three")
+	require.NoError(t, err)
+
+	aliases, err := store.GetAllPlayerAliases()
+	require.NoError(t, err)
+	assert.Len(t, aliases, 3)
+}
+
+func TestLinkAndUnlinkPlayerAlias(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Create a player alias
+	_, err := store.CreatePlayerAlias("manual_link_test", "Test Player")
+	require.NoError(t, err)
+
+	t.Run("links alias to playtomic player", func(t *testing.T) {
+		err := store.LinkPlayerAlias("manual_link_test", "playtomic_123", "Playtomic User", true, 0.95)
+		require.NoError(t, err)
+
+		alias, err := store.GetPlayerAlias("manual_link_test")
+		require.NoError(t, err)
+		require.NotNil(t, alias)
+
+		assert.NotNil(t, alias.PlaytomicPlayerID)
+		assert.Equal(t, "playtomic_123", *alias.PlaytomicPlayerID)
+		assert.NotNil(t, alias.PlaytomicPlayerName)
+		assert.Equal(t, "Playtomic User", *alias.PlaytomicPlayerName)
+		assert.True(t, alias.Confirmed)
+		assert.NotNil(t, alias.Confidence)
+		assert.InDelta(t, 0.95, *alias.Confidence, 0.001)
+	})
+
+	t.Run("unlinks alias", func(t *testing.T) {
+		err := store.UnlinkPlayerAlias("manual_link_test")
+		require.NoError(t, err)
+
+		alias, err := store.GetPlayerAlias("manual_link_test")
+		require.NoError(t, err)
+		require.NotNil(t, alias)
+
+		assert.Nil(t, alias.PlaytomicPlayerID)
+		assert.Nil(t, alias.PlaytomicPlayerName)
+		assert.False(t, alias.Confirmed)
+	})
+}
+
+func TestGetUnlinkedAliases(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Create some aliases
+	_, err := store.CreatePlayerAlias("manual_unlinked_1", "Unlinked One")
+	require.NoError(t, err)
+	_, err = store.CreatePlayerAlias("manual_unlinked_2", "Unlinked Two")
+	require.NoError(t, err)
+	_, err = store.CreatePlayerAlias("manual_linked", "Linked Player")
+	require.NoError(t, err)
+
+	// Link one of them
+	err = store.LinkPlayerAlias("manual_linked", "playtomic_xyz", "Playtomic XYZ", true, 1.0)
+	require.NoError(t, err)
+
+	unlinked, err := store.GetUnlinkedAliases()
+	require.NoError(t, err)
+	assert.Len(t, unlinked, 2)
+
+	// Verify the linked one is not in the list
+	for _, alias := range unlinked {
+		assert.NotEqual(t, "manual_linked", alias.ManualPlayerID)
+	}
+}
+
+func TestResolvePlayerID(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	t.Run("returns same ID for non-manual player", func(t *testing.T) {
+		resolved := store.ResolvePlayerID("playtomic_regular_123")
+		assert.Equal(t, "playtomic_regular_123", resolved)
+	})
+
+	t.Run("returns same ID for unlinked manual player", func(t *testing.T) {
+		_, err := store.CreatePlayerAlias("manual_unlinked", "Unlinked Player")
+		require.NoError(t, err)
+
+		resolved := store.ResolvePlayerID("manual_unlinked")
+		assert.Equal(t, "manual_unlinked", resolved)
+	})
+
+	t.Run("returns same ID for unconfirmed link", func(t *testing.T) {
+		_, err := store.CreatePlayerAlias("manual_unconfirmed", "Unconfirmed Player")
+		require.NoError(t, err)
+		err = store.LinkPlayerAlias("manual_unconfirmed", "playtomic_456", "Playtomic 456", false, 0.7)
+		require.NoError(t, err)
+
+		resolved := store.ResolvePlayerID("manual_unconfirmed")
+		assert.Equal(t, "manual_unconfirmed", resolved, "Should not resolve unconfirmed links")
+	})
+
+	t.Run("returns playtomic ID for confirmed link", func(t *testing.T) {
+		_, err := store.CreatePlayerAlias("manual_confirmed", "Confirmed Player")
+		require.NoError(t, err)
+		err = store.LinkPlayerAlias("manual_confirmed", "playtomic_789", "Playtomic 789", true, 1.0)
+		require.NoError(t, err)
+
+		resolved := store.ResolvePlayerID("manual_confirmed")
+		assert.Equal(t, "playtomic_789", resolved, "Should resolve to playtomic ID for confirmed links")
+	})
+}
+
+func TestSuggestPlayersForName(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Add some known players
+	store.AddPlayer("p1", "John Smith", 1.0)
+	store.AddPlayer("p2", "John Doe", 1.0)
+	store.AddPlayer("p3", "Jane Smith", 1.0)
+	store.AddPlayer("p4", "Robert Johnson", 1.0)
+
+	t.Run("suggests exact match", func(t *testing.T) {
+		suggestions, err := store.SuggestPlayersForName("John Smith", 5)
+		require.NoError(t, err)
+		require.NotEmpty(t, suggestions)
+
+		// First result should be the exact match
+		assert.Equal(t, "John Smith", suggestions[0].Player.Name)
+		assert.InDelta(t, 1.0, suggestions[0].Confidence, 0.01)
+	})
+
+	t.Run("suggests fuzzy matches", func(t *testing.T) {
+		suggestions, err := store.SuggestPlayersForName("Jon Smth", 5)
+		require.NoError(t, err)
+		require.NotEmpty(t, suggestions)
+
+		// Should still find John Smith as top match
+		foundJohnSmith := false
+		for _, s := range suggestions {
+			if s.Player.Name == "John Smith" {
+				foundJohnSmith = true
+				break
+			}
+		}
+		assert.True(t, foundJohnSmith, "Should find John Smith with fuzzy matching")
+	})
+
+	t.Run("limits results", func(t *testing.T) {
+		suggestions, err := store.SuggestPlayersForName("John", 2)
+		require.NoError(t, err)
+		assert.LessOrEqual(t, len(suggestions), 2)
+	})
+
+	t.Run("returns empty for no matches", func(t *testing.T) {
+		suggestions, err := store.SuggestPlayersForName("XYZXYZXYZ", 5)
+		require.NoError(t, err)
+		// May return some results with low confidence, but shouldn't error
+		for _, s := range suggestions {
+			assert.Less(t, s.Confidence, 0.5, "Very different names should have low confidence")
+		}
+	})
+}
+
+func TestCreateManualMatch(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	t.Run("creates manual match with new players", func(t *testing.T) {
+		input := &club.ManualMatchInput{
+			MatchDate:       time.Now(),
+			VenueName:       "Local Court",
+			MatchTypeEnum:   playtomic.MatchTypeEnumDoubles,
+			CompetitionMode: "COMPETITIVE",
+			Team1Players: []club.ManualPlayerInput{
+				{Name: "Alice"},
+				{Name: "Bob"},
+			},
+			Team2Players: []club.ManualPlayerInput{
+				{Name: "Charlie"},
+				{Name: "Diana"},
+			},
+			Sets: []club.SetScoreInput{
+				{Team1Games: 6, Team2Games: 4},
+				{Team1Games: 6, Team2Games: 3},
+			},
+		}
+
+		match, err := store.CreateManualMatch(input, "test_user")
+		require.NoError(t, err)
+		require.NotNil(t, match)
+
+		// Verify match properties
+		assert.True(t, strings.HasPrefix(match.MatchID, "manual_"), "Match ID should have manual_ prefix")
+		assert.Equal(t, playtomic.MatchTypeEnumDoubles, match.MatchTypeEnum)
+		assert.Len(t, match.Teams, 2)
+		assert.Len(t, match.Teams[0].Players, 2)
+		assert.Len(t, match.Teams[1].Players, 2)
+
+		// Verify players have manual_ prefix IDs
+		for _, team := range match.Teams {
+			for _, player := range team.Players {
+				assert.True(t, strings.HasPrefix(player.UserID, "manual_"), "Player ID should have manual_ prefix")
+			}
+		}
+
+		// Verify results
+		assert.Len(t, match.Results, 2)
+	})
+
+	t.Run("creates manual match with existing players", func(t *testing.T) {
+		// Add an existing player
+		store.AddPlayer("existing_player", "Existing Player", 2.0)
+
+		input := &club.ManualMatchInput{
+			MatchDate:       time.Now(),
+			VenueName:       "Another Court",
+			MatchTypeEnum:   playtomic.MatchTypeEnumSingles,
+			CompetitionMode: "FRIENDLY",
+			Team1Players: []club.ManualPlayerInput{
+				{ID: "existing_player", Name: "Existing Player"},
+			},
+			Team2Players: []club.ManualPlayerInput{
+				{Name: "New Opponent"},
+			},
+			Sets: []club.SetScoreInput{
+				{Team1Games: 6, Team2Games: 2},
+				{Team1Games: 6, Team2Games: 1},
+			},
+		}
+
+		match, err := store.CreateManualMatch(input, "test_user")
+		require.NoError(t, err)
+		require.NotNil(t, match)
+
+		// Verify existing player keeps their ID
+		assert.Equal(t, "existing_player", match.Teams[0].Players[0].UserID)
+
+		// Verify new player gets manual_ prefix
+		assert.True(t, strings.HasPrefix(match.Teams[1].Players[0].UserID, "manual_"))
+	})
+
+	t.Run("sets correct team results based on scores", func(t *testing.T) {
+		input := &club.ManualMatchInput{
+			MatchDate:       time.Now(),
+			MatchTypeEnum:   playtomic.MatchTypeEnumDoubles,
+			CompetitionMode: "COMPETITIVE",
+			Team1Players: []club.ManualPlayerInput{
+				{Name: "Winner1"},
+				{Name: "Winner2"},
+			},
+			Team2Players: []club.ManualPlayerInput{
+				{Name: "Loser1"},
+				{Name: "Loser2"},
+			},
+			Sets: []club.SetScoreInput{
+				{Team1Games: 6, Team2Games: 4}, // Team1 wins
+				{Team1Games: 6, Team2Games: 3}, // Team1 wins
+			},
+		}
+
+		match, err := store.CreateManualMatch(input, "test_user")
+		require.NoError(t, err)
+
+		assert.Equal(t, "WON", match.Teams[0].TeamResult)
+		assert.Equal(t, "LOST", match.Teams[1].TeamResult)
+	})
+}
+
+func TestGetManualMatches(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Create a manual match
+	input := &club.ManualMatchInput{
+		MatchDate:       time.Now(),
+		VenueName:       "Test Venue",
+		MatchTypeEnum:   playtomic.MatchTypeEnumDoubles,
+		CompetitionMode: "FRIENDLY",
+		Team1Players: []club.ManualPlayerInput{
+			{Name: "P1"},
+			{Name: "P2"},
+		},
+		Team2Players: []club.ManualPlayerInput{
+			{Name: "P3"},
+			{Name: "P4"},
+		},
+		Sets: []club.SetScoreInput{
+			{Team1Games: 6, Team2Games: 4},
+			{Team1Games: 6, Team2Games: 3},
+		},
+	}
+
+	_, err := store.CreateManualMatch(input, "test_user")
+	require.NoError(t, err)
+
+	// Retrieve manual matches
+	matches, err := store.GetManualMatches()
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+
+	assert.True(t, strings.HasPrefix(matches[0].MatchID, "manual_"))
+	assert.Equal(t, "Test Venue", matches[0].Tenant.Name)
+}
+
+func TestGetDistinctVenues(t *testing.T) {
+	store, db, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Insert some matches with different venues
+	store.AddPlayer("p1", "Player 1", 1.0)
+
+	// Insert matches directly with different tenant_names
+	_, err := db.Exec(`
+		INSERT INTO matches (id, owner_id, owner_name, start_time, end_time, created_at, status, game_status, results_status, resource_name, tenant_id, tenant_name, match_type, processing_status, match_type_enum)
+		VALUES
+			('m1', 'p1', 'Player 1', 1000, 2000, 1000, 'PLAYED', 'PLAYED', 'CONFIRMED', 'Court 1', 't1', 'PadelBoxen', 'COMPETITIVE', 'NEW', 'DOUBLES'),
+			('m2', 'p1', 'Player 1', 1000, 2000, 1000, 'PLAYED', 'PLAYED', 'CONFIRMED', 'Court 2', 't2', 'Padel Arena', 'COMPETITIVE', 'NEW', 'DOUBLES'),
+			('m3', 'p1', 'Player 1', 1000, 2000, 1000, 'PLAYED', 'PLAYED', 'CONFIRMED', 'Court 3', 't3', 'PadelCenter', 'COMPETITIVE', 'NEW', 'DOUBLES'),
+			('m4', 'p1', 'Player 1', 1000, 2000, 1000, 'PLAYED', 'PLAYED', 'CONFIRMED', 'Court 4', 't1', 'PadelBoxen', 'COMPETITIVE', 'NEW', 'DOUBLES')
+	`)
+	require.NoError(t, err)
+
+	t.Run("returns venues matching prefix", func(t *testing.T) {
+		venues, err := store.GetDistinctVenues("Padel", 10)
+		require.NoError(t, err)
+		assert.Len(t, venues, 3) // PadelBoxen, Padel Arena, PadelCenter (distinct)
+
+		// Should include all three
+		assert.Contains(t, venues, "PadelBoxen")
+		assert.Contains(t, venues, "Padel Arena")
+		assert.Contains(t, venues, "PadelCenter")
+	})
+
+	t.Run("returns only matching venues", func(t *testing.T) {
+		venues, err := store.GetDistinctVenues("PadelB", 10)
+		require.NoError(t, err)
+		assert.Len(t, venues, 1)
+		assert.Equal(t, "PadelBoxen", venues[0])
+	})
+
+	t.Run("respects limit", func(t *testing.T) {
+		venues, err := store.GetDistinctVenues("Padel", 2)
+		require.NoError(t, err)
+		assert.Len(t, venues, 2)
+	})
+
+	t.Run("returns empty for no matches", func(t *testing.T) {
+		venues, err := store.GetDistinctVenues("NonExistent", 10)
+		require.NoError(t, err)
+		assert.Empty(t, venues)
+	})
+}
+
+func TestManualMatchStatsIntegration(t *testing.T) {
+	store, _, teardown := setupTestDB(t)
+	defer teardown()
+
+	// Create a manual match
+	input := &club.ManualMatchInput{
+		MatchDate:       time.Now(),
+		VenueName:       "Stats Test Court",
+		MatchTypeEnum:   playtomic.MatchTypeEnumDoubles,
+		CompetitionMode: "COMPETITIVE",
+		Team1Players: []club.ManualPlayerInput{
+			{Name: "Stats Player A"},
+			{Name: "Stats Player B"},
+		},
+		Team2Players: []club.ManualPlayerInput{
+			{Name: "Stats Player C"},
+			{Name: "Stats Player D"},
+		},
+		Sets: []club.SetScoreInput{
+			{Team1Games: 6, Team2Games: 4},
+			{Team1Games: 6, Team2Games: 3},
+		},
+	}
+
+	match, err := store.CreateManualMatch(input, "test_user")
+	require.NoError(t, err)
+
+	// Update stats using the match
+	store.UpdatePlayerStats(match)
+
+	// Verify stats were recorded for manual players
+	// The players should be findable by name
+	stats, err := store.GetPlayerStatsByName("Stats Player A", playtomic.MatchTypeEnumDoubles)
+	require.NoError(t, err)
+	require.NotNil(t, stats)
+
+	assert.Equal(t, 1, stats.MatchesPlayed)
+	assert.Equal(t, 1, stats.MatchesWon)
+	assert.Equal(t, 2, stats.SetsWon)
+	assert.Equal(t, 0, stats.SetsLost)
 }

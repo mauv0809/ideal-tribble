@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/mauv0809/ideal-tribble/internal/auth"
+	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
 )
 
@@ -34,6 +35,7 @@ func NewRouter(
 	authStore *auth.Store,
 	sessionManager *auth.SessionManager,
 	pairingsStore pairings.PairingsStore,
+	clubStore club.ClubStore,
 	fetchService ...FetchService,
 ) (*Router, error) {
 	// Create rate limiter
@@ -56,7 +58,7 @@ func NewRouter(
 
 	// Create handlers
 	authHandlers := NewAuthHandlers(middleware, authStore, sessionManager, totpManager, rateLimiter)
-	handlers := NewHandlers(middleware, pairingsStore, fs)
+	handlers := NewHandlers(middleware, pairingsStore, clubStore, fs)
 	profileHandlers := NewProfileHandlers(middleware, authStore, sessionManager, totpManager)
 	adminHandlers := NewAdminHandlers(middleware, authStore)
 
@@ -115,6 +117,20 @@ func (r *Router) setupRoutes() {
 
 	// Match detail route
 	r.mux.Handle("GET /matches/{matchID}", r.middleware.RequireAuth(http.HandlerFunc(r.handlers.MatchDetail)))
+
+	// Manual match entry routes
+	r.mux.Handle("GET /matches/new", r.middleware.RequireAuth(http.HandlerFunc(r.handlers.NewMatchForm)))
+	r.mux.Handle("POST /matches/new", r.middleware.RequireAuth(http.HandlerFunc(r.handlers.CreateManualMatch)))
+	r.mux.Handle("GET /matches/manual", r.middleware.RequireAuth(http.HandlerFunc(r.handlers.ManualMatchesList)))
+
+	// Player management routes
+	r.mux.Handle("GET /players", r.middleware.RequireAuth(http.HandlerFunc(r.handlers.PlayersList)))
+	r.mux.Handle("POST /players/{id}/link", r.middleware.RequireAuth(http.HandlerFunc(r.handlers.LinkPlayer)))
+	r.mux.Handle("DELETE /players/{id}/link", r.middleware.RequireAuth(http.HandlerFunc(r.handlers.UnlinkPlayer)))
+
+	// Suggestion APIs (for autocomplete)
+	r.mux.Handle("GET /api/players/suggest", r.middleware.RequireAuth(http.HandlerFunc(r.handlers.SuggestPlayers)))
+	r.mux.Handle("GET /api/venues/suggest", r.middleware.RequireAuth(http.HandlerFunc(r.handlers.SuggestVenues)))
 
 	// Profile routes
 	r.mux.Handle("GET /profile", r.middleware.RequireAuth(http.HandlerFunc(r.profileHandlers.ProfilePage)))

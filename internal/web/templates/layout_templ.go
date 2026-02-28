@@ -79,7 +79,7 @@ func Layout(data PageData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if data.User != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"nav-links\"><a href=\"/dashboard\">Dashboard</a> <a href=\"/pairings\">Pairings</a> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"nav-links\"><a href=\"/dashboard\">Dashboard</a> <a href=\"/pairings\">Pairings</a> <a href=\"/players\">Players</a> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -89,89 +89,49 @@ func Layout(data PageData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<a href=\"/profile\">Profile</a> <select id=\"theme-select\" class=\"theme-select\" title=\"Theme\"><option value=\"latte\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if data.User.Theme == "latte" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, " selected")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, ">Latte</option> <option value=\"frappe\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if data.User.Theme == "frappe" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, " selected")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, ">Frappé</option> <option value=\"macchiato\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if data.User.Theme == "macchiato" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, " selected")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, ">Macchiato</option> <option value=\"mocha\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if data.User.Theme == "mocha" || data.User.Theme == "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, " selected")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, ">Mocha</option></select><form method=\"POST\" action=\"/logout\" style=\"margin: 0; display: inline;\"><button type=\"submit\" class=\"nav-logout\">Logout</button></form></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<a href=\"/profile\">Profile</a><form method=\"POST\" action=\"/logout\" style=\"margin: 0; display: inline;\"><button type=\"submit\" class=\"nav-logout\">Logout</button></form></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</div></nav><main>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div></nav><main>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if data.FlashError != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div class=\"flash flash-error\" role=\"alert\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"flash flash-error\" role=\"alert\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(data.FlashError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/layout.templ`, Line: 769, Col: 22}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/layout.templ`, Line: 764, Col: 22}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
 		if data.FlashSuccess != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"flash flash-success\" role=\"alert\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div class=\"flash flash-success\" role=\"alert\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(data.FlashSuccess)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/layout.templ`, Line: 774, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/layout.templ`, Line: 769, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -180,7 +140,7 @@ func Layout(data PageData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</main><footer><small>Padel Pairings Analytics</small></footer><script>\n\t\t\t// Convert UTC timestamps to local timezone\n\t\t\tfunction formatLocalDates() {\n\t\t\t\t// Full date format (e.g., \"Monday, January 2, 2006\")\n\t\t\t\tdocument.querySelectorAll('.local-date').forEach(el => {\n\t\t\t\t\tconst ts = parseInt(el.dataset.timestamp, 10);\n\t\t\t\t\tif (ts) {\n\t\t\t\t\t\tconst date = new Date(ts * 1000);\n\t\t\t\t\t\tel.textContent = date.toLocaleDateString(undefined, {\n\t\t\t\t\t\t\tweekday: 'long', year: 'numeric', month: 'long', day: 'numeric'\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Time format (e.g., \"2:00 PM\")\n\t\t\t\tdocument.querySelectorAll('.local-time').forEach(el => {\n\t\t\t\t\tconst ts = parseInt(el.dataset.timestamp, 10);\n\t\t\t\t\tif (ts) {\n\t\t\t\t\t\tconst date = new Date(ts * 1000);\n\t\t\t\t\t\tel.textContent = date.toLocaleTimeString(undefined, {\n\t\t\t\t\t\t\thour: 'numeric', minute: '2-digit'\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Short date + time format for tables (e.g., \"Jan 2, 2006 2:00 PM\")\n\t\t\t\tdocument.querySelectorAll('.local-datetime').forEach(el => {\n\t\t\t\t\tconst ts = parseInt(el.dataset.timestamp, 10);\n\t\t\t\t\tif (ts) {\n\t\t\t\t\t\tconst date = new Date(ts * 1000);\n\t\t\t\t\t\tel.textContent = date.toLocaleDateString(undefined, {\n\t\t\t\t\t\t\tmonth: 'short', day: 'numeric', year: 'numeric'\n\t\t\t\t\t\t}) + ' ' + date.toLocaleTimeString(undefined, {\n\t\t\t\t\t\t\thour: 'numeric', minute: '2-digit'\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t}\n\n\t\t\t// Run on page load\n\t\t\tformatLocalDates();\n\n\t\t\t// Run after htmx swaps content\n\t\t\tdocument.body.addEventListener('htmx:afterSwap', formatLocalDates);\n\n\t\t\t// Theme selector\n\t\t\tconst themeSelect = document.getElementById('theme-select');\n\t\t\tif (themeSelect) {\n\t\t\t\tthemeSelect.addEventListener('change', async function() {\n\t\t\t\t\tconst theme = this.value;\n\t\t\t\t\t// Apply immediately for instant feedback\n\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', theme);\n\n\t\t\t\t\t// Save to server\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst response = await fetch('/api/theme', {\n\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\theaders: { 'Content-Type': 'application/x-www-form-urlencoded' },\n\t\t\t\t\t\t\tbody: 'theme=' + encodeURIComponent(theme)\n\t\t\t\t\t\t});\n\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\tconsole.error('Failed to save theme: HTTP', response.status);\n\t\t\t\t\t\t}\n\t\t\t\t\t} catch (err) {\n\t\t\t\t\t\tconsole.error('Failed to save theme:', err);\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t}\n\t\t</script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</main><footer><small>Padel Pairings Analytics</small></footer><script>\n\t\t\t// Convert UTC timestamps to local timezone\n\t\t\tfunction formatLocalDates() {\n\t\t\t\t// Full date format (e.g., \"Monday, January 2, 2006\")\n\t\t\t\tdocument.querySelectorAll('.local-date').forEach(el => {\n\t\t\t\t\tconst ts = parseInt(el.dataset.timestamp, 10);\n\t\t\t\t\tif (ts) {\n\t\t\t\t\t\tconst date = new Date(ts * 1000);\n\t\t\t\t\t\tel.textContent = date.toLocaleDateString(undefined, {\n\t\t\t\t\t\t\tweekday: 'long', year: 'numeric', month: 'long', day: 'numeric'\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Time format (e.g., \"2:00 PM\")\n\t\t\t\tdocument.querySelectorAll('.local-time').forEach(el => {\n\t\t\t\t\tconst ts = parseInt(el.dataset.timestamp, 10);\n\t\t\t\t\tif (ts) {\n\t\t\t\t\t\tconst date = new Date(ts * 1000);\n\t\t\t\t\t\tel.textContent = date.toLocaleTimeString(undefined, {\n\t\t\t\t\t\t\thour: 'numeric', minute: '2-digit'\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Short date + time format for tables (e.g., \"Jan 2, 2006 2:00 PM\")\n\t\t\t\tdocument.querySelectorAll('.local-datetime').forEach(el => {\n\t\t\t\t\tconst ts = parseInt(el.dataset.timestamp, 10);\n\t\t\t\t\tif (ts) {\n\t\t\t\t\t\tconst date = new Date(ts * 1000);\n\t\t\t\t\t\tel.textContent = date.toLocaleDateString(undefined, {\n\t\t\t\t\t\t\tmonth: 'short', day: 'numeric', year: 'numeric'\n\t\t\t\t\t\t}) + ' ' + date.toLocaleTimeString(undefined, {\n\t\t\t\t\t\t\thour: 'numeric', minute: '2-digit'\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t}\n\n\t\t\t// Run on page load\n\t\t\tformatLocalDates();\n\n\t\t\t// Run after htmx swaps content\n\t\t\tdocument.body.addEventListener('htmx:afterSwap', formatLocalDates);\n\n\t\t\t// Theme selector\n\t\t\tconst themeSelect = document.getElementById('theme-select');\n\t\t\tif (themeSelect) {\n\t\t\t\tthemeSelect.addEventListener('change', async function() {\n\t\t\t\t\tconst theme = this.value;\n\t\t\t\t\t// Apply immediately for instant feedback\n\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', theme);\n\n\t\t\t\t\t// Save to server\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst response = await fetch('/api/theme', {\n\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\theaders: { 'Content-Type': 'application/x-www-form-urlencoded' },\n\t\t\t\t\t\t\tbody: 'theme=' + encodeURIComponent(theme)\n\t\t\t\t\t\t});\n\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\tconsole.error('Failed to save theme: HTTP', response.status);\n\t\t\t\t\t\t}\n\t\t\t\t\t} catch (err) {\n\t\t\t\t\t\tconsole.error('Failed to save theme:', err);\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t}\n\t\t</script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

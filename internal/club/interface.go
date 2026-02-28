@@ -30,4 +30,23 @@ type ClubStore interface {
 	GetUnmappedPlayers() ([]PlayerInfo, error)
 	UpdatePlayerSlackMapping(playerID, slackUserID, slackUsername, slackDisplayName, status string, confidence float64) error
 	FindPlayersByNameSimilarity(searchName string) ([]PlayerInfo, error)
+
+	// Player alias methods for manual player mapping
+	CreatePlayerAlias(manualID, manualName string) (*PlayerAlias, error)
+	GetPlayerAlias(manualID string) (*PlayerAlias, error)
+	GetAllPlayerAliases() ([]PlayerAlias, error)
+	GetUnlinkedAliases() ([]PlayerAlias, error)
+	LinkPlayerAlias(manualID, playtomicID, playtomicName string, confirmed bool, confidence float64) error
+	UnlinkPlayerAlias(manualID string) error
+	ResolvePlayerID(playerID string) string
+
+	// Player suggestion for autocomplete
+	SuggestPlayersForName(name string, limit int) ([]PlayerSuggestion, error)
+
+	// Manual match methods
+	CreateManualMatch(input *ManualMatchInput, createdBy string) (*playtomic.PadelMatch, error)
+	GetManualMatches() ([]*playtomic.PadelMatch, error)
+
+	// Venue suggestions
+	GetDistinctVenues(query string, limit int) ([]string, error)
 }

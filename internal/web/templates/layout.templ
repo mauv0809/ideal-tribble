@@ -746,16 +746,11 @@ templ Layout(data PageData) {
 					<div class="nav-links">
 						<a href="/dashboard">Dashboard</a>
 						<a href="/pairings">Pairings</a>
+						<a href="/players">Players</a>
 						if data.User.IsAdmin {
 							<a href="/admin/users">Users</a>
 						}
 						<a href="/profile">Profile</a>
-						<select id="theme-select" class="theme-select" title="Theme">
-							<option value="latte" selected?={ data.User.Theme == "latte" }>Latte</option>
-							<option value="frappe" selected?={ data.User.Theme == "frappe" }>Frappé</option>
-							<option value="macchiato" selected?={ data.User.Theme == "macchiato" }>Macchiato</option>
-							<option value="mocha" selected?={ data.User.Theme == "mocha" || data.User.Theme == "" }>Mocha</option>
-						</select>
 						<form method="POST" action="/logout" style="margin: 0; display: inline;">
 							<button type="submit" class="nav-logout">Logout</button>
 						</form>

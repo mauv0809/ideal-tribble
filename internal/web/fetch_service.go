@@ -129,7 +129,8 @@ func (s *DefaultFetchService) FetchMatches(days int) (clubMatches int, pairingMa
 					"teams", len(m.Teams))
 			}
 
-			pairingMatchList := pairings.DetectPairingMatches(allFetchedMatches, trackedPairings)
+			// Use resolver to handle manual player aliases
+			pairingMatchList := pairings.DetectPairingMatchesWithResolver(allFetchedMatches, trackedPairings, s.store.ResolvePlayerID)
 			if len(pairingMatchList) > 0 {
 				log.Info("Upserting pairing matches", "count", len(pairingMatchList))
 				if err := s.pairingsStore.UpsertPairingMatches(pairingMatchList); err != nil {

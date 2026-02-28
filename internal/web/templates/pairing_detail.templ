@@ -62,7 +62,13 @@ templ PairingDetailPage(data PairingDetailData) {
 	@Layout(data.PageData) {
 		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
 			<h1>{ data.Pairing.Player1Name } & { data.Pairing.Player2Name }</h1>
-			<a href="/pairings" role="button" class="outline">← Back to Pairings</a>
+			<div style="display: flex; gap: 0.75rem;">
+				<a href={ templ.SafeURL(fmt.Sprintf("/matches/new?pairing=%d", data.Pairing.ID)) } role="button">
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+					Enter Match
+				</a>
+				<a href="/pairings" role="button" class="outline">← Back to Pairings</a>
+			</div>
 		</div>
 
 		// Overall Stats

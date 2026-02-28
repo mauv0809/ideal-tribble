@@ -1,0 +1,163 @@
+package templates
+
+import (
+	"fmt"
+	"time"
+	"github.com/mauv0809/ideal-tribble/internal/playtomic"
+)
+
+// ManualMatchesData holds data for the manual matches list page.
+type ManualMatchesData struct {
+	PageData
+	Matches []*playtomic.PadelMatch
+}
+
+// ManualMatchesPage renders the list of manually entered matches.
+templ ManualMatchesPage(data ManualMatchesData) {
+	@Layout(data.PageData) {
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+			<h1>Manual Matches</h1>
+			<a href="/matches/new" role="button">Enter Match</a>
+		</div>
+
+		if len(data.Matches) == 0 {
+			<article>
+				<p style="text-align: center; color: var(--text-secondary);">
+					No manual matches recorded yet.
+				</p>
+				<div style="text-align: center;">
+					<a href="/matches/new" role="button">Enter Your First Match</a>
+				</div>
+			</article>
+		} else {
+			<div style="overflow-x: auto;">
+				<table>
+					<thead>
+						<tr>
+							<th>Date</th>
+							<th>Venue</th>
+							<th>Type</th>
+							<th>Team 1</th>
+							<th>Team 2</th>
+							<th>Result</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, match := range data.Matches {
+							<tr>
+								<td>
+									{ formatMatchDate(match.Start) }
+								</td>
+								<td>
+									if match.Tenant.Name != "" {
+										{ match.Tenant.Name }
+									} else {
+										<span style="color: var(--text-muted);">-</span>
+									}
+								</td>
+								<td>
+									<span class={ "badge", matchTypeBadgeClass(match.MatchTypeEnum) }>
+										{ string(match.MatchTypeEnum) }
+									</span>
+								</td>
+								<td>
+									@TeamPlayers(match.Teams, 0)
+								</td>
+								<td>
+									@TeamPlayers(match.Teams, 1)
+								</td>
+								<td>
+									@MatchResult(match)
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+
+		<style>
+			.badge {
+				display: inline-block;
+				padding: 0.25rem 0.5rem;
+				border-radius: var(--radius-sm);
+				font-size: 0.75rem;
+				font-weight: 500;
+				text-transform: uppercase;
+			}
+			.badge-doubles {
+				background: var(--accent-primary);
+				color: var(--ctp-base);
+			}
+			.badge-singles {
+				background: var(--accent-info);
+				color: var(--ctp-base);
+			}
+			.result-won {
+				color: var(--accent-success);
+				font-weight: 600;
+			}
+			.result-lost {
+				color: var(--accent-error);
+			}
+			.set-scores {
+				font-size: 0.9rem;
+				color: var(--text-secondary);
+			}
+		</style>
+	}
+}
+
+// TeamPlayers renders the players in a team.
+templ TeamPlayers(teams []playtomic.Team, teamIndex int) {
+	if teamIndex < len(teams) {
+		<div>
+			for i, player := range teams[teamIndex].Players {
+				if i > 0 {
+					<span style="color: var(--text-muted);"> & </span>
+				}
+				{ player.Name }
+			}
+			if teams[teamIndex].TeamResult == "WON" {
+				<span style="color: var(--accent-success); margin-left: 0.25rem;">W</span>
+			}
+		</div>
+	}
+}
+
+// MatchResult renders the match result with set scores.
+templ MatchResult(match *playtomic.PadelMatch) {
+	<div>
+		@SetScores(match.Results, match.Teams)
+	</div>
+}
+
+// SetScores renders the set-by-set scores.
+templ SetScores(results []playtomic.SetResult, teams []playtomic.Team) {
+	<div class="set-scores">
+		for i, set := range results {
+			if i > 0 {
+				<span style="margin: 0 0.25rem;">,</span>
+			}
+			if len(teams) >= 2 {
+				{ fmt.Sprintf("%d-%d", set.Scores[teams[0].ID], set.Scores[teams[1].ID]) }
+			}
+		}
+	</div>
+}
+
+func formatMatchDate(timestamp int64) string {
+	t := time.Unix(timestamp, 0)
+	return t.Format("Jan 2, 2006")
+}
+
+func matchTypeBadgeClass(matchType playtomic.MatchTypeEnum) string {
+	switch matchType {
+	case playtomic.MatchTypeEnumSingles:
+		return "badge-singles"
+	case playtomic.MatchTypeEnumDoubles:
+		return "badge-doubles"
+	default:
+		return ""
+	}
+}
