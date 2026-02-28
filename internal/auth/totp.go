@@ -63,6 +63,19 @@ func (m *TOTPManager) GenerateSecret(userEmail string) (encryptedSecret string, 
 	return encrypted, key.URL(), nil
 }
 
+// GetProvisioningURI generates a provisioning URI from an existing encrypted secret.
+func (m *TOTPManager) GetProvisioningURI(encryptedSecret, userEmail string) (string, error) {
+	secret, err := m.decrypt(encryptedSecret)
+	if err != nil {
+		return "", err
+	}
+
+	// Build the otpauth URI manually
+	// Format: otpauth://totp/ISSUER:ACCOUNT?secret=SECRET&issuer=ISSUER&algorithm=SHA1&digits=6
+	uri := "otpauth://totp/" + TOTPIssuer + ":" + userEmail + "?secret=" + secret + "&issuer=" + TOTPIssuer + "&algorithm=SHA1&digits=6"
+	return uri, nil
+}
+
 // ValidateCode validates a TOTP code against an encrypted secret.
 func (m *TOTPManager) ValidateCode(encryptedSecret, code string) (bool, error) {
 	if encryptedSecret == "" {

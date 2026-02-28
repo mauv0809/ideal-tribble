@@ -152,8 +152,8 @@ func (h *ProfileHandlers) TOTPQRCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Regenerate the provisioning URI
-	_, provisioningURI, err := h.totpManager.GenerateSecret(user.Email)
+	// Get provisioning URI from the stored secret
+	provisioningURI, err := h.totpManager.GetProvisioningURI(fullUser.TOTPSecret, user.Email)
 	if err != nil {
 		http.Error(w, "Failed to generate QR code", http.StatusInternalServerError)
 		return
