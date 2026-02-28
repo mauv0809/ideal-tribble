@@ -28,6 +28,7 @@ The name "Wally" is inspired by the helpful robot and the glass walls of the pad
 - Secures Slack command endpoints (e.g., `/slack/command/leaderboard`) by verifying the `X-Slack-Signature` header, ensuring requests originate genuinely from Slack.
 - Supports match type separation (singles/doubles) with dedicated statistics and ball-bringing tracking.
 - **Web dashboard** for tracking pairing analytics, opponent breakdowns, and match history with session-based authentication and optional TOTP 2FA.
+- **Manual match entry** for recording matches played outside Playtomic, with player/venue autocomplete and alias linking for unified statistics.
 - Infrastructure is managed via Terraform for consistent, repeatable deployments.
 - Includes a simple hot-reloading setup for easy local development.
 
@@ -289,6 +290,13 @@ Here's a look at our future development plans:
   - Individual player performance against different opponents
   - Match history with filtering by wins/losses
   - Head-to-head records against specific opponent pairs
+
+- **Manual Match Entry:** ✅ **Completed**
+  - Record matches played outside of Playtomic-managed courts
+  - Player autocomplete with fuzzy matching against existing players
+  - Venue suggestions from match history to prevent typos
+  - Player alias system to link manual players to Playtomic accounts for unified statistics
+  - Pre-fill support from pairing pages for quick entry
 
 ## License
 

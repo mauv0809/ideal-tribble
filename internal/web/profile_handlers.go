@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"image/png"
+	"log"
 	"net/http"
 
 	"github.com/boombuler/barcode"
@@ -103,8 +104,10 @@ func (h *ProfileHandlers) ChangePassword(w http.ResponseWriter, r *http.Request)
 // TOTPSetupPage renders the TOTP setup page.
 func (h *ProfileHandlers) TOTPSetupPage(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r)
+	log.Printf("[DEBUG TOTP] TOTPSetupPage called for user %s (ID: %d)", user.Email, user.ID)
 
 	if user.TOTPEnabled {
+		log.Printf("[DEBUG TOTP] User already has TOTP enabled, redirecting")
 		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 		return
 	}
@@ -112,21 +115,26 @@ func (h *ProfileHandlers) TOTPSetupPage(w http.ResponseWriter, r *http.Request) 
 	// Generate new TOTP secret
 	encryptedSecret, provisioningURI, err := h.totpManager.GenerateSecret(user.Email)
 	if err != nil {
+		log.Printf("[DEBUG TOTP] Failed to generate secret: %v", err)
 		_ = h.middleware.SetFlash(w, r, "error", "Failed to generate TOTP secret")
 		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 		return
 	}
+	log.Printf("[DEBUG TOTP] Generated secret, encrypted length: %d", len(encryptedSecret))
 
 	// Store the encrypted secret temporarily (we'll verify before enabling)
 	if err := h.authStore.SetTOTPSecret(user.ID, encryptedSecret); err != nil {
+		log.Printf("[DEBUG TOTP] Failed to save secret: %v", err)
 		_ = h.middleware.SetFlash(w, r, "error", "Failed to save TOTP secret")
 		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 		return
 	}
+	log.Printf("[DEBUG TOTP] Saved secret to database for user ID %d", user.ID)
 
 	// Extract the raw secret from the provisioning URI for display
 	// The secret is between "secret=" and "&" or end of string
 	secret := extractSecretFromURI(provisioningURI)
+	log.Printf("[DEBUG TOTP] Extracted secret from URI, length: %d", len(secret))
 
 	data := templates.TOTPSetupData{
 		PageData: templates.PageData{
@@ -144,20 +152,30 @@ func (h *ProfileHandlers) TOTPSetupPage(w http.ResponseWriter, r *http.Request) 
 // TOTPQRCode generates and serves the QR code image.
 func (h *ProfileHandlers) TOTPQRCode(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r)
+	log.Printf("[DEBUG TOTP] TOTPQRCode called for user %s (ID: %d)", user.Email, user.ID)
 
 	// Get the user's current TOTP secret
 	fullUser, err := h.authStore.GetUserByID(user.ID)
-	if err != nil || fullUser.TOTPSecret == "" {
+	if err != nil {
+		log.Printf("[DEBUG TOTP] Failed to get user: %v", err)
 		http.Error(w, "No TOTP secret configured", http.StatusBadRequest)
 		return
 	}
+	if fullUser.TOTPSecret == "" {
+		log.Printf("[DEBUG TOTP] User has no TOTP secret stored")
+		http.Error(w, "No TOTP secret configured", http.StatusBadRequest)
+		return
+	}
+	log.Printf("[DEBUG TOTP] Found stored secret, length: %d", len(fullUser.TOTPSecret))
 
 	// Get provisioning URI from the stored secret
 	provisioningURI, err := h.totpManager.GetProvisioningURI(fullUser.TOTPSecret, user.Email)
 	if err != nil {
+		log.Printf("[DEBUG TOTP] Failed to get provisioning URI: %v", err)
 		http.Error(w, "Failed to generate QR code", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("[DEBUG TOTP] Generated provisioning URI from stored secret")
 
 	// Generate QR code
 	qrCode, err := qr.Encode(provisioningURI, qr.M, qr.Auto)
@@ -186,25 +204,37 @@ func (h *ProfileHandlers) TOTPQRCode(w http.ResponseWriter, r *http.Request) {
 // VerifyTOTP verifies the TOTP code and enables 2FA.
 func (h *ProfileHandlers) VerifyTOTP(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r)
+	log.Printf("[DEBUG TOTP] VerifyTOTP called for user %s (ID: %d)", user.Email, user.ID)
 
 	if err := r.ParseForm(); err != nil {
+		log.Printf("[DEBUG TOTP] Failed to parse form: %v", err)
 		_ = h.middleware.SetFlash(w, r, "error", "Invalid form data")
 		http.Redirect(w, r, "/profile/totp/setup", http.StatusSeeOther)
 		return
 	}
 
 	code := r.FormValue("code")
+	log.Printf("[DEBUG TOTP] Received verification code")
 
 	// Get the stored secret
 	fullUser, err := h.authStore.GetUserByID(user.ID)
-	if err != nil || fullUser.TOTPSecret == "" {
+	if err != nil {
+		log.Printf("[DEBUG TOTP] Failed to get user: %v", err)
 		_ = h.middleware.SetFlash(w, r, "error", "No TOTP secret found. Please start setup again.")
 		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 		return
 	}
+	if fullUser.TOTPSecret == "" {
+		log.Printf("[DEBUG TOTP] User has no TOTP secret stored")
+		_ = h.middleware.SetFlash(w, r, "error", "No TOTP secret found. Please start setup again.")
+		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+		return
+	}
+	log.Printf("[DEBUG TOTP] Found stored secret for validation, length: %d", len(fullUser.TOTPSecret))
 
 	// Validate the code
 	valid, err := h.totpManager.ValidateCode(fullUser.TOTPSecret, code)
+	log.Printf("[DEBUG TOTP] Validation result: valid=%v, err=%v", valid, err)
 	if err != nil || !valid {
 		_ = h.middleware.SetFlash(w, r, "error", "Invalid verification code. Please try again.")
 		http.Redirect(w, r, "/profile/totp/setup", http.StatusSeeOther)
@@ -213,11 +243,13 @@ func (h *ProfileHandlers) VerifyTOTP(w http.ResponseWriter, r *http.Request) {
 
 	// Enable TOTP
 	if err := h.authStore.EnableTOTP(user.ID); err != nil {
+		log.Printf("[DEBUG TOTP] Failed to enable TOTP: %v", err)
 		_ = h.middleware.SetFlash(w, r, "error", "Failed to enable 2FA")
 		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 		return
 	}
 
+	log.Printf("[DEBUG TOTP] TOTP enabled successfully for user %d", user.ID)
 	_ = h.middleware.SetFlash(w, r, "success", "Two-factor authentication enabled successfully")
 	http.Redirect(w, r, "/profile", http.StatusSeeOther)
 }

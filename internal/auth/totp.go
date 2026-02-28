@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"log"
 
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -54,40 +55,53 @@ func (m *TOTPManager) GenerateSecret(userEmail string) (encryptedSecret string, 
 		return "", "", err
 	}
 
+	log.Printf("[DEBUG TOTP] Generated new TOTP secret")
+
 	// Encrypt the secret for storage
 	encrypted, err := m.encrypt(key.Secret())
 	if err != nil {
 		return "", "", err
 	}
 
+	log.Printf("[DEBUG TOTP] Encrypted secret length: %d", len(encrypted))
 	return encrypted, key.URL(), nil
 }
 
 // GetProvisioningURI generates a provisioning URI from an existing encrypted secret.
 func (m *TOTPManager) GetProvisioningURI(encryptedSecret, userEmail string) (string, error) {
+	log.Printf("[DEBUG TOTP] GetProvisioningURI called, encrypted length: %d", len(encryptedSecret))
 	secret, err := m.decrypt(encryptedSecret)
 	if err != nil {
+		log.Printf("[DEBUG TOTP] Failed to decrypt: %v", err)
 		return "", err
 	}
+
+	log.Printf("[DEBUG TOTP] Decrypted secret successfully")
 
 	// Build the otpauth URI manually
 	// Format: otpauth://totp/ISSUER:ACCOUNT?secret=SECRET&issuer=ISSUER&algorithm=SHA1&digits=6
 	uri := "otpauth://totp/" + TOTPIssuer + ":" + userEmail + "?secret=" + secret + "&issuer=" + TOTPIssuer + "&algorithm=SHA1&digits=6"
+	log.Printf("[DEBUG TOTP] Generated provisioning URI")
 	return uri, nil
 }
 
 // ValidateCode validates a TOTP code against an encrypted secret.
 func (m *TOTPManager) ValidateCode(encryptedSecret, code string) (bool, error) {
+	log.Printf("[DEBUG TOTP] ValidateCode called, encrypted length: %d", len(encryptedSecret))
 	if encryptedSecret == "" {
 		return false, ErrTOTPNotConfigured
 	}
 
 	secret, err := m.decrypt(encryptedSecret)
 	if err != nil {
+		log.Printf("[DEBUG TOTP] Failed to decrypt for validation: %v", err)
 		return false, err
 	}
 
-	return totp.Validate(code, secret), nil
+	log.Printf("[DEBUG TOTP] Decrypted secret for validation")
+	valid := totp.Validate(code, secret)
+	log.Printf("[DEBUG TOTP] Validation result: %v", valid)
+	return valid, nil
 }
 
 // encrypt encrypts plaintext using AES-256-GCM.
