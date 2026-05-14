@@ -1,6 +1,6 @@
 module github.com/mauv0809/ideal-tribble
 
-go 1.24.4
+go 1.25
 
 require (
 	cloud.google.com/go/pubsub v1.49.0
@@ -16,7 +16,7 @@ require (
 	github.com/pressly/goose/v3 v3.24.3
 	github.com/prometheus/client_golang v1.22.0
 	github.com/rafa-garcia/go-playtomic-api v0.1.0
-	github.com/slack-go/slack v0.17.3
+	github.com/slack-go/slack v0.23.1
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.11.1
 	github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d
