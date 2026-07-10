@@ -38,24 +38,11 @@ func Load() Config {
 	cfg := Config{
 		DBName:        getEnv("DB_NAME"),
 		MigrationsDir: "./migrations",
-		Slack: SlackConfig{
-			Token:         getEnv("SLACK_BOT_TOKEN"),
-			ChannelID:     getEnv("SLACK_CHANNEL_ID"),
-			SigningSecret: getEnv("SLACK_SIGNING_SECRET"),
-		},
-		TenantID: getEnv("TENANT_ID"),
-		Port:     getEnv("PORT"),
+		TenantID:      getEnv("TENANT_ID"),
+		Port:          getEnv("PORT"),
 		Turso: TursoConfig{
 			PrimaryURL: getEnv("TURSO_PRIMARY_URL"),
 			AuthToken:  getEnv("TURSO_AUTH_TOKEN"),
-		},
-		/*Inngest: InngestConfig{
-			AppID:      getEnv("INNGEST_APP_ID"),
-			SingingKey: getEnv("INNGEST_SIGNING_KEY"),
-			EventKey:   getEnv("INNGEST_EVENT_KEY"),
-		},*/
-		Ngrok: NgrokConfig{
-			AuthToken: os.Getenv("NGROK_AUTHTOKEN"),
 		},
 		Web: WebConfig{
 			SessionSecret:     sessionSecret,

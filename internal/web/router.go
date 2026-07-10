@@ -15,7 +15,7 @@ var staticFiles embed.FS
 
 // Config holds the configuration for the web server.
 type Config struct {
-	SessionSecret    []byte
+	SessionSecret     []byte
 	TOTPEncryptionKey []byte
 }
 
@@ -27,6 +27,7 @@ type Router struct {
 	handlers        *Handlers
 	profileHandlers *ProfileHandlers
 	adminHandlers   *AdminHandlers
+	clubStore       club.ClubStore
 }
 
 // NewRouter creates a new web router with all handlers configured.
@@ -69,6 +70,7 @@ func NewRouter(
 		handlers:        handlers,
 		profileHandlers: profileHandlers,
 		adminHandlers:   adminHandlers,
+		clubStore:       clubStore,
 	}
 
 	router.setupRoutes()
@@ -76,6 +78,10 @@ func NewRouter(
 }
 
 func (r *Router) setupRoutes() {
+	// Health check for the deploy proxy (Kamal). Pings the DB so an
+	// unhealthy container (DB unreachable) is restarted automatically.
+	r.mux.HandleFunc("GET /health", r.health)
+
 	// Static files
 	staticFS, _ := fs.Sub(staticFiles, "static")
 	r.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
@@ -156,4 +162,16 @@ func (r *Router) setupRoutes() {
 // ServeHTTP implements the http.Handler interface.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.mux.ServeHTTP(w, req)
+}
+
+// health reports liveness/readiness for the deploy proxy. It returns 200 when
+// the database is reachable and 503 otherwise.
+func (r *Router) health(w http.ResponseWriter, _ *http.Request) {
+	if err := r.clubStore.Ping(); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("unhealthy"))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("OK"))
 }

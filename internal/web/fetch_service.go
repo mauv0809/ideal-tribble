@@ -7,18 +7,16 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/mauv0809/ideal-tribble/internal/club"
 	"github.com/mauv0809/ideal-tribble/internal/config"
-	"github.com/mauv0809/ideal-tribble/internal/matchmaking"
 	"github.com/mauv0809/ideal-tribble/internal/pairings"
 	"github.com/mauv0809/ideal-tribble/internal/playtomic"
 )
 
 // DefaultFetchService implements FetchService using existing infrastructure.
 type DefaultFetchService struct {
-	store             club.ClubStore
-	cfg               config.Config
-	playtomicClient   playtomic.PlaytomicClient
-	matchmakingService matchmaking.MatchmakingService
-	pairingsStore     pairings.PairingsStore
+	store           club.ClubStore
+	cfg             config.Config
+	playtomicClient playtomic.PlaytomicClient
+	pairingsStore   pairings.PairingsStore
 }
 
 // NewFetchService creates a new fetch service.
@@ -26,15 +24,13 @@ func NewFetchService(
 	store club.ClubStore,
 	cfg config.Config,
 	playtomicClient playtomic.PlaytomicClient,
-	matchmakingService matchmaking.MatchmakingService,
 	pairingsStore pairings.PairingsStore,
 ) *DefaultFetchService {
 	return &DefaultFetchService{
-		store:             store,
-		cfg:               cfg,
-		playtomicClient:   playtomicClient,
-		matchmakingService: matchmakingService,
-		pairingsStore:     pairingsStore,
+		store:           store,
+		cfg:             cfg,
+		playtomicClient: playtomicClient,
+		pairingsStore:   pairingsStore,
 	}
 }
 
@@ -94,20 +90,6 @@ func (s *DefaultFetchService) FetchMatches(days int) (clubMatches int, pairingMa
 			return 0, 0, err
 		}
 		clubMatches = len(clubMatchesToUpsert)
-	}
-
-	// Detect and complete any match requests
-	if s.matchmakingService != nil && len(clubMatchesToUpsert) > 0 {
-		completedRequestIDs, err := s.matchmakingService.DetectMatchedRequests(clubMatchesToUpsert)
-		if err != nil {
-			log.Error("Failed to detect matched requests", "error", err)
-		} else if len(completedRequestIDs) > 0 {
-			for _, requestID := range completedRequestIDs {
-				if err := s.matchmakingService.UpdateMatchRequestStatus(requestID, matchmaking.StatusCompleted); err != nil {
-					log.Error("Failed to mark match request as completed", "requestID", requestID, "error", err)
-				}
-			}
-		}
 	}
 
 	// Detect and store pairing matches
