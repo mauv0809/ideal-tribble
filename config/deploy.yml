@@ -1,0 +1,64 @@
+# Kamal 2 deploy config for the Wally web app.
+#
+# Infra (the box, firewall, Docker, DNS) is provisioned separately by the
+# utiger-infra repo. This file owns only the application: image, proxy, TLS,
+# and runtime env.
+#
+# Local:  copy `.kamal/secrets.example` to `.kamal/secrets`, fill in values,
+#         then `kamal setup` once, `kamal deploy` thereafter.
+# CI:     GitHub Actions runs `kamal` with secrets injected from GH Secrets.
+
+service: wally
+image: mauv0809/ideal-tribble
+
+servers:
+  web:
+    hosts:
+      - box.utiger.dk
+
+# kamal-proxy fronts :80/:443 and auto-acquires a Let's Encrypt cert for the
+# host via the HTTP-01 challenge. The wally.utiger.dk DNS record must stay
+# UNPROXIED (gray cloud) in Cloudflare so the challenge reaches the origin —
+# Kamal has no DNS-01 support. (Record lives in utiger-infra/dns.tf.)
+proxy:
+  ssl: true
+  host: wally.utiger.dk
+  app_port: 8080
+  healthcheck:
+    path: /health
+    interval: 5
+
+registry:
+  server: ghcr.io
+  username: mauv0809
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: amd64
+  # buildx layer cache backed by GH Actions cache. First CI build is cold;
+  # subsequent builds restore Docker layers and the Dockerfile's Go module +
+  # build caches.
+  cache:
+    type: gha
+    options: mode=max
+
+env:
+  clear:
+    PORT: 8080
+    LOG_FORMAT: json
+    LOG_LEVEL: info
+    # DB_NAME is required by config but unused in remote (Turso) mode, where
+    # the connection comes entirely from TURSO_PRIMARY_URL.
+    DB_NAME: wally
+  secret:
+    # Turso remote DB — the auth token is secret, and the URL is treated as
+    # secret since it identifies the database.
+    - TURSO_PRIMARY_URL
+    - TURSO_AUTH_TOKEN
+    # Playtomic tenant the fetcher pulls matches for.
+    - TENANT_ID
+    # Web session cookie signing key (32+ chars).
+    - WEB_SESSION_SECRET
+    # TOTP encryption key (exactly 32 chars, AES-256).
+    - WEB_TOTP_ENCRYPTION_KEY

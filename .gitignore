@@ -26,6 +26,11 @@ go.work.sum
 # env file
 .env
 
+# Kamal real secrets file (rendered from .kamal/secrets.example at deploy time)
+.kamal/secrets
+
+# Claudify
+.claudify/
 # Editor/IDE
 .vscode/
 .idea/
@@ -57,3 +62,4 @@ air.log
 #terraform
 terraform/.terraform/
 cli
+CLAUDE.local.md

@@ -1,43 +1,40 @@
-.PHONY: build install clean run templ admin
+.PHONY: build server admin all templ run test clean
 
-# Go parameters
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
-GOGET=$(GOCMD) get
-BINARY_NAME=tribble-cli
+
+SERVER_BINARY=wally
 ADMIN_BINARY=tribble-admin
-CLI_PATH=./cmd/cli
 ADMIN_PATH=./cmd/admin
 
 # Generate templ templates
 templ:
 	templ generate ./internal/web/templates/
 
-# Build the CLI
-build: templ
-	$(GOBUILD) -o $(BINARY_NAME) $(CLI_PATH)
+# Build the web server (root package)
+server: templ
+	$(GOBUILD) -o $(SERVER_BINARY) .
 
-# Build the admin CLI
-admin: templ
+# Build the admin CLI (user bootstrap)
+admin:
 	$(GOBUILD) -o $(ADMIN_BINARY) $(ADMIN_PATH)
 
-# Build all binaries
-all: templ
-	$(GOBUILD) -o $(BINARY_NAME) $(CLI_PATH)
-	$(GOBUILD) -o $(ADMIN_BINARY) $(ADMIN_PATH)
+# Build everything
+all: server admin
 
-install:
-	$(GOBUILD) -o $(GOPATH)/bin/$(BINARY_NAME) $(CLI_PATH)
-	$(GOBUILD) -o $(GOPATH)/bin/$(ADMIN_BINARY) $(ADMIN_PATH)
+build: server
+
+# Build and run the server
+run: server
+	./$(SERVER_BINARY)
+
+test:
+	$(GOTEST) ./...
 
 clean:
 	$(GOCLEAN)
-	rm -f $(BINARY_NAME) $(ADMIN_BINARY)
+	rm -f $(SERVER_BINARY) $(ADMIN_BINARY)
 
-run:
-	$(GOBUILD) -o $(BINARY_NAME) -v ./...
-	./$(BINARY_NAME)
-
-.DEFAULT_GOAL := build
+.DEFAULT_GOAL := server

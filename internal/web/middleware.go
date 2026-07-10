@@ -6,8 +6,6 @@ import (
 
 	"github.com/gorilla/sessions"
 	"github.com/mauv0809/ideal-tribble/internal/auth"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 type contextKey string
@@ -52,23 +50,14 @@ func NewMiddleware(
 // RequireAuth ensures the user is authenticated.
 func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, span := otel.Tracer("middleware").Start(r.Context(), "RequireAuth")
-		defer span.End()
-
-		user := m.getUserFromSession(r.WithContext(ctx))
+		user := m.getUserFromSession(r)
 		if user == nil {
-			span.SetAttributes(attribute.Bool("authenticated", false))
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
 
-		span.SetAttributes(
-			attribute.Bool("authenticated", true),
-			attribute.Int64("user_id", user.ID),
-		)
-
 		// Add user to context
-		ctx = context.WithValue(ctx, userContextKey, user)
+		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -76,38 +65,26 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 // RequireAdmin ensures the user is an admin.
 func (m *Middleware) RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, span := otel.Tracer("middleware").Start(r.Context(), "RequireAdmin")
-		defer span.End()
-
 		user := GetUser(r)
 		if user == nil || !user.IsAdmin {
-			span.SetAttributes(attribute.Bool("is_admin", false))
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 
-		span.SetAttributes(attribute.Bool("is_admin", true))
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }
 
 // RateLimit applies rate limiting to a handler.
 func (m *Middleware) RateLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, span := otel.Tracer("middleware").Start(r.Context(), "RateLimit")
-		defer span.End()
-
 		ip := getClientIP(r)
-		span.SetAttributes(attribute.String("client_ip", ip))
-
 		if !m.rateLimiter.AllowIP(ip) {
-			span.SetAttributes(attribute.Bool("rate_limited", true))
 			http.Error(w, "Too many requests", http.StatusTooManyRequests)
 			return
 		}
 
-		span.SetAttributes(attribute.Bool("rate_limited", false))
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }
 

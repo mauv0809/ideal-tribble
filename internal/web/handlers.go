@@ -1273,15 +1273,10 @@ func (h *Handlers) CreateManualMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create the match
-	match, err := h.clubStore.CreateManualMatch(input, user.Email)
-	if err != nil {
+	if _, err := h.clubStore.CreateManualMatch(input, user.Email); err != nil {
 		h.renderMatchFormWithError(w, r, "Failed to create match: "+err.Error())
 		return
 	}
-
-	// Update player stats for this match
-	h.clubStore.UpdatePlayerStats(match)
-	h.clubStore.UpdateWeeklyStats(match)
 
 	// Set flash message and redirect
 	h.middleware.SetFlash(w, r, "success", "Match created successfully")

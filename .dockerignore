@@ -1,0 +1,34 @@
+# VCS / tooling
+.git
+.github
+.claude
+.claudify
+
+# Notes & docs (not needed in the image)
+Daily Notes
+docs
+*.md
+
+# Secrets & local env
+.env
+.env.*
+.kamal/secrets
+
+# Committed binaries and local DB (large; never built into the image)
+ideal-tribble
+tribble-cli
+tribble-admin
+admin
+*.db
+*.db-*
+
+# Test / coverage artifacts
+coverage.*
+*.out
+*.test
+
+# Legacy deploy artifacts (kept until removed from the repo)
+terraform
+nginx
+scripts
+observability
