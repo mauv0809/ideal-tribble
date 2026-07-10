@@ -2,7 +2,7 @@
 # Cache mounts (Go module + build cache) below need BuildKit + the 1.7 frontend.
 
 # ---- build stage ----
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /src
 
 # Cache deps separately for fast rebuilds.
